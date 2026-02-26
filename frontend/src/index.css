@@ -1,0 +1,54 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-gray-50 text-gray-900 antialiased;
+  }
+}
+
+@layer components {
+  .financial-table td,
+  .financial-table th {
+    @apply font-tabular tabular-nums;
+  }
+
+  .side-panel-enter {
+    transform: translateX(100%);
+  }
+  .side-panel-enter-active {
+    transform: translateX(0);
+    transition: transform 200ms ease-out;
+  }
+}
+
+/* Smooth slide-in for side panel */
+.slide-in {
+  animation: slideIn 200ms ease-out forwards;
+}
+
+@keyframes slideIn {
+  from {
+    transform: translateX(100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+
+/* Fade-in for side panel content when switching fields */
+.animate-fadeIn {
+  animation: fadeIn 150ms ease-out;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(3px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
