@@ -177,7 +177,7 @@ export function WizardProvider({ children }: { children: ReactNode }) {
   // Load mock data for Step 2/3 development — bypasses Step 1 real upload flow
   function loadMockStep2() {
     setState({
-      companyName: 'Acme Portfolio Co.',
+      companyName: 'Business Enterprise Company',
       companyId: null,
       reportingPeriod: 'March 2024',
       sessionId: 'mock-session-001',
