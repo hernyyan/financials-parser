@@ -1,4 +1,4 @@
-# Financial Analysis Platform
+# Henry — Financial Analysis Platform
 
 A locally-hosted web application for automating portfolio company financial statement processing. Built for a private equity firm to streamline the extraction, classification, and review of financial data from Excel workbooks.
 

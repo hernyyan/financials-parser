@@ -66,6 +66,7 @@ export default function SidePanel({
   const [correctedValue, setCorrectedValue] = useState<string>('')
   const [correctionReasoning, setCorrectionReasoning] = useState('')
   const [tag, setTag] = useState<Correction['tag']>('one_off_error')
+  const [reasoningError, setReasoningError] = useState(false)
 
   // Collapsible section state
   const [reasoningOpen, setReasoningOpen] = useState(true)
@@ -88,6 +89,7 @@ export default function SidePanel({
     }
     setReasoningOpen(true)
     setValidationOpen(hasFailure)
+    setReasoningError(false)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fieldName, currentValue, existingCorrection])
 
@@ -95,11 +97,16 @@ export default function SidePanel({
     if (!fieldName) return
     const parsed = parseFloat(correctedValue)
     if (isNaN(parsed)) return
+    if (!correctionReasoning.trim()) {
+      setReasoningError(true)
+      return
+    }
+    setReasoningError(false)
     onSaveCorrection({
       fieldName,
       originalValue: currentValue ?? 0,
       correctedValue: parsed,
-      reasoning: correctionReasoning || undefined,
+      reasoning: correctionReasoning,
       tag,
     })
   }
@@ -274,15 +281,27 @@ export default function SidePanel({
                 <div>
                   <label className="block text-xs text-gray-600 mb-1">
                     Correction Reasoning{' '}
-                    <span className="text-gray-400">(optional)</span>
+                    <span className="text-red-500">*</span>
                   </label>
                   <textarea
                     value={correctionReasoning}
-                    onChange={(e) => setCorrectionReasoning(e.target.value)}
+                    onChange={(e) => {
+                      setCorrectionReasoning(e.target.value)
+                      if (e.target.value.trim()) setReasoningError(false)
+                    }}
                     rows={3}
-                    className="w-full border border-gray-300 rounded px-2.5 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
+                    className={`w-full border rounded px-2.5 py-1.5 text-xs focus:outline-none focus:ring-2 focus:border-transparent resize-none ${
+                      reasoningError
+                        ? 'border-red-400 focus:ring-red-400'
+                        : 'border-gray-300 focus:ring-blue-500'
+                    }`}
                     placeholder="Why is this value incorrect? What should it be based on?"
                   />
+                  {reasoningError && (
+                    <p className="text-[10px] text-red-500 mt-1">
+                      Reasoning is required for all corrections.
+                    </p>
+                  )}
                 </div>
 
                 <div>
