@@ -8,6 +8,7 @@ import LoadingSpinner from '../shared/LoadingSpinner'
 import StatusBanner from '../shared/StatusBanner'
 import { uploadFile, runLayer1, getCompanies, createCompany } from '../../api/client'
 import type { Company } from '../../types'
+import approveSfx from '../../assets/approve.mp3'
 
 type SheetType = 'income_statement' | 'balance_sheet'
 
@@ -384,7 +385,7 @@ export default function Step1Upload() {
 
         {canApprove && (
           <button
-            onClick={approveStep1}
+            onClick={() => { new Audio(approveSfx).play(); approveStep1() }}
             className="flex items-center gap-1.5 bg-green-600 hover:bg-green-700 text-white text-sm px-4 py-1.5 rounded transition-colors font-medium"
           >
             ✓ Approve Extraction
