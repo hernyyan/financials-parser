@@ -179,7 +179,7 @@ export function WizardProvider({ children }: { children: ReactNode }) {
     setState({
       companyName: 'Business Enterprise Company',
       companyId: null,
-      reportingPeriod: 'March 2024',
+      reportingPeriod: 'February 2026',
       sessionId: 'mock-session-001',
       uploadedFile: null,
       sheetNames: ['Income Statement', 'Balance Sheet'],
