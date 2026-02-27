@@ -390,7 +390,7 @@ export default function Step1Upload() {
 
         {canApprove && (
           <button
-            onClick={() => { approveAudio.currentTime = 0; approveAudio.play(); approveStep1() }}
+            onClick={() => { if (Math.random() < 0.01) { approveAudio.currentTime = 0; approveAudio.play() } approveStep1() }}
             className="flex items-center gap-1.5 bg-green-600 hover:bg-green-700 text-white text-sm px-4 py-1.5 rounded transition-colors font-medium"
           >
             ✓ Approve Extraction
