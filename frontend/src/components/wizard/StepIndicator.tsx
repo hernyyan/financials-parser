@@ -4,7 +4,7 @@ interface StepIndicatorProps {
 
 const STEPS = [
   { number: 1, label: 'Upload & Extract' },
-  { number: 2, label: 'Classify & Review' },
+  { number: 2, label: 'Load & Edit' },
   { number: 3, label: 'Finalize' },
 ]
 

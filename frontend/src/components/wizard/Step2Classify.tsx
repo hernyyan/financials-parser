@@ -458,7 +458,7 @@ export default function Step2Classify() {
             className="flex items-center gap-1.5 bg-green-600 hover:bg-green-700 text-white text-sm px-4 py-1.5 rounded transition-colors font-medium disabled:opacity-40 disabled:cursor-not-allowed"
           >
             {approvingStep2 ? <LoadingSpinner size="sm" /> : '✓'}{' '}
-            {approvingStep2 ? 'Processing...' : 'Approve Classification'}
+            {approvingStep2 ? 'Processing...' : 'Approve Loader'}
           </button>
         </div>
       </div>
@@ -481,7 +481,7 @@ export default function Step2Classify() {
         >
           <div className="px-3 py-2 bg-gray-50 border-b border-gray-200 flex-shrink-0">
             <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">
-              Layer 1 Source Data
+              Source Data
             </p>
           </div>
           {sourceRows.length === 0 ? (
@@ -497,7 +497,7 @@ export default function Step2Classify() {
         <div className="flex flex-col overflow-hidden flex-1">
           <div className="px-3 py-2 bg-gray-50 border-b border-gray-200 flex-shrink-0 flex items-center justify-between">
             <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">
-              Classified Template
+              Template
             </p>
             {hasBothResults && (
               <p className="text-[10px] text-gray-400">Click any row to inspect / correct</p>
