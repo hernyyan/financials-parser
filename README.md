@@ -7,13 +7,12 @@ A locally-hosted web application for automating portfolio company financial stat
 - **Frontend**: React + TypeScript + Vite + Tailwind CSS
 - **Backend**: Python FastAPI + SQLite
 - **AI**: Anthropic Claude API
-- **Excel Processing**: openpyxl + LibreOffice headless
+- **Excel Processing**: openpyxl + SheetJS (client-side rendering)
 
 ## Prerequisites
 
 - Node.js 18+
 - Python 3.11+
-- LibreOffice (for Excel → PDF conversion)
 
 ## Setup
 
@@ -86,6 +85,7 @@ financial-platform/
 | Variable | Description | Default |
 |---|---|---|
 | `ANTHROPIC_API_KEY` | Anthropic API key | Required |
-| `LAYER1_MODEL` | Claude model for Layer 1 extraction | `claude-sonnet-4-6-20250310` |
-| `LAYER2_MODEL` | Claude model for Layer 2 classification | `claude-opus-4-6-20250310` |
-| `LIBREOFFICE_PATH` | Path to LibreOffice binary | `/usr/bin/libreoffice` |
+| `LAYER1_MODEL` | Claude model for Layer 1 extraction | `claude-sonnet-4-6` |
+| `LAYER2_MODEL` | Claude model for Layer 2 classification | `claude-opus-4-6` |
+| `LAYER_A_MODEL` | Claude model for Layer A instruction rewriting | `claude-sonnet-4-6` |
+| `LAYER_B_MODEL` | Claude model for Layer B markdown integration | `claude-opus-4-6` |
