@@ -444,6 +444,9 @@ export default function Step1Upload() {
         rightWidth="w-1/3"
         left={
           <div className="flex flex-col h-full overflow-hidden">
+            <div className="px-3 pt-2 pb-0 flex-shrink-0">
+              <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">File Preview</span>
+            </div>
             <TabSelector
               tabs={hasUpload ? sheetNames : placeholderTabs}
               activeTab={activeTab || (hasUpload ? sheetNames[0] : placeholderTabs[0])}
@@ -454,6 +457,9 @@ export default function Step1Upload() {
         }
         right={
           <div className="flex flex-col h-full overflow-hidden">
+            <div className="px-3 pt-2 pb-0 flex-shrink-0">
+              <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">Extracted Results</span>
+            </div>
             <TabSelector
               tabs={hasUpload ? sheetNames : placeholderTabs}
               activeTab={activeTab || (hasUpload ? sheetNames[0] : placeholderTabs[0])}
