@@ -4,10 +4,7 @@ import type { Layer1Result, Layer2Result, UploadResponse } from '../types'
 export const MOCK_UPLOAD_RESPONSE: UploadResponse = {
   sessionId: 'mock-session-001',
   sheetNames: ['Income Statement', 'Balance Sheet'],
-  pdfUrls: {
-    'Income Statement': '/files/mock-session-001/income_statement.pdf',
-    'Balance Sheet': '/files/mock-session-001/balance_sheet.pdf',
-  },
+  workbookUrl: '/files/mock-session-001/workbook.xlsx',
 }
 
 // Mock Layer 1 output - Income Statement

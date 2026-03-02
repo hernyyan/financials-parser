@@ -136,7 +136,7 @@ export default function ExcelViewer({ workbookUrl, activeSheet }: ExcelViewerPro
       if (skipped.has(cellKey)) continue
 
       const cellAddr = XLSX.utils.encode_cell({ r: absRow, c: absCol })
-      const cell: XLSX.CellObject | undefined = sheet[cellAddr]
+      const cell: XLSX.CellObject | undefined = sheet![cellAddr]
       const text = formatCellValue(cell)
       const isNum = cell?.t === 'n'
 
