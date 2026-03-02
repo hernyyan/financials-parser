@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { useWizardState } from '../../hooks/useWizardState'
 import DataTable from '../shared/DataTable'
 import SidePanel from '../shared/SidePanel'
@@ -135,6 +135,10 @@ export default function Step2Classify() {
   const [elapsedSeconds, setElapsedSeconds] = useState(0)
   const [approvingStep2, setApprovingStep2] = useState(false)
   const classifyingRef = useRef(false)
+  const leftIsRef = useRef<HTMLDivElement>(null)
+  const rightIsRef = useRef<HTMLDivElement>(null)
+  const [leftSpacer, setLeftSpacer] = useState(0)
+  const [rightSpacer, setRightSpacer] = useState(0)
 
   const isLayer2 = layer2Results['income_statement']
   const bsLayer2 = layer2Results['balance_sheet']
@@ -271,12 +275,35 @@ export default function Step2Classify() {
 
   const isTemplateRows = buildTemplateRows(isSections, 'Income Statement', isLayer2, corrections, selectedCell)
   const bsTemplateRows = buildTemplateRows(bsSections, 'Balance Sheet', bsLayer2, corrections, selectedCell)
-  const templateRows = [...isTemplateRows, ...bsTemplateRows]
-  const sourceRows = buildSourceRows(layer1Results)
+
+  // Build source rows in IS-first order so they align with the template side
+  const isSheetName = sheetNames.find((s) => detectSheetType(s) === 'income_statement')
+  const bsSheetName = sheetNames.find((s) => s !== isSheetName)
+  const sourceIsRows = isSheetName && layer1Results[isSheetName]
+    ? buildSourceRows({ [isSheetName]: layer1Results[isSheetName] })
+    : []
+  const sourceBsRows = bsSheetName && layer1Results[bsSheetName]
+    ? buildSourceRows({ [bsSheetName]: layer1Results[bsSheetName] })
+    : []
 
   const existingCorrection = selectedCell
     ? corrections.find((c) => c.fieldName === selectedCell)
     : undefined
+
+  // Measure IS section heights and add a spacer to the shorter side so BS tops align
+  useLayoutEffect(() => {
+    function sync() {
+      const lh = leftIsRef.current?.offsetHeight ?? 0
+      const rh = rightIsRef.current?.offsetHeight ?? 0
+      setLeftSpacer(Math.max(0, rh - lh))
+      setRightSpacer(Math.max(0, lh - rh))
+    }
+    sync()
+    const observer = new ResizeObserver(sync)
+    if (leftIsRef.current) observer.observe(leftIsRef.current)
+    if (rightIsRef.current) observer.observe(rightIsRef.current)
+    return () => observer.disconnect()
+  }, [hasBothResults])
 
   const allValidation = { ...(isLayer2?.validation ?? {}), ...(bsLayer2?.validation ?? {}) }
   const passCount = Object.values(allValidation).filter((v) => v.status === 'PASS').length
@@ -469,33 +496,36 @@ export default function Step2Classify() {
         </div>
       )}
 
-      {/* Main 2-column layout — panel is fixed so we pad-right to prevent overlap */}
+      {/* Main 2-column layout — single scroll container keeps both sides in sync */}
       <div
-        className="flex flex-1 overflow-hidden divide-x divide-gray-200 transition-[padding-right] duration-200"
+        className="flex flex-1 overflow-auto divide-x divide-gray-200 transition-[padding-right] duration-200"
         style={{ paddingRight: sidePanelOpen ? '24rem' : 0 }}
       >
         {/* Left: Layer 1 source data */}
-        <div
-          className="flex flex-col overflow-hidden flex-shrink-0"
-          style={{ width: '38%' }}
-        >
-          <div className="px-3 py-2 bg-gray-50 border-b border-gray-200 flex-shrink-0">
+        <div className="flex flex-col flex-shrink-0" style={{ width: '38%' }}>
+          <div className="px-3 py-2 bg-gray-50 border-b border-gray-200 sticky top-0 z-10">
             <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">
               Source Data
             </p>
           </div>
-          {sourceRows.length === 0 ? (
-            <div className="flex-1 flex items-center justify-center text-gray-400 text-sm">
+          {sourceIsRows.length === 0 && sourceBsRows.length === 0 ? (
+            <div className="flex items-center justify-center py-12 text-gray-400 text-sm">
               No source data available
             </div>
           ) : (
-            <DataTable rows={sourceRows} />
+            <>
+              <div ref={leftIsRef}>
+                <DataTable rows={sourceIsRows} noScroll />
+              </div>
+              <div style={{ height: leftSpacer }} />
+              <DataTable rows={sourceBsRows} noScroll />
+            </>
           )}
         </div>
 
-        {/* Center: Classified template */}
-        <div className="flex flex-col overflow-hidden flex-1">
-          <div className="px-3 py-2 bg-gray-50 border-b border-gray-200 flex-shrink-0 flex items-center justify-between">
+        {/* Right: Classified template */}
+        <div className="flex flex-col flex-1">
+          <div className="px-3 py-2 bg-gray-50 border-b border-gray-200 sticky top-0 z-10 flex items-center justify-between">
             <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">
               Template
             </p>
@@ -505,7 +535,7 @@ export default function Step2Classify() {
           </div>
 
           {hasAnyError && !hasBothResults ? (
-            <div className="flex-1 flex flex-col items-center justify-center gap-3 px-6 text-center">
+            <div className="flex flex-col items-center justify-center gap-3 px-6 py-12 text-center">
               <p className="text-sm font-medium text-red-600">Classification failed</p>
               {isError && <p className="text-xs text-red-500">Income Statement: {isError}</p>}
               {bsError && <p className="text-xs text-red-500">Balance Sheet: {bsError}</p>}
@@ -517,15 +547,17 @@ export default function Step2Classify() {
               </button>
             </div>
           ) : !hasBothResults ? (
-            <div className="flex-1 flex items-start justify-center pt-12">
+            <div className="flex items-start justify-center pt-12">
               <LoadingSpinner message="Classifying via Claude..." />
             </div>
           ) : (
-            <DataTable
-              rows={templateRows}
-              onCellClick={setSelectedCell}
-              selectedCell={selectedCell}
-            />
+            <>
+              <div ref={rightIsRef}>
+                <DataTable rows={isTemplateRows} noScroll onCellClick={setSelectedCell} selectedCell={selectedCell} />
+              </div>
+              <div style={{ height: rightSpacer }} />
+              <DataTable rows={bsTemplateRows} noScroll onCellClick={setSelectedCell} selectedCell={selectedCell} />
+            </>
           )}
         </div>
 

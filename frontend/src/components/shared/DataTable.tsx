@@ -15,6 +15,7 @@ interface DataTableProps {
   selectedCell?: string | null
   className?: string
   scrollRef?: React.RefObject<HTMLDivElement>
+  noScroll?: boolean
 }
 
 export default function DataTable({
@@ -23,9 +24,10 @@ export default function DataTable({
   selectedCell,
   className = '',
   scrollRef,
+  noScroll = false,
 }: DataTableProps) {
   return (
-    <div ref={scrollRef} className={`overflow-auto flex-1 ${className}`}>
+    <div ref={scrollRef} className={noScroll ? className : `overflow-auto flex-1 ${className}`}>
       <table className="w-full text-xs financial-table border-collapse">
         <tbody>
           {rows.map((row, idx) => {
