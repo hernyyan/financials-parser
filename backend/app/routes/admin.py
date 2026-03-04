@@ -4,18 +4,23 @@ GET /admin/company-context/{company_id} — Full contents of a company's markdow
 GET /admin/changelog                    — Entries from company_context_changelog.jsonl.
 GET /admin/alerts                       — Entries from alerts.jsonl.
 GET /admin/general-fixes                — Rows from general_fixes.csv.
+GET /admin/reviews                      — List all reviews (newest first) with optional filters.
+GET /admin/reviews/{session_id}/export  — Download finalized output as a CSV file.
 """
 import csv
 import json
+import re
 from io import StringIO
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import Response
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 
 from app.config import COMPANY_CONTEXT_DIR, DATA_DIR
 from app.db.database import get_db
+from app.services.template_service import get_template_service
 
 router = APIRouter(prefix="/admin")
 
@@ -174,6 +179,134 @@ def admin_general_fixes(
     rows = rows[:limit]
 
     return {"total_entries": len(rows), "entries": rows}
+
+
+# ── Endpoint 6: GET /admin/reviews ────────────────────────────────────────────
+
+@router.get("/reviews")
+def admin_list_reviews(
+    status: Optional[str] = Query(default=None, description="Filter by status: 'finalized' or 'in_progress'"),
+    company: Optional[str] = Query(default=None, description="Case-insensitive partial match on company name"),
+    limit: int = Query(default=50, ge=1),
+    db: Session = Depends(get_db),
+):
+    """List all reviews newest first, with optional status and company filters."""
+    conditions: list[str] = []
+    params: dict = {}
+
+    if status:
+        conditions.append("status = :status")
+        params["status"] = status
+    if company:
+        conditions.append("LOWER(company_name) LIKE :company")
+        params["company"] = f"%{company.lower()}%"
+
+    where_clause = f"WHERE {' AND '.join(conditions)}" if conditions else ""
+
+    total: int = db.execute(
+        text(f"SELECT COUNT(*) FROM reviews {where_clause}"),
+        params,
+    ).scalar() or 0
+
+    rows = db.execute(
+        text(f"""
+            SELECT id, session_id, company_name, reporting_period, status,
+                   created_at, finalized_at, corrections
+            FROM reviews
+            {where_clause}
+            ORDER BY created_at DESC
+            LIMIT :limit
+        """),
+        {**params, "limit": limit},
+    ).fetchall()
+
+    reviews = []
+    for row in rows:
+        corrections_raw = row[7]
+        try:
+            corrections_list = (
+                json.loads(corrections_raw)
+                if isinstance(corrections_raw, str)
+                else (corrections_raw or [])
+            )
+            corrections_count = len(corrections_list) if isinstance(corrections_list, list) else 0
+        except (json.JSONDecodeError, TypeError):
+            corrections_count = 0
+
+        reviews.append({
+            "id": row[0],
+            "session_id": row[1],
+            "company_name": row[2],
+            "reporting_period": row[3],
+            "status": row[4],
+            "created_at": row[5],
+            "finalized_at": row[6],
+            "corrections_count": corrections_count,
+        })
+
+    return {"total": total, "reviews": reviews}
+
+
+# ── Endpoint 7: GET /admin/reviews/{session_id}/export ────────────────────────
+
+@router.get("/reviews/{session_id}/export")
+def admin_export_review(session_id: str, db: Session = Depends(get_db)):
+    """Download the finalized output for a review as a CSV file attachment."""
+    row = db.execute(
+        text("""
+            SELECT company_name, reporting_period, final_output, corrections
+            FROM reviews WHERE session_id = :sid
+        """),
+        {"sid": session_id},
+    ).fetchone()
+
+    if not row:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Session '{session_id}' not found or not yet finalized.",
+        )
+
+    company_name: str = row[0]
+    reporting_period: str = row[1]
+    final_output: dict = json.loads(row[2] or "{}")
+    corrections: list = json.loads(row[3] or "[]")
+    corrected_fields = {c.get("fieldName", "") for c in corrections}
+
+    template_svc = get_template_service()
+
+    output = StringIO()
+    writer = csv.writer(output)
+    writer.writerow(["Field Name", "Value", "Status"])
+
+    for stmt_label, stmt_key in [
+        ("Income Statement", "income_statement"),
+        ("Balance Sheet", "balance_sheet"),
+    ]:
+        writer.writerow([stmt_label, "", ""])
+        sections = template_svc.template.get(stmt_key, {}).get("sections", [])
+        stmt_values: dict = final_output.get(stmt_label, {})
+
+        for section in sections:
+            header = section.get("header")
+            if header:
+                writer.writerow([header, "", ""])
+            for field in section.get("fields", []):
+                value = stmt_values.get(field)
+                value_str = f"{value:.2f}" if value is not None else ""
+                status = "corrected" if field in corrected_fields else ""
+                writer.writerow([field, value_str, status])
+
+        writer.writerow(["", "", ""])
+
+    safe_company = re.sub(r"[^\w\s-]", "", company_name).strip().replace(" ", "_")
+    safe_period = re.sub(r"[^\w\s-]", "", reporting_period).strip().replace(" ", "_")
+    filename = f"{safe_company}_{safe_period}.csv"
+
+    return Response(
+        content=output.getvalue(),
+        media_type="text/csv",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 # ── Shared helpers ─────────────────────────────────────────────────────────────
