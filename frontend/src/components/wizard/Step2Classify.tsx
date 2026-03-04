@@ -381,7 +381,7 @@ export default function Step2Classify() {
       <div className="flex flex-col flex-1 overflow-hidden">
         <div className="bg-white border-b border-gray-200 px-4 py-2.5 flex-shrink-0">
           <button
-            onClick={() => setShowBackConfirm(true)}
+            onClick={backToStep1}
             className="text-sm text-gray-600 hover:text-gray-800 border border-gray-300 hover:border-gray-400 px-3 py-1.5 rounded transition-colors"
           >
             ← Back to Extraction
