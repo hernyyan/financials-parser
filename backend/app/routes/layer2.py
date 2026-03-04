@@ -44,7 +44,7 @@ def run_layer2(request: Layer2Request, db: Session = Depends(get_db)):
     except anthropic.APITimeoutError:
         raise HTTPException(
             status_code=504,
-            detail="Layer 2 classification timed out (>120s). Consider switching LAYER2_MODEL=claude-sonnet-4-6 in your .env for faster results.",
+            detail="Layer 2 classification timed out. Please try again.",
         )
     except anthropic.APIError as e:
         raise HTTPException(status_code=502, detail=f"Anthropic API error: {e}")

@@ -54,7 +54,7 @@ class Layer2Service:
             "layer1_output": json.dumps(layer1_data, indent=2),
         }
 
-        response_text = self.claude.call_claude(prompt_key, variables, model, max_tokens=16384)
+        response_text = self.claude.call_claude(prompt_key, variables, model, max_tokens=32768)
         parsed = self.claude.parse_json_response(response_text)
         return self._split_response(parsed, normalized)
 

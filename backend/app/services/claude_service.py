@@ -25,7 +25,7 @@ class ClaudeService:
             raise RuntimeError(
                 "ANTHROPIC_API_KEY is not set. Add it to your .env file."
             )
-        self.client = anthropic.Anthropic(api_key=api_key, timeout=120)
+        self.client = anthropic.Anthropic(api_key=api_key, timeout=300)
         self.prompts: Dict[str, str] = {}
         self._load_prompts(prompts_dir)
 
