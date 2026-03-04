@@ -193,7 +193,10 @@ export default function Step2Classify() {
   }
 
   async function runClassification() {
-    if (classifyingRef.current) return
+    if (classifyingRef.current) {
+      console.warn('[Step2] runClassification: already running, skipping')
+      return
+    }
     classifyingRef.current = true
     setIsError(null)
     setBsError(null)
@@ -203,7 +206,10 @@ export default function Step2Classify() {
     const newResults: Record<string, Layer2Result> = { ...layer2Results }
     const tasks: Promise<void>[] = []
 
+    console.log('[Step2] runClassification start — isStatus:', isStatus, 'bsStatus:', bsStatus, 'existing layer2Results keys:', Object.keys(layer2Results), 'isSheet:', isSheet, 'bsSheet:', bsSheet, 'layer1Results keys:', Object.keys(layer1Results))
+
     if (isSheet && layer1Results[isSheet] && isStatus !== 'done') {
+      console.log('[Step2] IS: queuing task')
       setIsStatus('loading')
       tasks.push(
         runLayer2({
@@ -212,19 +218,26 @@ export default function Step2Classify() {
           layer1_data: layer1Results[isSheet].lineItems,
         })
           .then((result) => {
+            console.log('[Step2] IS .then() fired — result truthy:', !!result, 'statementType:', result?.statementType)
             newResults['income_statement'] = result
+            console.log('[Step2] IS: calling setIsStatus(done)')
             setIsStatus('done')
           })
           .catch((err) => {
+            console.error('[Step2] IS .catch() fired — error:', err)
             setIsStatus('error')
             setIsError(err instanceof Error ? err.message : 'Income statement classification failed.')
           }),
       )
     } else if (!isSheet || !layer1Results[isSheet]) {
+      console.log('[Step2] IS: no sheet/data, setting done immediately')
       setIsStatus('done')
+    } else {
+      console.log('[Step2] IS: skipped (isStatus already done)')
     }
 
     if (bsSheet && layer1Results[bsSheet] && bsStatus !== 'done') {
+      console.log('[Step2] BS: queuing task — layer1 lineItems keys:', Object.keys(layer1Results[bsSheet].lineItems).length)
       setBsStatus('loading')
       tasks.push(
         runLayer2({
@@ -233,24 +246,41 @@ export default function Step2Classify() {
           layer1_data: layer1Results[bsSheet].lineItems,
         })
           .then((result) => {
+            console.log('[Step2] BS .then() fired — result truthy:', !!result, 'statementType:', result?.statementType)
+            console.log('[Step2] BS response:', result)
             newResults['balance_sheet'] = result
+            console.log('[Step2] BS: calling setBsStatus(done)')
             setBsStatus('done')
+            console.log('[Step2] BS: setBsStatus(done) called')
           })
           .catch((err) => {
+            console.error('[Step2] BS .catch() fired — error:', err)
             setBsStatus('error')
             setBsError(err instanceof Error ? err.message : 'Balance sheet classification failed.')
           }),
       )
     } else if (!bsSheet || !layer1Results[bsSheet]) {
+      console.log('[Step2] BS: no sheet/data, setting done immediately')
       setBsStatus('done')
+    } else {
+      console.log('[Step2] BS: skipped (bsStatus already done)')
     }
 
+    console.log('[Step2] waiting for', tasks.length, 'task(s) to settle')
     await Promise.allSettled(tasks)
+    console.log('[Step2] all tasks settled — newResults keys:', Object.keys(newResults), 'layer2Results keys (closure):', Object.keys(layer2Results))
 
-    if (Object.keys(newResults).length > Object.keys(layer2Results).length) {
+    const newLen = Object.keys(newResults).length
+    const oldLen = Object.keys(layer2Results).length
+    if (newLen > oldLen) {
+      console.log('[Step2] calling setLayer2Results with keys:', Object.keys(newResults))
       setLayer2Results(newResults)
+      console.log('[Step2] setLayer2Results called')
+    } else {
+      console.warn('[Step2] setLayer2Results NOT called — newLen:', newLen, 'oldLen:', oldLen, 'newResults:', newResults)
     }
     classifyingRef.current = false
+    console.log('[Step2] runClassification complete')
   }
 
   function handleRetry() {
