@@ -1,13 +1,20 @@
 import { useEffect, useRef, useState } from 'react'
 import { useWizardState } from '../../hooks/useWizardState'
-import SplitPane from '../layout/SplitPane'
 import TabSelector from '../shared/TabSelector'
 import ExcelViewer from '../shared/ExcelViewer'
-import DataTable from '../shared/DataTable'
-import LoadingSpinner from '../shared/LoadingSpinner'
 import StatusBanner from '../shared/StatusBanner'
 import { uploadFile, runLayer1, getCompanies, createCompany } from '../../api/client'
 import type { Company } from '../../types'
+import {
+  Upload,
+  Search,
+  ChevronDown,
+  Plus,
+  Loader2,
+  FileSpreadsheet,
+  CheckCircle2,
+  ArrowRight,
+} from 'lucide-react'
 import approveSfx from '../../assets/approve.mp3'
 
 // Pre-load once at module level so the audio buffer is ready before first click.
@@ -69,7 +76,6 @@ export default function Step1Upload() {
     setLayer1Results,
     setActiveSheetTab,
     approveStep1,
-    loadMockStep2,
   } = useWizardState()
 
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -91,9 +97,6 @@ export default function Step1Upload() {
   const activeTab = activeSheetTab || sheetNames[0] || ''
 
   // Preserve scroll position per tab when switching tabs.
-  // If the destination tab hasn't been extracted yet, auto-set its sheet type
-  // to whichever statement type is still missing (income_statement / balance_sheet).
-  // If both are already extracted, or neither, leave the existing selection alone.
   function handleTabChange(tab: string) {
     tabScrollPositions.current[activeTab] = tableScrollRef.current?.scrollTop ?? 0
     setActiveSheetTab(tab)
@@ -111,7 +114,6 @@ export default function Step1Upload() {
       } else if (isOnly('balance_sheet')) {
         setTabStates((prev) => ({ ...prev, [tab]: { ...prev[tab], sheetType: 'income_statement' } }))
       }
-      // Both done or neither done → leave as-is
     }
   }
 
@@ -187,6 +189,8 @@ export default function Step1Upload() {
     (s) => tabStates[s]?.status === 'done' && tabStates[s]?.sheetType === 'balance_sheet',
   )
   const canApprove = extractedIS && extractedBS
+
+  const extractedSheetNames = sheetNames.filter((s) => tabStates[s]?.status === 'done')
 
   async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
@@ -290,28 +294,26 @@ export default function Step1Upload() {
     }
   }
 
-  function buildTableRows() {
-    if (!activeLayer1) return []
-    return Object.entries(activeLayer1.lineItems).map(([label, value]) => ({
-      label,
-      value: formatLineItemValue(value),
-      isClickable: false,
-    }))
-  }
-
-  const tableRows = buildTableRows()
   const placeholderTabs = ['Sheet 1', 'Sheet 2']
+  const displayTabs = hasUpload ? sheetNames : placeholderTabs
+  const displayActiveTab = activeTab || displayTabs[0]
 
   return (
-    <div className="flex flex-col flex-1 overflow-hidden">
-      {/* Top bar */}
-      <div className="bg-white border-b border-gray-200 px-4 py-3 flex items-center gap-3 flex-shrink-0 flex-wrap">
-        <div className="flex items-center gap-2">
-          <label className="text-xs font-medium text-gray-600 whitespace-nowrap">Company</label>
-          <div ref={comboRef} className="relative">
+    <div className="flex flex-col h-full">
+      {/* Toolbar */}
+      <div className="flex items-center gap-3 px-4 py-2.5 border-b border-border bg-gray-50/80 shrink-0 flex-wrap">
+        {/* Company dropdown */}
+        <div className="relative" ref={comboRef}>
+          <div
+            className="flex items-center gap-2 bg-white border border-border rounded-lg px-3 py-1.5 cursor-pointer hover:border-gray-300 min-w-[220px]"
+            onClick={() => { if (!hasUpload) setComboOpen(!comboOpen) }}
+          >
+            <Search className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
             <input
-              type="text"
+              className="bg-transparent outline-none text-[13px] flex-1 min-w-0 disabled:cursor-not-allowed"
+              placeholder={companiesLoading ? 'Loading...' : 'Select company...'}
               value={comboSearch}
+              disabled={hasUpload || creatingCompany}
               onChange={(e) => {
                 setComboSearch(e.target.value)
                 setComboOpen(true)
@@ -321,55 +323,55 @@ export default function Step1Upload() {
                 }
               }}
               onFocus={() => { if (!hasUpload) setComboOpen(true) }}
-              placeholder={companiesLoading ? 'Loading...' : 'Search or add company...'}
-              disabled={hasUpload || creatingCompany}
-              className="border border-gray-300 rounded px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 w-52 disabled:bg-gray-50 disabled:text-gray-500"
             />
-            {comboOpen && !hasUpload && (
-              <div className="absolute top-full left-0 mt-1 w-full bg-white border border-gray-200 rounded shadow-lg z-50 max-h-48 overflow-y-auto">
-                {comboSearch.trim() &&
-                  !companies.some(
-                    (c) => c.name.toLowerCase() === comboSearch.trim().toLowerCase(),
-                  ) && (
-                    <button
-                      onClick={handleCreateCompany}
-                      disabled={creatingCompany}
-                      className="w-full text-left px-3 py-2 text-sm text-blue-600 hover:bg-blue-50 border-b border-gray-100 font-medium disabled:opacity-50"
-                    >
-                      {creatingCompany ? 'Creating...' : `+ Add "${comboSearch.trim()}"`}
-                    </button>
-                  )}
-                {filteredCompanies.length === 0 && !comboSearch.trim() && (
-                  <p className="px-3 py-2 text-xs text-gray-400 italic">
-                    No companies yet. Type a name to add one.
-                  </p>
-                )}
-                {filteredCompanies.map((company) => (
-                  <button
-                    key={company.id}
-                    onClick={() => handleSelectCompany(company)}
-                    className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
-                  >
-                    {company.name}
-                  </button>
-                ))}
-              </div>
-            )}
+            <ChevronDown className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
           </div>
+          {comboOpen && !hasUpload && (
+            <div className="absolute top-full left-0 mt-1 w-full bg-white border border-border rounded-lg shadow-lg z-50 max-h-[200px] overflow-auto">
+              {filteredCompanies.length === 0 && !comboSearch.trim() && (
+                <p className="px-3 py-2 text-[12px] text-muted-foreground italic">
+                  No companies yet. Type a name to add one.
+                </p>
+              )}
+              {filteredCompanies.map((company) => (
+                <div
+                  key={company.id}
+                  className="px-3 py-2 text-[13px] hover:bg-gray-50 cursor-pointer"
+                  onClick={() => handleSelectCompany(company)}
+                >
+                  {company.name}
+                </div>
+              ))}
+              {comboSearch.trim() &&
+                !companies.some(
+                  (c) => c.name.toLowerCase() === comboSearch.trim().toLowerCase(),
+                ) && (
+                  <div
+                    className="px-3 py-2 text-[13px] text-blue-600 hover:bg-blue-50 cursor-pointer flex items-center gap-1.5 border-t border-border"
+                    onClick={handleCreateCompany}
+                  >
+                    {creatingCompany ? (
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    ) : (
+                      <Plus className="w-3.5 h-3.5" />
+                    )}
+                    {creatingCompany ? 'Creating...' : `Add "${comboSearch.trim()}"`}
+                  </div>
+                )}
+            </div>
+          )}
         </div>
-        <div className="flex items-center gap-2">
-          <label className="text-xs font-medium text-gray-600 whitespace-nowrap">Period</label>
-          <input
-            type="text"
-            value={reportingPeriod}
-            onChange={(e) => setReportingPeriod(e.target.value)}
-            placeholder="e.g. March 2024"
-            disabled={hasUpload}
-            className="border border-gray-300 rounded px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 w-36 disabled:bg-gray-50 disabled:text-gray-500"
-          />
-        </div>
-        <div className="h-5 w-px bg-gray-200" />
 
+        {/* Reporting Period */}
+        <input
+          className="bg-white border border-border rounded-lg px-3 py-1.5 text-[13px] w-[160px] hover:border-gray-300 focus:outline-none focus:ring-2 focus:ring-primary/20 disabled:bg-gray-50 disabled:text-muted-foreground"
+          placeholder="Reporting period..."
+          value={reportingPeriod}
+          disabled={hasUpload}
+          onChange={(e) => setReportingPeriod(e.target.value)}
+        />
+
+        {/* Upload / Re-upload button */}
         <input
           ref={fileInputRef}
           type="file"
@@ -382,37 +384,44 @@ export default function Step1Upload() {
           <button
             onClick={() => fileInputRef.current?.click()}
             disabled={uploading}
-            className="flex items-center gap-1.5 bg-white border border-gray-300 hover:border-blue-400 text-gray-700 text-sm px-3 py-1.5 rounded transition-colors disabled:opacity-50"
+            className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-[13px] transition-colors bg-primary text-white hover:bg-primary/90 disabled:opacity-50"
+            style={{ fontWeight: 500 }}
           >
-            {uploading ? <LoadingSpinner size="sm" /> : '📂'}
-            {uploading ? 'Uploading workbook...' : 'Upload Excel (.xlsx)'}
+            {uploading ? (
+              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+            ) : (
+              <Upload className="w-3.5 h-3.5" />
+            )}
+            {uploading ? 'Uploading...' : 'Upload Excel'}
           </button>
         ) : (
           <button
             onClick={handleReupload}
-            className="flex items-center gap-1.5 bg-white border border-gray-300 hover:border-blue-400 text-gray-700 text-sm px-3 py-1.5 rounded transition-colors"
+            className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-[13px] transition-colors bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100"
+            style={{ fontWeight: 500 }}
           >
-            🔄 Re-upload
+            <FileSpreadsheet className="w-3.5 h-3.5" />
+            {uploadedFile?.name ?? 'Uploaded file'}
           </button>
         )}
 
+        <div className="flex-1" />
+
+        {/* Approve button */}
         {canApprove && (
           <button
-            onClick={() => { if (Math.random() < 0.01) { approveAudio.currentTime = 0; approveAudio.play() } approveStep1() }}
-            className="flex items-center gap-1.5 bg-green-600 hover:bg-green-700 text-white text-sm px-4 py-1.5 rounded transition-colors font-medium"
+            onClick={() => {
+              if (Math.random() < 0.01) { approveAudio.currentTime = 0; approveAudio.play() }
+              approveStep1()
+            }}
+            className="flex items-center gap-2 bg-emerald-600 text-white px-4 py-1.5 rounded-lg text-[13px] hover:bg-emerald-700 transition-colors"
+            style={{ fontWeight: 500 }}
           >
-            ✓ Approve Extraction
+            <CheckCircle2 className="w-3.5 h-3.5" />
+            Approve Extraction
+            <ArrowRight className="w-3.5 h-3.5" />
           </button>
         )}
-
-        <div className="ml-auto">
-          <button
-            onClick={loadMockStep2}
-            className="text-xs text-gray-400 hover:text-gray-600 underline"
-          >
-            Skip to Step 2 (mock data)
-          </button>
-        </div>
       </div>
 
       {/* Status banner */}
@@ -426,134 +435,159 @@ export default function Step1Upload() {
         </div>
       )}
 
-      {/* Metadata strip */}
-      {activeLayer1 && (
-        <div className="bg-gray-50 border-b border-gray-200 px-4 py-1.5 flex items-center gap-4 text-xs text-gray-500 flex-shrink-0">
-          <span>
-            Scaling:{' '}
-            <span className="font-medium text-gray-700">{activeLayer1.sourceScaling}</span>
-          </span>
-          <span>
-            Column:{' '}
-            <span className="font-medium text-gray-700">{activeLayer1.columnIdentified}</span>
-          </span>
-          <span>
-            Items extracted:{' '}
-            <span className="font-medium text-gray-700">
-              {Object.keys(activeLayer1.lineItems).length}
-            </span>
-          </span>
-        </div>
-      )}
-
-      {/* Split pane — left 2/3 for Excel preview, right 1/3 for extraction */}
-      <SplitPane
-        leftWidth="w-2/3"
-        rightWidth="w-1/3"
-        left={
-          <div className="flex flex-col h-full overflow-hidden">
-            <div className="px-3 pt-2 pb-0 flex-shrink-0">
-              <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">File Preview</span>
+      {/* Split pane */}
+      <div className="flex flex-1 min-h-0">
+        {/* Left: Excel preview */}
+        <div className="flex-[2] border-r border-border flex flex-col min-w-0">
+          <TabSelector
+            tabs={displayTabs}
+            activeTab={displayActiveTab}
+            onChange={handleTabChange}
+            extractedTabs={extractedSheetNames}
+          />
+          {!hasUpload ? (
+            <div className="flex flex-col items-center justify-center flex-1 text-muted-foreground">
+              <FileSpreadsheet className="w-12 h-12 mb-3 opacity-30" />
+              <p className="text-[13px]">Upload an Excel file to preview</p>
             </div>
-            <TabSelector
-              tabs={hasUpload ? sheetNames : placeholderTabs}
-              activeTab={activeTab || (hasUpload ? sheetNames[0] : placeholderTabs[0])}
-              onChange={handleTabChange}
-            />
+          ) : (
             <ExcelViewer workbookUrl={workbookUrl} activeSheet={activeTab} />
-          </div>
-        }
-        right={
-          <div className="flex flex-col h-full overflow-hidden">
-            <div className="px-3 pt-2 pb-0 flex-shrink-0">
-              <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">Extracted Results</span>
-            </div>
-            <TabSelector
-              tabs={hasUpload ? sheetNames : placeholderTabs}
-              activeTab={activeTab || (hasUpload ? sheetNames[0] : placeholderTabs[0])}
-              onChange={handleTabChange}
-            />
+          )}
+        </div>
 
+        {/* Right: Extraction panel */}
+        <div className="flex-1 flex flex-col min-w-[320px] max-w-[420px]">
+          <TabSelector
+            tabs={displayTabs}
+            activeTab={displayActiveTab}
+            onChange={handleTabChange}
+            extractedTabs={extractedSheetNames}
+            smallText
+          />
+
+          <div className="flex-1 overflow-auto p-4">
             {!hasUpload ? (
-              <div className="flex-1 flex items-center justify-center text-gray-400">
-                <div className="text-center">
-                  <p className="text-sm">No file uploaded yet</p>
-                  <p className="text-xs mt-1">Upload an Excel workbook to begin extraction</p>
-                </div>
+              <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
+                <p className="text-[13px]">Upload a file to begin extraction</p>
               </div>
             ) : activeTabState?.status === 'done' && activeLayer1 ? (
-              <>
-                <div className="px-3 py-1.5 bg-white border-b border-gray-100 flex items-center justify-between flex-shrink-0">
-                  <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">
-                    Layer 1 Extraction
+              <div>
+                {/* Metadata bar */}
+                <div className="bg-gray-50 rounded-lg px-3 py-2 mb-3 text-[11px] text-muted-foreground flex flex-wrap gap-x-3 gap-y-1">
+                  <span>
+                    Scaling:{' '}
+                    <span style={{ fontWeight: 500 }} className="text-foreground">
+                      {activeLayer1.sourceScaling}
+                    </span>
                   </span>
-                  <span className="text-[10px] text-gray-400">{tableRows.length} line items</span>
+                  <span>
+                    Column:{' '}
+                    <span style={{ fontWeight: 500 }} className="text-foreground">
+                      {activeLayer1.columnIdentified}
+                    </span>
+                  </span>
+                  <span>
+                    Items:{' '}
+                    <span style={{ fontWeight: 500 }} className="text-foreground">
+                      {Object.keys(activeLayer1.lineItems).length}
+                    </span>
+                  </span>
                 </div>
-                <DataTable rows={tableRows} scrollRef={tableScrollRef} />
-              </>
+
+                {/* Extracted items table */}
+                <table className="w-full text-[12px]">
+                  <thead>
+                    <tr className="border-b border-border">
+                      <th
+                        className="text-left py-1.5 px-2 text-muted-foreground"
+                        style={{ fontWeight: 500 }}
+                      >
+                        Line Item
+                      </th>
+                      <th
+                        className="text-right py-1.5 px-2 text-muted-foreground"
+                        style={{ fontWeight: 500 }}
+                      >
+                        Value
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {Object.entries(activeLayer1.lineItems).map(([label, value], i) => {
+                      const isBold =
+                        label.includes('Total') ||
+                        label.includes('Gross') ||
+                        label.includes('Net') ||
+                        label.includes('Operating Income') ||
+                        label.includes('Pre-Tax')
+                      return (
+                        <tr
+                          key={i}
+                          className={`border-b border-gray-100 ${isBold ? 'bg-gray-50/50' : ''}`}
+                        >
+                          <td className="py-1.5 px-2" style={{ fontWeight: isBold ? 500 : 400 }}>
+                            {label}
+                          </td>
+                          <td
+                            className={`py-1.5 px-2 text-right font-mono ${value < 0 ? 'text-red-600' : ''}`}
+                          >
+                            {formatLineItemValue(value)}
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            ) : activeTabState?.status === 'extracting' ? (
+              <div className="flex flex-col items-center justify-center h-full gap-3">
+                <Loader2 className="w-8 h-8 text-primary animate-spin" />
+                <p className="text-[13px] text-muted-foreground">
+                  Running AI extraction on "{activeTab}"...
+                </p>
+              </div>
+            ) : activeTabState?.status === 'error' ? (
+              <div className="flex flex-col items-center justify-center h-full text-center px-4">
+                <p className="text-[13px] text-red-600" style={{ fontWeight: 500 }}>
+                  Extraction failed
+                </p>
+                <p className="text-[12px] text-red-400 mt-1">{activeTabState.error}</p>
+                <button
+                  onClick={() => handleRunExtraction(activeTab)}
+                  className="mt-3 text-[12px] text-blue-500 hover:text-blue-700 underline"
+                >
+                  Retry
+                </button>
+              </div>
             ) : (
-              <div className="flex flex-col h-full overflow-hidden">
-                {/* Sheet type selector + run button */}
-                <div className="px-3 py-3 bg-white border-b border-gray-100 flex items-center gap-3 flex-shrink-0">
-                  <label className="text-xs font-medium text-gray-600 whitespace-nowrap">
-                    Sheet Type
+              <div className="space-y-4">
+                <div>
+                  <label className="text-[12px] text-muted-foreground block mb-1.5">
+                    Statement Type
                   </label>
                   <select
                     value={activeTabState?.sheetType ?? 'income_statement'}
                     onChange={(e) => setTabSheetType(activeTab, e.target.value as SheetType)}
-                    disabled={activeTabState?.status === 'extracting'}
-                    className="border border-gray-300 rounded px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
+                    disabled={!hasUpload}
+                    className="w-full bg-white border border-border rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:ring-2 focus:ring-primary/20 disabled:opacity-50"
                   >
                     <option value="income_statement">Income Statement</option>
                     <option value="balance_sheet">Balance Sheet</option>
                   </select>
-                  <button
-                    onClick={() => handleRunExtraction(activeTab)}
-                    disabled={activeTabState?.status === 'extracting'}
-                    className="flex items-center gap-1.5 bg-blue-600 hover:bg-blue-700 text-white text-sm px-4 py-1.5 rounded transition-colors disabled:opacity-50"
-                  >
-                    {activeTabState?.status === 'extracting' ? (
-                      <LoadingSpinner size="sm" />
-                    ) : (
-                      '⚡'
-                    )}
-                    {activeTabState?.status === 'extracting'
-                      ? `Extracting "${activeTab}"...`
-                      : 'Run Extraction'}
-                  </button>
                 </div>
-
-                {/* Status area */}
-                <div className="flex-1 flex items-center justify-center text-gray-400">
-                  {activeTabState?.status === 'extracting' ? (
-                    <LoadingSpinner
-                      message={`Running AI extraction on "${activeTab}"...`}
-                    />
-                  ) : activeTabState?.status === 'error' ? (
-                    <div className="text-center px-4">
-                      <p className="text-sm font-medium text-red-500">Extraction failed</p>
-                      <p className="text-xs mt-1 text-red-400">{activeTabState.error}</p>
-                      <button
-                        onClick={() => handleRunExtraction(activeTab)}
-                        className="mt-3 text-xs text-blue-500 hover:text-blue-700 underline"
-                      >
-                        Retry
-                      </button>
-                    </div>
-                  ) : (
-                    <div className="text-center">
-                      <p className="text-sm">Ready to extract</p>
-                      <p className="text-xs mt-1">
-                        Confirm the sheet type above and click Run Extraction
-                      </p>
-                    </div>
-                  )}
-                </div>
+                <button
+                  onClick={() => handleRunExtraction(activeTab)}
+                  disabled={!hasUpload}
+                  className="w-full bg-primary text-white py-2 rounded-lg text-[13px] hover:bg-primary/90 transition-colors disabled:opacity-50"
+                  style={{ fontWeight: 500 }}
+                >
+                  Run Extraction
+                </button>
               </div>
             )}
           </div>
-        }
-      />
+        </div>
+      </div>
     </div>
   )
 }

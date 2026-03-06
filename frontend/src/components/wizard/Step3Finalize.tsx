@@ -1,11 +1,22 @@
 import { useEffect, useState } from 'react'
 import { useWizardState } from '../../hooks/useWizardState'
 import LoadingSpinner from '../shared/LoadingSpinner'
-import StatusBanner from '../shared/StatusBanner'
 import { finalizeOutput, getTemplate } from '../../api/client'
 import { formatFieldValue, formatDollar } from '../../utils/formatters'
 import { IS_TEMPLATE_FIELDS, BS_TEMPLATE_FIELDS } from '../../mocks/mockData'
 import type { TemplateResponse, TemplateSection } from '../../types'
+import {
+  ArrowLeft,
+  CheckCircle2,
+  Download,
+  RotateCcw,
+  Flag,
+  Edit3,
+  AlertTriangle,
+  Scale,
+  XCircle,
+  Loader2,
+} from 'lucide-react'
 
 type StatusMessage = { type: 'success' | 'error' | 'info'; message: string } | null
 
@@ -21,13 +32,15 @@ function formatDateTime(iso: string): string {
 
 interface TableRow {
   label: string
-  value: string | null
-  rawValue?: number | null
+  classifiedValue: string | null
+  finalValue: string | null
+  rawFinalValue?: number | null
   isStatementHeader?: boolean
   isHeader?: boolean
   isBalanceCheck?: boolean
   corrected?: boolean
   flagged?: boolean
+  validationFail?: boolean
 }
 
 export default function Step3Finalize() {
@@ -81,6 +94,22 @@ export default function Step3Finalize() {
     ...(isLayer2?.flaggedFields ?? []),
     ...(bsLayer2?.flaggedFields ?? []),
   ])
+  const allValidationFails = new Set([
+    ...Object.entries(isLayer2?.validation ?? {})
+      .filter(([, v]) => v.status === 'FAIL')
+      .flatMap(([k]) =>
+        Object.entries(isLayer2?.fieldValidations ?? {})
+          .filter(([, checks]) => checks.includes(k))
+          .map(([f]) => f)
+      ),
+    ...Object.entries(bsLayer2?.validation ?? {})
+      .filter(([, v]) => v.status === 'FAIL')
+      .flatMap(([k]) =>
+        Object.entries(bsLayer2?.fieldValidations ?? {})
+          .filter(([, checks]) => checks.includes(k))
+          .map(([f]) => f)
+      ),
+  ])
 
   // Summary stats
   const totalPopulated = [
@@ -101,40 +130,48 @@ export default function Step3Finalize() {
   function buildRows(): TableRow[] {
     const rows: TableRow[] = []
 
-    rows.push({ label: 'Income Statement', value: null, isStatementHeader: true })
+    rows.push({ label: 'Income Statement', classifiedValue: null, finalValue: null, isStatementHeader: true })
     for (const section of isSections) {
-      if (section.header) rows.push({ label: section.header, value: null, isHeader: true })
+      if (section.header) rows.push({ label: section.header, classifiedValue: null, finalValue: null, isHeader: true })
       for (const field of section.fields) {
-        const rawValue = finalValues.income_statement[field] ?? null
+        const rawFinalValue = finalValues.income_statement[field] ?? null
+        const l2Value = isLayer2?.values[field] ?? null
         const corrected = correctedFieldNames.has(field)
         const flagged = allFlaggedFields.has(field) && !corrected
+        const validationFail = allValidationFails.has(field) && !corrected
         rows.push({
           label: field,
-          value: rawValue !== null ? formatFieldValue(field, rawValue) : null,
-          rawValue,
+          classifiedValue: l2Value !== null ? formatFieldValue(field, l2Value) : null,
+          finalValue: rawFinalValue !== null ? formatFieldValue(field, rawFinalValue) : null,
+          rawFinalValue,
           corrected,
           flagged,
+          validationFail,
         })
       }
     }
 
-    rows.push({ label: 'Balance Sheet', value: null, isStatementHeader: true })
+    rows.push({ label: 'Balance Sheet', classifiedValue: null, finalValue: null, isStatementHeader: true })
     for (const section of bsSections) {
-      if (section.header) rows.push({ label: section.header, value: null, isHeader: true })
+      if (section.header) rows.push({ label: section.header, classifiedValue: null, finalValue: null, isHeader: true })
       for (const field of section.fields) {
         if (field === 'Check') {
-          rows.push({ label: 'Check', value: null, isBalanceCheck: true })
+          rows.push({ label: 'Check', classifiedValue: null, finalValue: null, isBalanceCheck: true })
           continue
         }
-        const rawValue = finalValues.balance_sheet[field] ?? null
+        const rawFinalValue = finalValues.balance_sheet[field] ?? null
+        const l2Value = bsLayer2?.values[field] ?? null
         const corrected = correctedFieldNames.has(field)
         const flagged = allFlaggedFields.has(field) && !corrected
+        const validationFail = allValidationFails.has(field) && !corrected
         rows.push({
           label: field,
-          value: rawValue !== null ? formatFieldValue(field, rawValue) : null,
-          rawValue,
+          classifiedValue: l2Value !== null ? formatFieldValue(field, l2Value) : null,
+          finalValue: rawFinalValue !== null ? formatFieldValue(field, rawFinalValue) : null,
+          rawFinalValue,
           corrected,
           flagged,
+          validationFail,
         })
       }
     }
@@ -157,10 +194,6 @@ export default function Step3Finalize() {
       })
       setFinalizedAt(response.finalizedAt)
       setFinalized(true)
-      setStatus({
-        type: 'success',
-        message: `Output finalized and saved for ${companyName} — ${reportingPeriod}.`,
-      })
     } catch (err) {
       setStatus({
         type: 'error',
@@ -173,119 +206,129 @@ export default function Step3Finalize() {
   }
 
   return (
-    <div className="flex flex-col flex-1 overflow-hidden">
-      {/* Action bar */}
-      <div className="bg-white border-b border-gray-200 px-4 py-2.5 flex items-center gap-3 flex-shrink-0">
+    <div className="flex flex-col h-full">
+      {/* Toolbar */}
+      <div className="flex items-center gap-3 px-4 py-2.5 border-b border-border bg-gray-50/80 shrink-0">
         <button
           onClick={backToStep2}
           disabled={finalized}
-          className="flex items-center gap-1.5 text-sm text-gray-600 hover:text-gray-800 border border-gray-300 hover:border-gray-400 px-3 py-1.5 rounded transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+          className="flex items-center gap-1.5 text-[13px] text-muted-foreground hover:text-foreground transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
         >
-          ← Back to Review
+          <ArrowLeft className="w-3.5 h-3.5" />
+          Back to Review
         </button>
 
-        <div className="ml-auto flex items-center gap-2">
+        <div className="flex-1" />
+
+        {!finalized ? (
           <button
-            onClick={resetWizard}
-            className="text-sm text-gray-500 hover:text-gray-700 border border-gray-300 hover:border-gray-400 px-3 py-1.5 rounded transition-colors"
+            onClick={handleFinalize}
+            disabled={saving}
+            className="flex items-center gap-2 bg-emerald-600 text-white px-4 py-1.5 rounded-lg text-[13px] hover:bg-emerald-700 transition-colors disabled:opacity-50"
+            style={{ fontWeight: 500 }}
           >
-            ↩ Start New Review
+            {saving ? (
+              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+            ) : (
+              <Download className="w-3.5 h-3.5" />
+            )}
+            {saving ? 'Saving...' : 'Finalize & Save'}
           </button>
-          {!finalized && (
-            <button
-              onClick={handleFinalize}
-              disabled={saving}
-              className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white text-sm px-5 py-1.5 rounded transition-colors font-medium disabled:opacity-50"
+        ) : (
+          <>
+            <span
+              className="flex items-center gap-1.5 text-[13px] text-emerald-600 bg-emerald-50 px-3 py-1.5 rounded-lg"
+              style={{ fontWeight: 500 }}
             >
-              {saving && <LoadingSpinner size="sm" />}
-              {saving ? 'Saving...' : '💾 Finalize & Save'}
+              <CheckCircle2 className="w-3.5 h-3.5" />
+              Finalized
+            </span>
+            <button
+              onClick={resetWizard}
+              className="flex items-center gap-2 bg-primary text-white px-4 py-1.5 rounded-lg text-[13px] hover:bg-primary/90 transition-colors"
+              style={{ fontWeight: 500 }}
+            >
+              <RotateCcw className="w-3.5 h-3.5" />
+              Start New Review
             </button>
-          )}
-        </div>
+          </>
+        )}
       </div>
 
-      {/* Status banner */}
-      {status && (
-        <div className="px-4 pt-2 flex-shrink-0">
-          <StatusBanner
-            type={status.type}
-            message={status.message}
-            onDismiss={() => setStatus(null)}
-          />
-        </div>
-      )}
+      <div className="flex-1 overflow-auto px-4 py-3">
+        {/* Error banner */}
+        {status?.type === 'error' && (
+          <div className="flex items-center gap-2 mb-3 p-3 bg-red-50 border border-red-200 rounded-lg">
+            <XCircle className="w-4 h-4 text-red-500 shrink-0" />
+            <p className="text-[13px] text-red-700">{status.message}</p>
+          </div>
+        )}
 
-      <div className="flex-1 overflow-auto px-6 py-4">
-        {/* Summary panel */}
-        <div className="bg-white border border-gray-200 rounded-lg p-4 mb-4">
-          <div className="flex items-start justify-between">
+        {/* Success banner */}
+        {finalized && finalizedAt && (
+          <div className="flex items-center gap-2 mb-3 p-3 bg-emerald-50 border border-emerald-200 rounded-lg">
+            <CheckCircle2 className="w-5 h-5 text-emerald-500 shrink-0" />
             <div>
-              <h2 className="text-lg font-bold text-gray-900">{companyName || '—'}</h2>
-              <p className="text-sm text-gray-500 mt-0.5">{reportingPeriod || '—'}</p>
-            </div>
-            <div
-              className={`flex items-center gap-1.5 text-sm font-medium px-3 py-1.5 rounded-full ${
-                finalized ? 'bg-green-100 text-green-700' : 'bg-blue-50 text-blue-700'
-              }`}
-            >
-              {finalized ? '✅ Finalized' : 'Ready to Finalize'}
+              <p className="text-[13px] text-emerald-700" style={{ fontWeight: 500 }}>
+                Successfully finalized and saved for {companyName} — {reportingPeriod}
+              </p>
+              <p className="text-[11px] text-emerald-600">{formatDateTime(finalizedAt)}</p>
             </div>
           </div>
+        )}
 
-          <div className="grid grid-cols-2 gap-4 md:grid-cols-4 mt-4 pt-4 border-t border-gray-100">
-            <div>
-              <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-0.5">
-                Fields Populated
-              </p>
-              <p className="text-sm font-semibold text-gray-800">{totalPopulated}</p>
+        {/* Summary stat cards */}
+        <div className="grid grid-cols-4 gap-3 mb-3">
+          <div className="p-3 rounded-lg border border-border bg-gray-50">
+            <div className="flex items-center gap-2 mb-1">
+              <CheckCircle2 className="w-4 h-4 text-emerald-500" />
+              <p className="text-[11px] text-muted-foreground">Fields Populated</p>
             </div>
-            <div>
-              <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-0.5">
-                Corrections Made
-              </p>
-              <p
-                className={`text-sm font-semibold ${
-                  corrections.length > 0 ? 'text-blue-600' : 'text-gray-800'
-                }`}
-              >
-                {corrections.length}
-              </p>
+            <p className="text-[18px]" style={{ fontWeight: 600 }}>{totalPopulated}</p>
+          </div>
+          <div className="p-3 rounded-lg border border-border bg-gray-50">
+            <div className="flex items-center gap-2 mb-1">
+              <Edit3 className="w-4 h-4 text-purple-500" />
+              <p className="text-[11px] text-muted-foreground">Corrections Made</p>
             </div>
-            <div>
-              <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-0.5">
-                Flags Remaining
-              </p>
-              <p
-                className={`text-sm font-semibold ${
-                  flaggedRemaining > 0 ? 'text-amber-600' : 'text-gray-800'
-                }`}
-              >
-                {flaggedRemaining}
-              </p>
+            <p className="text-[18px]" style={{ fontWeight: 600 }}>{corrections.length}</p>
+          </div>
+          <div className="p-3 rounded-lg border border-border bg-gray-50">
+            <div className="flex items-center gap-2 mb-1">
+              <Flag className="w-4 h-4 text-amber-500" />
+              <p className="text-[11px] text-muted-foreground">Flagged Remaining</p>
             </div>
-            <div>
-              <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-0.5">
-                Finalized
-              </p>
-              <p className="text-sm font-semibold text-gray-800">
-                {finalizedAt ? formatDateTime(finalizedAt) : '—'}
-              </p>
+            <p className="text-[18px]" style={{ fontWeight: 600 }}>{flaggedRemaining}</p>
+          </div>
+          <div className={`p-3 rounded-lg border ${isBalanced ? 'border-border bg-gray-50' : 'border-red-200 bg-red-50'}`}>
+            <div className="flex items-center gap-2 mb-1">
+              {isBalanced ? (
+                <Scale className="w-4 h-4 text-emerald-500" />
+              ) : (
+                <XCircle className="w-4 h-4 text-red-500" />
+              )}
+              <p className="text-[11px] text-muted-foreground">Balance Sheet Balances</p>
             </div>
+            <p className="text-[18px]" style={{ fontWeight: 600 }}>{isBalanced ? 'Yes' : 'No'}</p>
           </div>
         </div>
 
-        {/* Full output table */}
-        <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
-          <table className="w-full text-xs financial-table border-collapse">
+        {/* Output table */}
+        <div className="bg-white border border-border rounded-lg overflow-hidden">
+          <table className="w-full text-[12px] border-collapse">
             <thead>
-              <tr className="bg-gray-50 border-b border-gray-200 sticky top-0 z-10">
-                <th className="px-4 py-2 text-left text-[10px] font-semibold text-gray-500 uppercase tracking-wide w-[50%]">
+              <tr className="bg-gray-50 border-b border-border sticky top-0 z-10">
+                <th className="px-4 py-2 w-8" />
+                <th className="px-4 py-2 text-left text-muted-foreground" style={{ fontWeight: 500 }}>
                   Field
                 </th>
-                <th className="px-4 py-2 text-right text-[10px] font-semibold text-gray-500 uppercase tracking-wide w-[30%]">
-                  Value
+                <th className="px-4 py-2 text-right text-muted-foreground" style={{ fontWeight: 500 }}>
+                  Classified Value
                 </th>
-                <th className="px-4 py-2 text-left text-[10px] font-semibold text-gray-500 uppercase tracking-wide w-[20%]">
+                <th className="px-4 py-2 text-right text-muted-foreground" style={{ fontWeight: 500 }}>
+                  Final Value
+                </th>
+                <th className="px-4 py-2 text-left text-muted-foreground w-[120px]" style={{ fontWeight: 500 }}>
                   Status
                 </th>
               </tr>
@@ -294,10 +337,11 @@ export default function Step3Finalize() {
               {rows.map((row, idx) => {
                 if (row.isStatementHeader) {
                   return (
-                    <tr key={idx} className="bg-gray-700 border-y border-gray-600">
+                    <tr key={idx} className="bg-blue-50/50 border-b border-border">
                       <td
-                        colSpan={3}
-                        className="px-4 py-2 font-bold text-white text-[11px] uppercase tracking-wider"
+                        colSpan={5}
+                        className="px-4 py-2 text-blue-700 text-[11px] uppercase"
+                        style={{ fontWeight: 600, letterSpacing: '0.05em' }}
                       >
                         {row.label}
                       </td>
@@ -307,10 +351,11 @@ export default function Step3Finalize() {
 
                 if (row.isHeader) {
                   return (
-                    <tr key={idx} className="bg-gray-100 border-y border-gray-200">
+                    <tr key={idx} className="bg-gray-50/80 border-b border-gray-200">
                       <td
-                        colSpan={3}
-                        className="px-4 py-1.5 font-semibold text-gray-600 uppercase tracking-wide text-[10px]"
+                        colSpan={5}
+                        className="px-4 py-1.5 text-muted-foreground text-[10px] uppercase"
+                        style={{ fontWeight: 600, letterSpacing: '0.08em' }}
                       >
                         {row.label}
                       </td>
@@ -321,59 +366,89 @@ export default function Step3Finalize() {
                 if (row.isBalanceCheck) {
                   return (
                     <tr key={idx} className="bg-gray-50 border-b border-gray-200">
-                      <td className="px-4 py-1.5 text-gray-600 font-medium text-[11px]">
+                      <td className="px-4 py-1.5">
+                        {isBalanced ? (
+                          <CheckCircle2 className="w-3 h-3 text-emerald-500" />
+                        ) : (
+                          <XCircle className="w-3 h-3 text-red-500" />
+                        )}
+                      </td>
+                      <td className="px-4 py-1.5 text-muted-foreground" style={{ fontWeight: 500 }}>
                         Balance Check
                       </td>
                       <td
-                        colSpan={2}
-                        className={`px-4 py-1.5 font-medium tabular-nums ${
-                          isBalanced ? 'text-green-600' : 'text-red-600'
-                        }`}
+                        colSpan={3}
+                        className={`px-4 py-1.5 ${isBalanced ? 'text-emerald-600' : 'text-red-600'}`}
+                        style={{ fontWeight: 500 }}
                       >
                         {isBalanced
-                          ? '✅ Balanced'
-                          : `❌ Imbalanced — difference: ${formatDollar(balanceDiff)}`}
+                          ? 'Balanced'
+                          : `Imbalanced — difference: ${formatDollar(balanceDiff)}`}
                       </td>
                     </tr>
                   )
                 }
 
+                const rowBg = row.corrected
+                  ? 'bg-purple-50/30'
+                  : row.flagged
+                  ? 'bg-amber-50/30'
+                  : row.validationFail
+                  ? 'bg-red-50/30'
+                  : ''
+
+                const isBold =
+                  row.label.includes('Total') ||
+                  row.label.includes('Gross') ||
+                  row.label.includes('Net') ||
+                  row.label === 'EBITDA'
+
+                const isNegFinal =
+                  row.rawFinalValue !== null &&
+                  row.rawFinalValue !== undefined &&
+                  row.rawFinalValue < 0
+
                 return (
-                  <tr
-                    key={idx}
-                    className={`border-b border-gray-100 ${
-                      row.corrected
-                        ? 'bg-blue-50/40'
-                        : idx % 2 === 0
-                        ? 'bg-white'
-                        : 'bg-gray-50/40'
-                    }`}
-                  >
-                    <td className="px-4 py-1.5 text-gray-700">{row.label}</td>
+                  <tr key={idx} className={`border-b border-gray-100 ${rowBg}`}>
+                    <td className="px-4 py-1.5">
+                      {row.flagged && <Flag className="w-3 h-3 text-amber-500" />}
+                      {row.validationFail && <AlertTriangle className="w-3 h-3 text-red-500" />}
+                      {row.corrected && <Edit3 className="w-3 h-3 text-purple-500" />}
+                    </td>
+                    <td className="px-4 py-1.5" style={{ fontWeight: isBold ? 500 : 400 }}>
+                      {row.label}
+                    </td>
                     <td
-                      className={`px-4 py-1.5 text-right tabular-nums font-tabular ${
-                        row.value === null || row.value === '—'
-                          ? 'text-gray-300'
-                          : row.corrected
-                          ? 'text-blue-600 font-medium'
-                          : row.rawValue !== null &&
-                            row.rawValue !== undefined &&
-                            row.rawValue < 0
-                          ? 'text-red-600'
-                          : 'text-gray-900'
-                      }`}
+                      className={`px-4 py-1.5 text-right font-mono ${
+                        row.classifiedValue === null ? 'text-gray-300' : ''
+                      } ${row.corrected ? 'line-through text-muted-foreground' : ''}`}
                     >
-                      {row.value ?? '—'}
+                      {row.classifiedValue ?? '—'}
+                    </td>
+                    <td
+                      className={`px-4 py-1.5 text-right font-mono ${
+                        row.finalValue === null ? 'text-gray-300' : ''
+                      } ${row.corrected ? 'text-purple-700' : ''} ${
+                        isNegFinal && !row.corrected ? 'text-red-600' : ''
+                      }`}
+                      style={{ fontWeight: row.corrected ? 500 : 400 }}
+                    >
+                      {row.finalValue ?? '—'}
                     </td>
                     <td className="px-4 py-1.5">
                       {row.corrected && (
-                        <span className="text-[9px] bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded uppercase font-semibold">
+                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-purple-100 text-purple-700" style={{ fontWeight: 500 }}>
                           Corrected
                         </span>
                       )}
                       {row.flagged && (
-                        <span className="text-[9px] bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded uppercase font-semibold">
+                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-100 text-amber-700" style={{ fontWeight: 500 }}>
                           Flagged
+                        </span>
+                      )}
+                      {row.validationFail && (
+                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-red-100 text-red-700" style={{ fontWeight: 500 }}>
+                          Validation Fail
                         </span>
                       )}
                     </td>

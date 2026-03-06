@@ -1,34 +1,69 @@
+import { PiggyBank, Check } from 'lucide-react'
 import { useWizardState } from '../../hooks/useWizardState'
-import piggyBank from '../../assets/piggy-bank.jpg'
+
+const STEPS = ['Upload & Extract', 'Classify & Review', 'Finalize & Export']
 
 export default function Header() {
-  const { companyName, reportingPeriod } = useWizardState()
+  const { companyName, reportingPeriod, currentStep } = useWizardState()
 
   return (
-    <header className="bg-white border-b border-gray-200 px-6 py-3 flex items-center justify-between flex-shrink-0">
-      <div className="flex items-center gap-3">
-        <div className="w-8 h-8 rounded overflow-hidden flex-shrink-0">
-          <img src={piggyBank} alt="Henry logo" className="w-full h-full object-cover" />
-        </div>
-        <div>
-          <h1 className="text-sm font-semibold text-gray-900 leading-none">
-            Henry
-          </h1>
-          <p className="text-xs text-gray-500 mt-0.5">Portfolio Company Statement Processor</p>
-        </div>
-      </div>
-
-      <div className="flex items-center gap-3">
-        {companyName && (
-          <div className="text-right">
-            <p className="text-sm font-semibold text-gray-800 leading-none">{companyName}</p>
-            {reportingPeriod && (
-              <p className="text-xs text-gray-400 mt-0.5">{reportingPeriod}</p>
-            )}
+    <div className="border-b border-border bg-white shrink-0">
+      <div className="flex items-center justify-between px-5 py-2.5">
+        <div className="flex items-center gap-2.5">
+          <div className="w-8 h-8 bg-amber-500 rounded-lg flex items-center justify-center">
+            <PiggyBank className="w-5 h-5 text-white" />
           </div>
-        )}
-        <div className="text-xs text-gray-300">v0.1.0</div>
+          <span className="text-[17px] tracking-tight" style={{ fontWeight: 600 }}>Henry</span>
+        </div>
+        <div className="flex items-center gap-4 text-[13px] text-muted-foreground">
+          {companyName && (
+            <span className="bg-secondary px-2.5 py-1 rounded-md" style={{ fontWeight: 500 }}>
+              {companyName}
+            </span>
+          )}
+          {reportingPeriod && (
+            <span className="bg-secondary px-2.5 py-1 rounded-md">{reportingPeriod}</span>
+          )}
+        </div>
       </div>
-    </header>
+      <div className="flex items-center px-5 pb-0">
+        {STEPS.map((step, i) => {
+          const stepNum = i + 1
+          const isActive = stepNum === currentStep
+          const isComplete = stepNum < currentStep
+          return (
+            <div
+              key={step}
+              className={`flex items-center gap-2 px-4 py-2 border-b-2 transition-colors ${
+                isActive
+                  ? 'border-primary text-primary'
+                  : isComplete
+                  ? 'border-emerald-500 text-emerald-600'
+                  : 'border-transparent text-muted-foreground'
+              }`}
+            >
+              <div
+                className={`w-5 h-5 rounded-full flex items-center justify-center text-[11px] shrink-0 ${
+                  isActive
+                    ? 'bg-primary text-white'
+                    : isComplete
+                    ? 'bg-emerald-500 text-white'
+                    : 'bg-muted text-muted-foreground'
+                }`}
+                style={{ fontWeight: 600 }}
+              >
+                {isComplete ? <Check className="w-3 h-3" /> : stepNum}
+              </div>
+              <span
+                className="text-[13px] whitespace-nowrap"
+                style={{ fontWeight: isActive ? 500 : 400 }}
+              >
+                {step}
+              </span>
+            </div>
+          )
+        })}
+      </div>
+    </div>
   )
 }

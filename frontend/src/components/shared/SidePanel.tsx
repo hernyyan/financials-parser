@@ -1,6 +1,16 @@
 import { useState, useEffect } from 'react'
 import type { Layer2Result, Correction, ValidationCheck } from '../../types'
 import { formatFieldValue } from '../../utils/formatters'
+import {
+  X,
+  ChevronDown,
+  ChevronRight,
+  CheckCircle2,
+  XCircle,
+  AlertTriangle,
+  Save,
+  Trash2,
+} from 'lucide-react'
 
 interface SidePanelProps {
   isOpen: boolean
@@ -14,18 +24,18 @@ interface SidePanelProps {
 }
 
 const TAG_OPTIONS: { value: Correction['tag']; label: string; description: string }[] = [
-  { value: 'one_off_error', label: 'One-off Error', description: 'Isolated mistake in this report; no further action taken' },
-  { value: 'company_specific', label: 'Company-specific', description: 'Consistent pattern for this company; queued for future reference' },
-  { value: 'general_fix', label: 'General Fix', description: 'Systematic issue across all companies; logged to shared CSV' },
+  { value: 'one_off_error', label: 'One-off Error', description: 'Isolated mistake, no further action' },
+  { value: 'company_specific', label: 'Company-specific', description: 'Pattern unique to this company, saved for future' },
+  { value: 'general_fix', label: 'General Fix', description: 'Systematic issue, logged for review' },
 ]
 
-/** Wrap dollar amounts in reasoning text with a monospace span for readability. */
+/** Highlight dollar amounts in reasoning text with blue-50 background. */
 function highlightDollarAmounts(text: string): React.ReactNode {
   const parts = text.split(/(\(\$[\d,]+(?:\.\d{1,2})?\)|\$[\d,]+(?:\.\d{1,2})?)/g)
   return parts.map((part, i) => {
     if (/^\$[\d,]/.test(part) || /^\(\$[\d,]/.test(part)) {
       return (
-        <span key={i} className="font-mono font-semibold text-gray-800">
+        <span key={i} className="text-primary bg-blue-50 px-0.5 rounded" style={{ fontWeight: 600 }}>
           {part}
         </span>
       )
@@ -60,7 +70,7 @@ export default function SidePanel({
     .filter((pair): pair is [string, ValidationCheck] => pair[1] !== undefined)
 
   const hasFailure = relevantChecks.some(([, check]) => check.status === 'FAIL')
-  const failCount = relevantChecks.filter(([, c]) => c.status === 'FAIL').length
+  const passCount = relevantChecks.filter(([, c]) => c.status === 'PASS').length
 
   // Correction form state
   const [correctedValue, setCorrectedValue] = useState<string>('')
@@ -72,7 +82,7 @@ export default function SidePanel({
   const [reasoningOpen, setReasoningOpen] = useState(true)
   const [validationOpen, setValidationOpen] = useState(false)
 
-  // Reset form and expand relevant sections when selected field changes
+  // Reset form when selected field changes
   useEffect(() => {
     if (existingCorrection) {
       setCorrectedValue(String(existingCorrection.correctedValue))
@@ -118,246 +128,224 @@ export default function SidePanel({
     }
   }
 
+  if (!isOpen || !fieldName) return null
+
   return (
     <div
-      className={`fixed top-0 right-0 h-screen w-96 flex flex-col bg-white border-l border-gray-200 shadow-xl z-50 transition-transform duration-200 ease-out ${
-        isOpen ? 'translate-x-0' : 'translate-x-full'
-      }`}
+      key={fieldName}
+      className="w-[400px] border-l border-border bg-white flex flex-col shrink-0 overflow-hidden animate-fadeIn"
     >
-      {isOpen && fieldName && (
-        /* key causes content to remount (fade-in) whenever a different field is selected */
-        <div key={fieldName} className="flex flex-col h-full overflow-hidden animate-fadeIn">
-          {/* Header */}
-          <div className="flex items-start justify-between px-4 py-3 border-b border-gray-200 bg-gray-50 flex-shrink-0">
-            <div className="flex-1 min-w-0 pr-2">
-              <h3 className="text-sm font-semibold text-gray-800 leading-tight">{fieldName}</h3>
-              {statementType && (
-                <span className="inline-block mt-0.5 text-[10px] px-1.5 py-0.5 rounded bg-gray-200 text-gray-600 font-medium">
-                  {statementType === 'income_statement' ? 'Income Statement' : 'Balance Sheet'}
-                </span>
-              )}
+      {/* Header */}
+      <div className="flex items-start justify-between px-4 py-3 border-b border-border shrink-0">
+        <div>
+          {statementType && (
+            <p className="text-[11px] text-muted-foreground mb-0.5">
+              {statementType === 'income_statement' ? 'Income Statement' : 'Balance Sheet'}
+            </p>
+          )}
+          <h3 className="text-[14px]" style={{ fontWeight: 600 }}>{fieldName}</h3>
+        </div>
+        <button
+          onClick={onClose}
+          className="p-1 hover:bg-gray-100 rounded transition-colors mt-0.5"
+        >
+          <X className="w-4 h-4" />
+        </button>
+      </div>
+
+      {/* Scrollable content */}
+      <div className="flex-1 overflow-y-auto">
+        {/* Current value */}
+        <div className="px-4 py-3 border-b border-border">
+          <p className="text-[11px] text-muted-foreground mb-1">Classified Value</p>
+          {existingCorrection ? (
+            <div>
+              <p
+                className="text-[20px] font-mono line-through text-muted-foreground"
+                style={{ fontWeight: 600 }}
+              >
+                {formatFieldValue(fieldName, currentValue)}
+              </p>
+              <p className="text-[12px] text-amber-600 mt-1" style={{ fontWeight: 500 }}>
+                Corrected to: {formatFieldValue(fieldName, existingCorrection.correctedValue)}
+              </p>
             </div>
-            <button
-              onClick={onClose}
-              className="text-gray-400 hover:text-gray-600 transition-colors flex-shrink-0 text-lg leading-none mt-0.5"
+          ) : (
+            <p
+              className={`text-[20px] font-mono ${
+                currentValue !== null && currentValue < 0 ? 'text-red-600' : 'text-foreground'
+              }`}
+              style={{ fontWeight: 600 }}
             >
-              ✕
-            </button>
-          </div>
+              {formatFieldValue(fieldName, currentValue)}
+            </p>
+          )}
+        </div>
 
-          <div className="flex-1 overflow-y-auto">
-            {/* Current / corrected value */}
-            <div className="px-4 py-3 border-b border-gray-100">
-              <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-1.5">
-                Classified Value
-              </p>
-              {existingCorrection ? (
-                <div className="space-y-1">
-                  <p className="text-sm text-gray-400 line-through">
-                    {formatFieldValue(fieldName, currentValue)}
-                  </p>
-                  <p className="text-lg font-semibold text-blue-600 tabular-nums">
-                    {formatFieldValue(fieldName, existingCorrection.correctedValue)}
-                  </p>
-                  <p className="text-[10px] text-blue-500">Manually corrected</p>
-                </div>
+        {/* AI Reasoning — collapsible */}
+        <div className="border-b border-border">
+          <button
+            onClick={() => setReasoningOpen((o) => !o)}
+            className="flex items-center justify-between w-full px-4 py-2.5 hover:bg-gray-50 transition-colors"
+          >
+            <span className="text-[12px]" style={{ fontWeight: 500 }}>AI Reasoning</span>
+            {reasoningOpen ? (
+              <ChevronDown className="w-3.5 h-3.5 text-muted-foreground" />
+            ) : (
+              <ChevronRight className="w-3.5 h-3.5 text-muted-foreground" />
+            )}
+          </button>
+          {reasoningOpen && (
+            <div className="px-4 pb-3 text-[12px] text-muted-foreground leading-relaxed">
+              {reasoning ? (
+                <p className="whitespace-pre-wrap">{highlightDollarAmounts(reasoning)}</p>
               ) : (
-                <p
-                  className={`text-lg font-semibold tabular-nums ${
-                    currentValue !== null && currentValue < 0 ? 'text-red-600' : 'text-gray-900'
-                  }`}
-                >
-                  {formatFieldValue(fieldName, currentValue)}
-                </p>
+                <p className="italic">No source data mapped to this field.</p>
               )}
             </div>
+          )}
+        </div>
 
-            {/* Classification reasoning — collapsible */}
-            <div className="border-b border-gray-100">
-              <button
-                onClick={() => setReasoningOpen((o) => !o)}
-                className="w-full flex items-center justify-between px-4 py-2.5 text-left hover:bg-gray-50 transition-colors"
-              >
-                <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">
-                  Classification Reasoning
-                </p>
-                <span className="text-gray-400 text-[10px]">{reasoningOpen ? '▲' : '▼'}</span>
-              </button>
-              {reasoningOpen && (
-                <div className="px-4 pb-3">
-                  {reasoning ? (
-                    <p className="text-xs text-gray-600 leading-relaxed whitespace-pre-wrap">
-                      {highlightDollarAmounts(reasoning)}
-                    </p>
-                  ) : (
-                    <p className="text-xs text-gray-400 italic">
-                      No source data mapped to this field.
-                    </p>
-                  )}
-                </div>
+        {/* Validation Checks — collapsible */}
+        {relevantChecks.length > 0 && (
+          <div className="border-b border-border">
+            <button
+              onClick={() => setValidationOpen((o) => !o)}
+              className="flex items-center justify-between w-full px-4 py-2.5 hover:bg-gray-50 transition-colors"
+            >
+              <span className="text-[12px]" style={{ fontWeight: 500 }}>
+                Validation Checks ({passCount}/{relevantChecks.length} passed)
+              </span>
+              {validationOpen ? (
+                <ChevronDown className="w-3.5 h-3.5 text-muted-foreground" />
+              ) : (
+                <ChevronRight className="w-3.5 h-3.5 text-muted-foreground" />
               )}
-            </div>
-
-            {/* Validation checks — collapsible */}
-            <div className="border-b border-gray-100">
-              <button
-                onClick={() => setValidationOpen((o) => !o)}
-                className="w-full flex items-center justify-between px-4 py-2.5 text-left hover:bg-gray-50 transition-colors"
-              >
-                <div className="flex items-center gap-2">
-                  <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">
-                    Validation Checks
-                  </p>
-                  {relevantChecks.length > 0 && (
-                    <span
-                      className={`text-[9px] px-1 py-0.5 rounded font-semibold ${
-                        hasFailure ? 'bg-red-100 text-red-600' : 'bg-green-100 text-green-600'
-                      }`}
-                    >
-                      {hasFailure ? `${failCount} FAIL` : 'ALL PASS'}
-                    </span>
-                  )}
-                </div>
-                <span className="text-gray-400 text-[10px]">{validationOpen ? '▲' : '▼'}</span>
-              </button>
-              {validationOpen && (
-                <div className="px-4 pb-3">
-                  {relevantChecks.length > 0 ? (
-                    <div className="space-y-1.5">
-                      {relevantChecks.map(([checkName, check]) => (
-                        <div
-                          key={checkName}
-                          className={`rounded p-2 text-xs ${
-                            check.status === 'PASS'
-                              ? 'bg-green-50 border border-green-100'
-                              : 'bg-red-50 border border-red-100'
-                          }`}
-                        >
-                          <div className="flex items-center gap-1.5 mb-0.5">
-                            <span className="text-sm">{check.status === 'PASS' ? '✅' : '❌'}</span>
-                            <span
-                              className={`font-semibold text-[10px] ${
-                                check.status === 'PASS' ? 'text-green-700' : 'text-red-700'
-                              }`}
-                            >
-                              {check.status}
-                            </span>
-                          </div>
-                          <p className="text-gray-600 text-[10px] font-medium mb-0.5">
-                            {check.checkName}
-                          </p>
-                          <p className="text-gray-500">{check.details}</p>
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <p className="text-xs text-gray-400 italic">
-                      No validation checks for this field.
-                    </p>
-                  )}
-                </div>
-              )}
-            </div>
-
-            {/* Correction form */}
-            <div className="px-4 py-3">
-              <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-2.5">
-                Make Correction
-              </p>
-              <div className="space-y-3">
-                <div>
-                  <label className="block text-xs text-gray-600 mb-1">Corrected Value</label>
-                  <input
-                    type="number"
-                    step="any"
-                    value={correctedValue}
-                    onChange={(e) => setCorrectedValue(e.target.value)}
-                    onKeyDown={handleInputKeyDown}
-                    className="w-full border border-gray-300 rounded px-2.5 py-1.5 text-sm tabular-nums focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    placeholder="Enter corrected value"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs text-gray-600 mb-1">
-                    Correction Reasoning{' '}
-                    <span className="text-red-500">*</span>
-                  </label>
-                  <textarea
-                    value={correctionReasoning}
-                    onChange={(e) => {
-                      setCorrectionReasoning(e.target.value)
-                      if (e.target.value.trim()) setReasoningError(false)
-                    }}
-                    rows={3}
-                    className={`w-full border rounded px-2.5 py-1.5 text-xs focus:outline-none focus:ring-2 focus:border-transparent resize-none ${
-                      reasoningError
-                        ? 'border-red-400 focus:ring-red-400'
-                        : 'border-gray-300 focus:ring-blue-500'
+            </button>
+            {validationOpen && (
+              <div className="px-4 pb-3 space-y-2">
+                {relevantChecks.map(([checkName, check]) => (
+                  <div
+                    key={checkName}
+                    className={`rounded-lg px-3 py-2 text-[11px] ${
+                      check.status === 'PASS' ? 'bg-emerald-50' : 'bg-red-50'
                     }`}
-                    placeholder="Why is this value incorrect? What should it be based on?"
-                  />
-                  {reasoningError && (
-                    <p className="text-[10px] text-red-500 mt-1">
-                      Reasoning is required for all corrections.
+                  >
+                    <div className="flex items-center gap-1.5 mb-0.5">
+                      {check.status === 'PASS' ? (
+                        <CheckCircle2 className="w-3 h-3 text-emerald-500 shrink-0" />
+                      ) : (
+                        <XCircle className="w-3 h-3 text-red-500 shrink-0" />
+                      )}
+                      <span
+                        style={{ fontWeight: 500 }}
+                        className={check.status === 'PASS' ? 'text-emerald-700' : 'text-red-700'}
+                      >
+                        {check.checkName}
+                      </span>
+                    </div>
+                    <p className={`ml-[18px] ${check.status === 'PASS' ? 'text-emerald-600' : 'text-red-600'}`}>
+                      {check.details}
                     </p>
-                  )}
-                </div>
-
-                <div>
-                  <label className="block text-xs text-gray-600 mb-2">
-                    Correction Type
-                  </label>
-                  <div className="space-y-2">
-                    {TAG_OPTIONS.map((opt) => (
-                      <label key={opt.value} className="flex items-start gap-2.5 cursor-pointer group">
-                        <input
-                          type="radio"
-                          name="correction-tag"
-                          value={opt.value}
-                          checked={tag === opt.value}
-                          onChange={() => setTag(opt.value)}
-                          className="mt-0.5 accent-blue-600"
-                        />
-                        <div>
-                          <p className="text-xs font-medium text-gray-700 group-hover:text-gray-900">{opt.label}</p>
-                          <p className="text-[10px] text-gray-400 leading-tight">{opt.description}</p>
-                        </div>
-                      </label>
-                    ))}
                   </div>
-                </div>
+                ))}
               </div>
-            </div>
-          </div>
-
-          {/* Action buttons */}
-          <div className="flex flex-col gap-1.5 px-4 py-3 border-t border-gray-200 bg-gray-50 flex-shrink-0">
-            <div className="flex gap-2">
-              <button
-                onClick={handleSave}
-                className="flex-1 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-3 py-2 rounded transition-colors"
-              >
-                Save Correction
-              </button>
-              <button
-                onClick={onClose}
-                className="px-3 py-2 text-sm text-gray-600 hover:text-gray-800 border border-gray-300 rounded hover:border-gray-400 transition-colors"
-              >
-                Cancel
-              </button>
-            </div>
-            {existingCorrection && (
-              <button
-                onClick={() => onRemoveCorrection(fieldName)}
-                className="text-xs text-red-500 hover:text-red-700 text-center py-1 transition-colors"
-              >
-                Remove correction (revert to original)
-              </button>
             )}
           </div>
+        )}
+
+        {/* Correction form */}
+        <div className="px-4 py-3 space-y-3">
+          <h4 className="text-[12px] flex items-center gap-1.5" style={{ fontWeight: 500 }}>
+            <AlertTriangle className="w-3.5 h-3.5 text-amber-500" />
+            Submit Correction
+          </h4>
+
+          <div>
+            <label className="text-[11px] text-muted-foreground block mb-1">Corrected Value</label>
+            <input
+              type="number"
+              step="any"
+              value={correctedValue}
+              onChange={(e) => setCorrectedValue(e.target.value)}
+              onKeyDown={handleInputKeyDown}
+              className="w-full bg-white border border-border rounded-lg px-3 py-2 text-[13px] font-mono focus:outline-none focus:ring-2 focus:ring-primary/20"
+              placeholder="Enter corrected value"
+            />
+          </div>
+
+          <div>
+            <label className="text-[11px] text-muted-foreground block mb-1">
+              Reasoning <span className="text-red-500">*</span>
+            </label>
+            <textarea
+              value={correctionReasoning}
+              onChange={(e) => {
+                setCorrectionReasoning(e.target.value)
+                if (e.target.value.trim()) setReasoningError(false)
+              }}
+              rows={3}
+              className={`w-full bg-white border rounded-lg px-3 py-2 text-[12px] resize-none focus:outline-none focus:ring-2 focus:ring-primary/20 ${
+                reasoningError ? 'border-red-400' : 'border-border'
+              }`}
+              placeholder="Explain why this value should be corrected..."
+            />
+            {reasoningError && (
+              <p className="text-[10px] text-red-500 mt-1">
+                Reasoning is required for all corrections.
+              </p>
+            )}
+          </div>
+
+          <div>
+            <label className="text-[11px] text-muted-foreground block mb-2">Correction Type</label>
+            <div className="space-y-2">
+              {TAG_OPTIONS.map((opt) => (
+                <label
+                  key={opt.value}
+                  className={`flex items-start gap-2.5 p-2 rounded-lg border cursor-pointer transition-colors ${
+                    tag === opt.value
+                      ? 'border-primary bg-blue-50/50'
+                      : 'border-gray-200 hover:border-gray-300'
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    name="correction-tag"
+                    value={opt.value}
+                    checked={tag === opt.value}
+                    onChange={() => setTag(opt.value)}
+                    className="mt-0.5 accent-blue-600"
+                  />
+                  <div>
+                    <p className="text-[12px]" style={{ fontWeight: 500 }}>{opt.label}</p>
+                    <p className="text-[11px] text-muted-foreground">{opt.description}</p>
+                  </div>
+                </label>
+              ))}
+            </div>
+          </div>
+
+          <button
+            onClick={handleSave}
+            className="w-full bg-primary text-white py-2 rounded-lg text-[13px] hover:bg-primary/90 transition-colors flex items-center justify-center gap-2"
+            style={{ fontWeight: 500 }}
+          >
+            <Save className="w-3.5 h-3.5" />
+            Save Correction
+          </button>
+
+          {existingCorrection && (
+            <button
+              onClick={() => onRemoveCorrection(fieldName)}
+              className="w-full text-red-600 hover:text-red-700 py-1.5 text-[12px] flex items-center justify-center gap-1.5 transition-colors"
+            >
+              <Trash2 className="w-3 h-3" />
+              Remove Correction
+            </button>
+          )}
         </div>
-      )}
+      </div>
     </div>
   )
 }

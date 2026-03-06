@@ -8,6 +8,14 @@ import { runLayer2, saveCorrection, getTemplate, processCorrections } from '../.
 import { IS_TEMPLATE_FIELDS, BS_TEMPLATE_FIELDS } from '../../mocks/mockData'
 import { formatFieldValue } from '../../utils/formatters'
 import type { Correction, Layer2Result, TemplateResponse, TemplateSection, CorrectionProcessItem } from '../../types'
+import {
+  ArrowLeft,
+  CheckCircle2,
+  Loader2,
+  XCircle,
+  Edit3,
+  ArrowRight,
+} from 'lucide-react'
 
 type RunStatus = 'idle' | 'loading' | 'done' | 'error'
 type StatusMessage = { type: 'success' | 'error' | 'info'; message: string } | null
@@ -134,6 +142,7 @@ export default function Step2Classify() {
     const interval = setInterval(() => setElapsedSeconds((s) => s + 1), 1000)
     return () => clearInterval(interval)
   }, [isClassifying])
+
   const hasBothResults = !!isLayer2 && !!bsLayer2
   const hasAnyResults = !!isLayer2 || !!bsLayer2
   const allSettled = isStatus !== 'loading' && bsStatus !== 'loading'
@@ -174,7 +183,6 @@ export default function Step2Classify() {
     setBsError(null)
     setStatus(null)
 
-    // isKey/bsKey come from sheetStatementTypes — the user's explicit Step 1 designations
     const newResults: Record<string, Layer2Result> = { ...layer2Results }
     const tasks: Promise<void>[] = []
 
@@ -372,48 +380,46 @@ export default function Step2Classify() {
   // Full-page loading view while classification is running and no results available yet
   if (isClassifying && !hasAnyResults) {
     return (
-      <div className="flex flex-col flex-1 overflow-hidden">
-        <div className="bg-white border-b border-gray-200 px-4 py-2.5 flex-shrink-0">
+      <div className="flex flex-col h-full">
+        <div className="flex items-center px-4 py-2.5 border-b border-border bg-gray-50/80 shrink-0">
           <button
             onClick={backToStep1}
-            className="text-sm text-gray-600 hover:text-gray-800 border border-gray-300 hover:border-gray-400 px-3 py-1.5 rounded transition-colors"
+            className="flex items-center gap-1.5 text-[13px] text-muted-foreground hover:text-foreground transition-colors"
           >
-            ← Back to Extraction
+            <ArrowLeft className="w-3.5 h-3.5" />
+            Back to Extraction
           </button>
         </div>
-        <div className="flex-1 flex flex-col items-center justify-start pt-16 gap-6">
-          <LoadingSpinner size="lg" />
-          <div className="text-center">
-            <p className="text-sm font-medium text-gray-700">Running AI Classification</p>
-            <p className="text-xs text-gray-500 mt-1">
-              This may take up to 2 minutes per statement
-              {elapsedSeconds > 0 && (
-                <span className="ml-1 tabular-nums">— {elapsedSeconds}s elapsed</span>
+        <div className="flex-1 flex flex-col items-center justify-center">
+          <Loader2 className="w-10 h-10 text-primary animate-spin mb-4" />
+          <h2 className="text-[16px] mb-1" style={{ fontWeight: 600 }}>Classifying Financial Data</h2>
+          <p className="text-[13px] text-muted-foreground mb-6">{elapsedSeconds}s elapsed</p>
+          <div className="w-[300px] space-y-3">
+            <div className="flex items-center gap-3 p-3 rounded-lg bg-gray-50 border border-border">
+              {isStatus === 'done' ? (
+                <CheckCircle2 className="w-5 h-5 text-emerald-500 shrink-0" />
+              ) : (
+                <Loader2 className="w-5 h-5 text-primary animate-spin shrink-0" />
               )}
-            </p>
-          </div>
-          <div className="text-sm space-y-2">
-            <div className="flex items-center gap-2.5">
-              {isStatus === 'loading' && <LoadingSpinner size="sm" />}
-              {isStatus === 'done' && <span className="text-green-600 font-bold">✓</span>}
-              {isStatus === 'error' && <span className="text-red-500 font-bold">✗</span>}
-              {isStatus === 'idle' && <span className="w-4 h-4 rounded-full border border-gray-300 inline-block" />}
-              <span className={isStatus === 'error' ? 'text-red-600' : 'text-gray-600'}>
-                Income Statement
-                {isStatus === 'done' && ' — Done'}
-                {isStatus === 'error' && ` — ${isError}`}
-              </span>
+              <div>
+                <p className="text-[13px]" style={{ fontWeight: 500 }}>Income Statement</p>
+                <p className="text-[11px] text-muted-foreground">
+                  {isStatus === 'done' ? 'Classification complete' : 'Classifying line items...'}
+                </p>
+              </div>
             </div>
-            <div className="flex items-center gap-2.5">
-              {bsStatus === 'loading' && <LoadingSpinner size="sm" />}
-              {bsStatus === 'done' && <span className="text-green-600 font-bold">✓</span>}
-              {bsStatus === 'error' && <span className="text-red-500 font-bold">✗</span>}
-              {bsStatus === 'idle' && <span className="w-4 h-4 rounded-full border border-gray-300 inline-block" />}
-              <span className={bsStatus === 'error' ? 'text-red-600' : 'text-gray-600'}>
-                Balance Sheet
-                {bsStatus === 'done' && ' — Done'}
-                {bsStatus === 'error' && ` — ${bsError}`}
-              </span>
+            <div className="flex items-center gap-3 p-3 rounded-lg bg-gray-50 border border-border">
+              {bsStatus === 'done' ? (
+                <CheckCircle2 className="w-5 h-5 text-emerald-500 shrink-0" />
+              ) : (
+                <Loader2 className="w-5 h-5 text-primary animate-spin shrink-0" />
+              )}
+              <div>
+                <p className="text-[13px]" style={{ fontWeight: 500 }}>Balance Sheet</p>
+                <p className="text-[11px] text-muted-foreground">
+                  {bsStatus === 'done' ? 'Classification complete' : 'Classifying line items...'}
+                </p>
+              </div>
             </div>
           </div>
         </div>
@@ -422,30 +428,31 @@ export default function Step2Classify() {
   }
 
   return (
-    <div className="flex flex-col flex-1 overflow-hidden">
+    <div className="flex flex-col h-full">
       {/* Action bar */}
-      <div className="bg-white border-b border-gray-200 px-4 py-2.5 flex items-center gap-3 flex-shrink-0">
+      <div className="flex items-center gap-3 px-4 py-2.5 border-b border-border bg-gray-50/80 shrink-0">
         <button
           onClick={() => setShowBackConfirm(true)}
-          className="flex items-center gap-1.5 text-sm text-gray-600 hover:text-gray-800 border border-gray-300 hover:border-gray-400 px-3 py-1.5 rounded transition-colors"
+          className="flex items-center gap-1.5 text-[13px] text-muted-foreground hover:text-foreground transition-colors"
         >
-          ← Back to Extraction
+          <ArrowLeft className="w-3.5 h-3.5" />
+          Back to Extraction
         </button>
 
         {showBackConfirm && (
-          <div className="flex items-center gap-2 bg-red-50 border border-red-200 rounded px-3 py-1.5">
-            <span className="text-xs text-red-700 font-medium">
+          <div className="flex items-center gap-2 bg-red-50 border border-red-200 rounded-lg px-3 py-1.5">
+            <span className="text-[12px] text-red-700" style={{ fontWeight: 500 }}>
               Discard all classification results and corrections?
             </span>
             <button
               onClick={() => { setShowBackConfirm(false); backToStep1() }}
-              className="text-xs bg-red-600 text-white px-2.5 py-1 rounded hover:bg-red-700"
+              className="text-[12px] bg-red-600 text-white px-2.5 py-1 rounded-lg hover:bg-red-700"
             >
               Yes, go back
             </button>
             <button
               onClick={() => setShowBackConfirm(false)}
-              className="text-xs text-gray-500 hover:text-gray-700"
+              className="text-[12px] text-muted-foreground hover:text-foreground"
             >
               Cancel
             </button>
@@ -453,35 +460,52 @@ export default function Step2Classify() {
         )}
 
         {hasAnyResults && !isClassifying && !showBackConfirm && (
-          <div className="flex items-center gap-3 text-xs">
-            {passCount > 0 && <span className="text-green-600 font-medium">{passCount} passed</span>}
-            {failCount > 0 && <span className="text-red-600 font-medium">{failCount} failed</span>}
+          <div className="flex items-center gap-3 text-[12px]">
+            {passCount > 0 && (
+              <span className="flex items-center gap-1 text-emerald-600">
+                <CheckCircle2 className="w-3.5 h-3.5" />
+                {passCount} passed
+              </span>
+            )}
+            {failCount > 0 && (
+              <span className="flex items-center gap-1 text-red-500">
+                <XCircle className="w-3.5 h-3.5" />
+                {failCount} failed
+              </span>
+            )}
             {corrections.length > 0 && (
-              <span className="text-blue-600 font-medium">
+              <span className="flex items-center gap-1 text-amber-600">
+                <Edit3 className="w-3.5 h-3.5" />
                 {corrections.length} correction{corrections.length !== 1 ? 's' : ''}
               </span>
             )}
           </div>
         )}
 
-        <div className="ml-auto flex items-center gap-2">
-          {hasAnyError && (
-            <button
-              onClick={handleRetry}
-              className="text-sm border border-blue-400 text-blue-600 hover:bg-blue-50 px-3 py-1.5 rounded transition-colors"
-            >
-              ↺ Retry
-            </button>
-          )}
+        <div className="flex-1" />
+
+        {hasAnyError && (
           <button
-            onClick={handleApproveStep2}
-            disabled={isClassifying || !hasAnyResults || approvingStep2}
-            className="flex items-center gap-1.5 bg-green-600 hover:bg-green-700 text-white text-sm px-4 py-1.5 rounded transition-colors font-medium disabled:opacity-40 disabled:cursor-not-allowed"
+            onClick={handleRetry}
+            className="text-[13px] border border-blue-400 text-blue-600 hover:bg-blue-50 px-3 py-1.5 rounded-lg transition-colors"
           >
-            {approvingStep2 ? <LoadingSpinner size="sm" /> : '✓'}{' '}
-            {approvingStep2 ? 'Processing...' : 'Approve Loader'}
+            Retry
           </button>
-        </div>
+        )}
+        <button
+          onClick={handleApproveStep2}
+          disabled={isClassifying || !hasAnyResults || approvingStep2}
+          className="flex items-center gap-2 bg-emerald-600 text-white px-4 py-1.5 rounded-lg text-[13px] hover:bg-emerald-700 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+          style={{ fontWeight: 500 }}
+        >
+          {approvingStep2 ? (
+            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+          ) : (
+            <CheckCircle2 className="w-3.5 h-3.5" />
+          )}
+          {approvingStep2 ? 'Processing...' : 'Approve Classification'}
+          {!approvingStep2 && <ArrowRight className="w-3.5 h-3.5" />}
+        </button>
       </div>
 
       {status && (
@@ -490,63 +514,61 @@ export default function Step2Classify() {
         </div>
       )}
 
-      {/* Main 2-column layout — single scroll container keeps both sides in sync */}
-      <div
-        className="flex flex-1 overflow-auto divide-x divide-gray-200 transition-[padding-right] duration-200"
-        style={{ paddingRight: sidePanelOpen ? '24rem' : 0 }}
-      >
+      {/* Main layout — horizontal flex with inline side panel */}
+      <div className="flex flex-1 min-h-0 overflow-auto divide-x divide-border">
         {/* Left: Layer 1 source data */}
-        <div className="flex flex-col flex-shrink-0" style={{ width: '38%' }}>
-          <div className="px-3 py-2 bg-gray-50 border-b border-gray-200 sticky top-0 z-10">
-            <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">
-              Source Data
+        <div
+          className="flex flex-col flex-shrink-0 transition-all duration-200"
+          style={{ width: sidePanelOpen ? '28%' : '38%' }}
+        >
+          <div className="px-4 py-2 border-b border-border bg-gray-50 sticky top-0 z-10">
+            <p className="text-[12px] text-muted-foreground" style={{ fontWeight: 500 }}>
+              Source Data (Extracted)
             </p>
           </div>
           {sourceIsRows.length === 0 && sourceBsRows.length === 0 ? (
-            <div className="flex items-center justify-center py-12 text-gray-400 text-sm">
+            <div className="flex items-center justify-center py-12 text-muted-foreground text-[13px]">
               No source data available
             </div>
           ) : (
             <>
               <div ref={leftIsRef}>
-                <DataTable rows={sourceIsRows} noScroll />
+                <DataTable rows={sourceIsRows} noScroll stmtHeaderStyle="gray" />
               </div>
               <div style={{ height: leftSpacer }} />
-              <DataTable rows={sourceBsRows} noScroll />
+              <DataTable rows={sourceBsRows} noScroll stmtHeaderStyle="gray" />
             </>
           )}
         </div>
 
         {/* Right: Classified template */}
-        <div className="flex flex-col flex-1">
-          <div className="px-3 py-2 bg-gray-50 border-b border-gray-200 sticky top-0 z-10 flex items-center justify-between">
-            <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">
-              Template
+        <div className="flex flex-col flex-1 min-w-0">
+          <div className="px-4 py-2 border-b border-border bg-gray-50 sticky top-0 z-10 flex items-center justify-between">
+            <p className="text-[12px] text-muted-foreground" style={{ fontWeight: 500 }}>
+              Classified Template
             </p>
             {hasAnyResults && !isClassifying && (
-              <p className="text-[10px] text-gray-400">Click any row to inspect / correct</p>
+              <p className="text-[11px] text-muted-foreground">Click any row to inspect / correct</p>
             )}
           </div>
 
-          {/* Nothing loaded yet: show full loading or all-failed error */}
           {!hasAnyResults && !allSettled ? (
             <div className="flex items-start justify-center pt-12">
               <LoadingSpinner message="Classifying via Claude..." />
             </div>
           ) : !hasAnyResults && hasAnyError ? (
             <div className="flex flex-col items-center justify-center gap-3 px-6 py-12 text-center">
-              <p className="text-sm font-medium text-red-600">Classification failed</p>
-              {isError && <p className="text-xs text-red-500">Income Statement: {isError}</p>}
-              {bsError && <p className="text-xs text-red-500">Balance Sheet: {bsError}</p>}
+              <p className="text-[13px] text-red-600" style={{ fontWeight: 500 }}>Classification failed</p>
+              {isError && <p className="text-[12px] text-red-500">Income Statement: {isError}</p>}
+              {bsError && <p className="text-[12px] text-red-500">Balance Sheet: {bsError}</p>}
               <button
                 onClick={handleRetry}
-                className="mt-2 text-sm bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
+                className="mt-2 text-[13px] bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700"
               >
                 Retry Classification
               </button>
             </div>
           ) : (
-            /* At least one result ready (or all settled) — render template; inline loading/error per statement */
             <>
               <div ref={rightIsRef}>
                 {isStatus === 'loading' ? (
@@ -554,7 +576,12 @@ export default function Step2Classify() {
                     <LoadingSpinner size="sm" message="Classifying Income Statement..." />
                   </div>
                 ) : (
-                  <DataTable rows={isTemplateRows} noScroll onCellClick={setSelectedCell} selectedCell={selectedCell} />
+                  <DataTable
+                    rows={isTemplateRows}
+                    noScroll
+                    onCellClick={setSelectedCell}
+                    selectedCell={selectedCell}
+                  />
                 )}
               </div>
               <div style={{ height: rightSpacer }} />
@@ -563,25 +590,29 @@ export default function Step2Classify() {
                   <LoadingSpinner size="sm" message="Classifying Balance Sheet..." />
                 </div>
               ) : (
-                <DataTable rows={bsTemplateRows} noScroll onCellClick={setSelectedCell} selectedCell={selectedCell} />
+                <DataTable
+                  rows={bsTemplateRows}
+                  noScroll
+                  onCellClick={setSelectedCell}
+                  selectedCell={selectedCell}
+                />
               )}
             </>
           )}
         </div>
 
+        {/* Inline side panel */}
+        <SidePanel
+          isOpen={sidePanelOpen}
+          fieldName={selectedCell}
+          statementType={selectedCellType}
+          layer2Result={activeLayer2}
+          existingCorrection={existingCorrection}
+          onClose={() => setSidePanelOpen(false)}
+          onSaveCorrection={handleSaveCorrection}
+          onRemoveCorrection={handleRemoveCorrection}
+        />
       </div>
-
-      {/* Side panel — fixed to viewport, independent scroll */}
-      <SidePanel
-        isOpen={sidePanelOpen}
-        fieldName={selectedCell}
-        statementType={selectedCellType}
-        layer2Result={activeLayer2}
-        existingCorrection={existingCorrection}
-        onClose={() => setSidePanelOpen(false)}
-        onSaveCorrection={handleSaveCorrection}
-        onRemoveCorrection={handleRemoveCorrection}
-      />
     </div>
   )
 }
