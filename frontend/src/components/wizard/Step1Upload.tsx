@@ -384,8 +384,8 @@ export default function Step1Upload() {
           <button
             onClick={() => fileInputRef.current?.click()}
             disabled={uploading}
-            className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-[13px] transition-colors bg-primary text-white hover:bg-primary/90 disabled:opacity-50"
-            style={{ fontWeight: 500 }}
+            className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-[13px] transition-colors disabled:opacity-50"
+            style={{ backgroundColor: '#030213', color: 'white', fontWeight: 500 }}
           >
             {uploading ? (
               <Loader2 className="w-3.5 h-3.5 animate-spin" />
@@ -465,101 +465,89 @@ export default function Step1Upload() {
             smallText
           />
 
-          <div className="flex-1 overflow-auto p-4">
-            {!hasUpload ? (
-              <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
-                <p className="text-[13px]">Upload a file to begin extraction</p>
-              </div>
-            ) : activeTabState?.status === 'done' && activeLayer1 ? (
-              <div>
-                {/* Metadata bar */}
-                <div className="bg-gray-50 rounded-lg px-3 py-2 mb-3 text-[11px] text-muted-foreground flex flex-wrap gap-x-3 gap-y-1">
-                  <span>
-                    Scaling:{' '}
-                    <span style={{ fontWeight: 500 }} className="text-foreground">
-                      {activeLayer1.sourceScaling}
-                    </span>
+          {!hasUpload ? (
+            <div className="flex-1 flex items-center justify-center text-muted-foreground">
+              <p className="text-[13px]">Upload a file to begin extraction</p>
+            </div>
+          ) : activeTabState?.status === 'done' && activeLayer1 ? (
+            <div className="flex-1 overflow-auto p-4">
+              {/* Metadata bar */}
+              <div className="bg-gray-50 rounded-lg px-3 py-2 mb-3 text-[11px] text-muted-foreground flex flex-wrap gap-x-3 gap-y-1">
+                <span>
+                  Scaling:{' '}
+                  <span style={{ fontWeight: 500 }} className="text-foreground">
+                    {activeLayer1.sourceScaling}
                   </span>
-                  <span>
-                    Column:{' '}
-                    <span style={{ fontWeight: 500 }} className="text-foreground">
-                      {activeLayer1.columnIdentified}
-                    </span>
+                </span>
+                <span>
+                  Column:{' '}
+                  <span style={{ fontWeight: 500 }} className="text-foreground">
+                    {activeLayer1.columnIdentified}
                   </span>
-                  <span>
-                    Items:{' '}
-                    <span style={{ fontWeight: 500 }} className="text-foreground">
-                      {Object.keys(activeLayer1.lineItems).length}
-                    </span>
+                </span>
+                <span>
+                  Items:{' '}
+                  <span style={{ fontWeight: 500 }} className="text-foreground">
+                    {Object.keys(activeLayer1.lineItems).length}
                   </span>
-                </div>
-
-                {/* Extracted items table */}
-                <table className="w-full text-[12px]">
-                  <thead>
-                    <tr className="border-b border-border">
-                      <th
-                        className="text-left py-1.5 px-2 text-muted-foreground"
-                        style={{ fontWeight: 500 }}
-                      >
-                        Line Item
-                      </th>
-                      <th
-                        className="text-right py-1.5 px-2 text-muted-foreground"
-                        style={{ fontWeight: 500 }}
-                      >
-                        Value
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {Object.entries(activeLayer1.lineItems).map(([label, value], i) => {
-                      const isBold =
-                        label.includes('Total') ||
-                        label.includes('Gross') ||
-                        label.includes('Net') ||
-                        label.includes('Operating Income') ||
-                        label.includes('Pre-Tax')
-                      return (
-                        <tr
-                          key={i}
-                          className={`border-b border-gray-100 ${isBold ? 'bg-gray-50/50' : ''}`}
-                        >
-                          <td className="py-1.5 px-2" style={{ fontWeight: isBold ? 500 : 400 }}>
-                            {label}
-                          </td>
-                          <td
-                            className={`py-1.5 px-2 text-right font-mono ${value < 0 ? 'text-red-600' : ''}`}
-                          >
-                            {formatLineItemValue(value)}
-                          </td>
-                        </tr>
-                      )
-                    })}
-                  </tbody>
-                </table>
+                </span>
               </div>
-            ) : activeTabState?.status === 'extracting' ? (
-              <div className="flex flex-col items-center justify-center h-full gap-3">
-                <Loader2 className="w-8 h-8 text-primary animate-spin" />
-                <p className="text-[13px] text-muted-foreground">
-                  Running AI extraction on "{activeTab}"...
-                </p>
-              </div>
-            ) : activeTabState?.status === 'error' ? (
-              <div className="flex flex-col items-center justify-center h-full text-center px-4">
-                <p className="text-[13px] text-red-600" style={{ fontWeight: 500 }}>
-                  Extraction failed
-                </p>
-                <p className="text-[12px] text-red-400 mt-1">{activeTabState.error}</p>
-                <button
-                  onClick={() => handleRunExtraction(activeTab)}
-                  className="mt-3 text-[12px] text-blue-500 hover:text-blue-700 underline"
-                >
-                  Retry
-                </button>
-              </div>
-            ) : (
+              {/* Extracted items table */}
+              <table className="w-full text-[12px]">
+                <thead>
+                  <tr className="border-b border-border">
+                    <th className="text-left py-1.5 px-2 text-muted-foreground" style={{ fontWeight: 500 }}>
+                      Line Item
+                    </th>
+                    <th className="text-right py-1.5 px-2 text-muted-foreground" style={{ fontWeight: 500 }}>
+                      Value
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {Object.entries(activeLayer1.lineItems).map(([label, value], i) => {
+                    const isBold =
+                      label.includes('Total') ||
+                      label.includes('Gross') ||
+                      label.includes('Net') ||
+                      label.includes('Operating Income') ||
+                      label.includes('Pre-Tax')
+                    return (
+                      <tr key={i} className={`border-b border-gray-100 ${isBold ? 'bg-gray-50/50' : ''}`}>
+                        <td className="py-1.5 px-2" style={{ fontWeight: isBold ? 500 : 400 }}>
+                          {label}
+                        </td>
+                        <td className={`py-1.5 px-2 text-right font-mono ${value < 0 ? 'text-red-600' : ''}`}>
+                          {formatLineItemValue(value)}
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+          ) : activeTabState?.status === 'extracting' ? (
+            <div className="flex-1 flex flex-col items-center justify-center gap-3">
+              <Loader2 className="w-8 h-8 animate-spin" style={{ color: '#030213' }} />
+              <p className="text-[13px] text-muted-foreground">
+                Running AI extraction on "{activeTab}"...
+              </p>
+            </div>
+          ) : activeTabState?.status === 'error' ? (
+            <div className="flex-1 flex flex-col items-center justify-center text-center px-4">
+              <p className="text-[13px] text-red-600" style={{ fontWeight: 500 }}>
+                Extraction failed
+              </p>
+              <p className="text-[12px] text-red-400 mt-1">{activeTabState.error}</p>
+              <button
+                onClick={() => handleRunExtraction(activeTab)}
+                className="mt-3 text-[12px] text-blue-500 hover:text-blue-700 underline"
+              >
+                Retry
+              </button>
+            </div>
+          ) : (
+            <div className="flex-1 overflow-auto p-4">
               <div className="space-y-4">
                 <div>
                   <label className="text-[12px] text-muted-foreground block mb-1.5">
@@ -578,14 +566,14 @@ export default function Step1Upload() {
                 <button
                   onClick={() => handleRunExtraction(activeTab)}
                   disabled={!hasUpload}
-                  className="w-full bg-primary text-white py-2 rounded-lg text-[13px] hover:bg-primary/90 transition-colors disabled:opacity-50"
-                  style={{ fontWeight: 500 }}
+                  className="w-full py-2 rounded-lg text-[13px] transition-colors disabled:opacity-50"
+                  style={{ backgroundColor: '#030213', color: 'white', fontWeight: 500 }}
                 >
                   Run Extraction
                 </button>
               </div>
-            )}
-          </div>
+            </div>
+          )}
         </div>
       </div>
     </div>
