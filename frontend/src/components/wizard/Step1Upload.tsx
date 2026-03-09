@@ -364,8 +364,8 @@ export default function Step1Upload() {
 
         {/* Reporting Period */}
         <input
-          className="bg-white border border-border rounded-lg px-3 py-1.5 text-[13px] w-[160px] hover:border-gray-300 focus:outline-none focus:ring-2 focus:ring-primary/20 disabled:bg-gray-50 disabled:text-muted-foreground"
-          placeholder="Reporting period..."
+          className="bg-white border border-border rounded-lg px-3 py-1.5 text-[13px] w-[220px] hover:border-gray-300 focus:outline-none focus:ring-2 focus:ring-primary/20 disabled:bg-gray-50 disabled:text-muted-foreground"
+          placeholder="e.g. February 2026"
           value={reportingPeriod}
           disabled={hasUpload}
           onChange={(e) => setReportingPeriod(e.target.value)}
