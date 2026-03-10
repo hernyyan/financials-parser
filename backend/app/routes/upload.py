@@ -20,7 +20,7 @@ MAX_FILE_SIZE = 50 * 1024 * 1024  # 50 MB
 
 
 @router.post("/upload", response_model=UploadResponse)
-async def upload_file(
+def upload_file(
     file: UploadFile = File(...),
     company_name: str = Form(...),
     reporting_period: str = Form(...),
@@ -43,7 +43,7 @@ async def upload_file(
             detail="Only .xlsx and .xls files are accepted.",
         )
 
-    content = await file.read()
+    content = file.file.read()
     if len(content) > MAX_FILE_SIZE:
         raise HTTPException(
             status_code=400,
