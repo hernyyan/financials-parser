@@ -150,25 +150,27 @@ def convert_to_csvs(filepath: str) -> Dict[str, str]:
     if not source_path.exists():
         raise FileNotFoundError(f"Upload file not found: {filepath}")
 
-    wb = _open_workbook(filepath, read_only=False)
+    wb = _open_workbook(filepath, read_only=True)
     csv_contents: Dict[str, str] = {}
 
-    for sheet_name in wb.sheetnames:
-        ws = wb[sheet_name]
+    try:
+        for sheet_name in wb.sheetnames:
+            ws = wb[sheet_name]
 
-        if ws.sheet_state != "visible":
-            continue
+            if ws.sheet_state != "visible":
+                continue
 
-        if ws.max_row is None or ws.max_row == 0:
-            continue
+            if ws.max_row is None or ws.max_row == 0:
+                continue
 
-        output = io.StringIO()
-        writer = csv.writer(output)
+            output = io.StringIO()
+            writer = csv.writer(output)
 
-        for row in ws.iter_rows(values_only=True):
-            writer.writerow([("" if cell is None else str(cell)) for cell in row])
+            for row in ws.iter_rows(values_only=True):
+                writer.writerow([("" if cell is None else str(cell)) for cell in row])
 
-        csv_contents[sheet_name] = output.getvalue()
+            csv_contents[sheet_name] = output.getvalue()
+    finally:
+        wb.close()
 
-    wb.close()
     return csv_contents
