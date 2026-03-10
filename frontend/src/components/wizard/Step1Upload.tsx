@@ -356,7 +356,7 @@ export default function Step1Upload() {
             <ChevronDown className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
           </div>
           {comboOpen && !hasUpload && (
-            <div className="absolute top-full left-0 mt-1 w-full bg-white border border-border rounded-lg shadow-lg z-50 max-h-[200px] overflow-auto">
+            <div className="absolute top-full left-0 mt-1 w-full bg-white border border-border rounded-lg shadow-lg z-50 max-h-[calc(100vh-120px)] overflow-auto">
               {filteredCompanies.length === 0 && !comboSearch.trim() && (
                 <p className="px-3 py-2 text-[12px] text-muted-foreground italic">
                   No companies yet. Type a name to add one.
