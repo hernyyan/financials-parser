@@ -203,6 +203,7 @@ export function WizardProvider({ children }: { children: ReactNode }) {
       activeSheetTab: 'Income Statement',
       selectedCell: null,
       sidePanelOpen: false,
+      useCompanyContext: false,
     })
   }
 
