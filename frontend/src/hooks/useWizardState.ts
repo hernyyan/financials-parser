@@ -25,6 +25,10 @@ interface WizardContextType extends WizardState {
   setSelectedCell: (cell: string | null) => void
   setSidePanelOpen: (open: boolean) => void
   setUseCompanyContext: (enabled: boolean) => void
+  setUploadFileType: (type: 'excel' | 'pdf' | null) => void
+  setPdfPageCount: (count: number) => void
+  setPdfUrl: (url: string | null) => void
+  setPdfPageAssignments: (assignments: Record<number, 'income_statement' | 'balance_sheet'>) => void
   resetWizard: () => void
   loadMockStep2: () => void
 }
@@ -34,12 +38,16 @@ const defaultState: WizardState = {
   companyId: null,
   reportingPeriod: '',
   sessionId: null,
+  uploadFileType: null,
   uploadedFile: null,
   sheetNames: [],
   workbookUrl: null,
   layer1Results: {},
   step1Approved: false,
   useCompanyContext: true,
+  pdfPageCount: 0,
+  pdfUrl: null,
+  pdfPageAssignments: {},
   layer2Results: {},
   corrections: [],
   step2Approved: false,
@@ -142,6 +150,10 @@ export function WizardProvider({ children }: { children: ReactNode }) {
       step2Approved: false,
       sidePanelOpen: false,
       selectedCell: null,
+      uploadFileType: null,
+      pdfPageCount: 0,
+      pdfUrl: null,
+      pdfPageAssignments: {},
     }))
   }
 
@@ -177,6 +189,22 @@ export function WizardProvider({ children }: { children: ReactNode }) {
     setState((s) => ({ ...s, useCompanyContext: enabled }))
   }
 
+  function setUploadFileType(type: 'excel' | 'pdf' | null) {
+    setState((s) => ({ ...s, uploadFileType: type }))
+  }
+
+  function setPdfPageCount(count: number) {
+    setState((s) => ({ ...s, pdfPageCount: count }))
+  }
+
+  function setPdfUrl(url: string | null) {
+    setState((s) => ({ ...s, pdfUrl: url }))
+  }
+
+  function setPdfPageAssignments(assignments: Record<number, 'income_statement' | 'balance_sheet'>) {
+    setState((s) => ({ ...s, pdfPageAssignments: assignments }))
+  }
+
   function resetWizard() {
     setState(defaultState)
   }
@@ -188,12 +216,16 @@ export function WizardProvider({ children }: { children: ReactNode }) {
       companyId: null,
       reportingPeriod: 'February 2026',
       sessionId: 'mock-session-001',
+      uploadFileType: null,
       uploadedFile: null,
       sheetNames: ['Income Statement', 'Balance Sheet'],
       workbookUrl: null,
       layer1Results: {},
       step1Approved: true,
       useCompanyContext: true,
+      pdfPageCount: 0,
+      pdfUrl: null,
+      pdfPageAssignments: {},
       layer2Results: {
         income_statement: MOCK_LAYER2_INCOME_STATEMENT,
         balance_sheet: MOCK_LAYER2_BALANCE_SHEET,
@@ -228,6 +260,10 @@ export function WizardProvider({ children }: { children: ReactNode }) {
     setSelectedCell,
     setSidePanelOpen,
     setUseCompanyContext,
+    setUploadFileType,
+    setPdfPageCount,
+    setPdfUrl,
+    setPdfPageAssignments,
     resetWizard,
     loadMockStep2,
   }

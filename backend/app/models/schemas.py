@@ -60,8 +60,18 @@ class Layer2Response(BaseModel):
 
 class UploadResponse(BaseModel):
     sessionId: str
-    sheetNames: List[str]
-    workbookUrl: str          # "/files/{session_id}/workbook"
+    sheetNames: List[str] = []
+    workbookUrl: str = ""
+    fileType: str = "excel"   # "excel" | "pdf"
+    pdfPageCount: int = 0
+    pdfUrl: str = ""
+
+
+class Layer1PdfRequest(BaseModel):
+    sessionId: str
+    pages: List[int]          # 1-indexed page numbers
+    statementType: str        # 'income_statement' | 'balance_sheet'
+    reportingPeriod: str
 
 
 # ─── Corrections ──────────────────────────────────────────────────────────────

@@ -1,6 +1,7 @@
 """
-POST /upload             — Accept an Excel workbook, extract CSVs for Layer 1, return session info.
+POST /upload             — Accept an Excel workbook or PDF, return session info.
 GET  /files/{session_id}/workbook — Serve the original uploaded workbook for client-side preview.
+GET  /files/{session_id}/pdf      — Serve the uploaded PDF for client-side preview.
 """
 import uuid
 
@@ -27,20 +28,30 @@ def upload_file(
     db: Session = Depends(get_db),
 ):
     """
-    Accept an Excel workbook upload.
+    Accept an Excel workbook or PDF upload.
 
-    Steps:
-    1. Validate file type (.xlsx/.xls) and size (max 50 MB).
+    For Excel:
+    1. Validate file type and size.
     2. Save original file to uploads/{session_id}/original.xlsx.
-    3. Convert each visible sheet to CSV → processed/{session_id}/{safe_name}.csv (for Layer 1).
+    3. Convert each visible sheet to CSV → processed/{session_id}/{safe_name}.csv.
     4. Create a review record in the database.
-    5. Return sessionId, sheetNames, workbookUrl (for client-side Excel preview).
+    5. Return sessionId, sheetNames, workbookUrl.
+
+    For PDF:
+    1. Validate file type and size.
+    2. Save PDF to uploads/{session_id}/original.pdf.
+    3. Count pages using pypdf.
+    4. Create a review record in the database.
+    5. Return sessionId, pdfPageCount, pdfUrl.
     """
     filename = file.filename or ""
-    if not filename.lower().endswith((".xlsx", ".xls")):
+    is_pdf = filename.lower().endswith(".pdf")
+    is_excel = filename.lower().endswith((".xlsx", ".xls"))
+
+    if not is_pdf and not is_excel:
         raise HTTPException(
             status_code=400,
-            detail="Only .xlsx and .xls files are accepted.",
+            detail="Only .xlsx, .xls, and .pdf files are accepted.",
         )
 
     content = file.file.read()
@@ -58,50 +69,79 @@ def upload_file(
     processed_session_dir = PROCESSED_DIR / session_id
     processed_session_dir.mkdir(parents=True, exist_ok=True)
 
-    upload_path = upload_session_dir / "original.xlsx"
-    upload_path.write_bytes(content)
-
-    # Convert to CSVs and save to disk for Layer 1
-    try:
-        csv_contents = convert_to_csvs(str(upload_path))
-    except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Failed to read sheet data: {e}",
-        )
-
-    if not csv_contents:
-        raise HTTPException(
-            status_code=400,
-            detail="No visible, non-empty sheets found in the workbook.",
-        )
-
-    for sheet_name, csv_text in csv_contents.items():
-        safe_name = _safe_filename(sheet_name)
-        csv_path = processed_session_dir / f"{safe_name}.csv"
-        csv_path.write_text(csv_text, encoding="utf-8")
-
-    sheet_names = list(csv_contents.keys())
-    workbook_url = f"/files/{session_id}/workbook"
-
     # Create DB record (non-fatal)
-    try:
-        db.execute(
-            text(
-                "INSERT INTO reviews (session_id, company_name, reporting_period, status) "
-                "VALUES (:sid, :cn, :rp, 'in_progress')"
-            ),
-            {"sid": session_id, "cn": company_name, "rp": reporting_period},
-        )
-        db.commit()
-    except Exception:
-        db.rollback()
+    def _save_db_record():
+        try:
+            db.execute(
+                text(
+                    "INSERT INTO reviews (session_id, company_name, reporting_period, status) "
+                    "VALUES (:sid, :cn, :rp, 'in_progress')"
+                ),
+                {"sid": session_id, "cn": company_name, "rp": reporting_period},
+            )
+            db.commit()
+        except Exception:
+            db.rollback()
 
-    return UploadResponse(
-        sessionId=session_id,
-        sheetNames=sheet_names,
-        workbookUrl=workbook_url,
-    )
+    if is_pdf:
+        upload_path = upload_session_dir / "original.pdf"
+        upload_path.write_bytes(content)
+
+        try:
+            from pypdf import PdfReader
+            reader = PdfReader(str(upload_path))
+            page_count = len(reader.pages)
+        except Exception as e:
+            raise HTTPException(
+                status_code=500,
+                detail=f"Failed to read PDF: {e}",
+            )
+
+        pdf_url = f"/files/{session_id}/pdf"
+        _save_db_record()
+
+        return UploadResponse(
+            sessionId=session_id,
+            sheetNames=[],
+            workbookUrl="",
+            fileType="pdf",
+            pdfPageCount=page_count,
+            pdfUrl=pdf_url,
+        )
+
+    else:
+        upload_path = upload_session_dir / "original.xlsx"
+        upload_path.write_bytes(content)
+
+        try:
+            csv_contents = convert_to_csvs(str(upload_path))
+        except Exception as e:
+            raise HTTPException(
+                status_code=500,
+                detail=f"Failed to read sheet data: {e}",
+            )
+
+        if not csv_contents:
+            raise HTTPException(
+                status_code=400,
+                detail="No visible, non-empty sheets found in the workbook.",
+            )
+
+        for sheet_name, csv_text in csv_contents.items():
+            safe_name = _safe_filename(sheet_name)
+            csv_path = processed_session_dir / f"{safe_name}.csv"
+            csv_path.write_text(csv_text, encoding="utf-8")
+
+        sheet_names = list(csv_contents.keys())
+        workbook_url = f"/files/{session_id}/workbook"
+        _save_db_record()
+
+        return UploadResponse(
+            sessionId=session_id,
+            sheetNames=sheet_names,
+            workbookUrl=workbook_url,
+            fileType="excel",
+        )
 
 
 @router.get("/files/{session_id}/workbook")
@@ -114,4 +154,17 @@ def serve_workbook(session_id: str):
         path=str(workbook_path),
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         filename="workbook.xlsx",
+    )
+
+
+@router.get("/files/{session_id}/pdf")
+def serve_pdf(session_id: str):
+    """Serve the uploaded PDF for client-side preview."""
+    pdf_path = UPLOADS_DIR / session_id / "original.pdf"
+    if not pdf_path.exists():
+        raise HTTPException(status_code=404, detail="PDF not found.")
+    return FileResponse(
+        path=str(pdf_path),
+        media_type="application/pdf",
+        filename="document.pdf",
     )

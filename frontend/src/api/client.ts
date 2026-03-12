@@ -71,6 +71,21 @@ export async function runLayer1(
   return handleResponse<Layer1Response>(res)
 }
 
+// POST /layer1/run-pdf
+export async function runLayer1Pdf(
+  sessionId: string,
+  pages: number[],
+  statementType: string,
+  reportingPeriod: string,
+): Promise<Layer1Response> {
+  const res = await fetch(`${API_BASE}/layer1/run-pdf`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ sessionId, pages, statementType, reportingPeriod }),
+  })
+  return handleResponse<Layer1Response>(res)
+}
+
 // POST /layer2/run
 // layer1_data is just the lineItems dict (not the full Layer1Result)
 export async function runLayer2(request: Layer2Request): Promise<Layer2Result> {

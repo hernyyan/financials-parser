@@ -5,6 +5,7 @@ export const MOCK_UPLOAD_RESPONSE: UploadResponse = {
   sessionId: 'mock-session-001',
   sheetNames: ['Income Statement', 'Balance Sheet'],
   workbookUrl: '/files/mock-session-001/workbook.xlsx',
+  fileType: 'excel',
 }
 
 // Mock Layer 1 output - Income Statement
