@@ -242,7 +242,6 @@ export function WizardProvider({ children }: { children: ReactNode }) {
       workbookUrl: null,
       layer1Results: {},
       step1Approved: true,
-      useCompanyContext: true,
       pdfPageCount: 0,
       pdfUrl: null,
       pdfPageAssignments: {},
