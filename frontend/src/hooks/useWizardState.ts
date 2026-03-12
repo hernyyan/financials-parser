@@ -14,6 +14,7 @@ interface WizardContextType extends WizardState {
   setSheetNames: (names: string[]) => void
   setWorkbookUrl: (url: string | null) => void
   setLayer1Results: (results: Record<string, Layer1Result>) => void
+  mergeLayer1Result: (statementType: string, result: Layer1Result) => void
   approveStep1: () => void
   setLayer2Results: (results: Record<string, Layer2Result>) => void
   addCorrection: (correction: Correction) => void
@@ -96,6 +97,16 @@ export function WizardProvider({ children }: { children: ReactNode }) {
 
   function setLayer1Results(results: Record<string, Layer1Result>) {
     setState((s) => ({ ...s, layer1Results: results }))
+  }
+
+  function mergeLayer1Result(statementType: string, result: Layer1Result) {
+    setState((s) => ({
+      ...s,
+      layer1Results: {
+        ...s.layer1Results,
+        [statementType]: result,
+      },
+    }))
   }
 
   function approveStep1() {
@@ -249,6 +260,7 @@ export function WizardProvider({ children }: { children: ReactNode }) {
     setSheetNames,
     setWorkbookUrl,
     setLayer1Results,
+    mergeLayer1Result,
     approveStep1,
     setLayer2Results,
     addCorrection,

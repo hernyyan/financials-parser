@@ -148,6 +148,7 @@ export default function Step1Upload() {
     setSheetNames,
     setWorkbookUrl,
     setLayer1Results,
+    mergeLayer1Result,
     setActiveSheetTab,
     setUseCompanyContext,
     setUploadFileType,
@@ -169,7 +170,7 @@ export default function Step1Upload() {
 
   // PDF-specific local state
   const [pdfActiveTab, setPdfActiveTab] = useState<'income_statement' | 'balance_sheet'>('income_statement')
-  const [pdfExtracting, setPdfExtracting] = useState<string | null>(null)
+  const [pdfExtracting, setPdfExtracting] = useState<Record<string, boolean>>({})
 
   // Company combobox state
   const [companies, setCompanies] = useState<Company[]>([])
@@ -446,23 +447,20 @@ export default function Step1Upload() {
       return
     }
 
-    setPdfExtracting(pdfActiveTab)
+    setPdfExtracting((prev) => ({ ...prev, [pdfActiveTab]: true }))
     setStatus(null)
 
     try {
       const result = await runLayer1Pdf(sessionId, pages, pdfActiveTab, reportingPeriod)
-      setLayer1Results({
-        ...layer1Results,
-        [pdfActiveTab]: {
-          lineItems: result.lineItems,
-          sourceScaling: result.sourceScaling,
-          columnIdentified: result.columnIdentified,
-          sourceSheet: `PDF pages ${pages.join(', ')}`,
-        },
+      mergeLayer1Result(pdfActiveTab, {
+        lineItems: result.lineItems,
+        sourceScaling: result.sourceScaling,
+        columnIdentified: result.columnIdentified,
+        sourceSheet: `PDF pages ${pages.join(', ')}`,
       })
-      setPdfExtracting(null)
+      setPdfExtracting((prev) => ({ ...prev, [pdfActiveTab]: false }))
     } catch (err) {
-      setPdfExtracting(null)
+      setPdfExtracting((prev) => ({ ...prev, [pdfActiveTab]: false }))
       setStatus({
         type: 'error',
         message: `Extraction failed: ${err instanceof Error ? err.message : 'Unknown error'}`,
@@ -494,32 +492,29 @@ export default function Step1Upload() {
         runLayer1(sessionId, tabName, 'balance_sheet', reportingPeriod),
       ])
 
-      const newResults = { ...layer1Results }
       const errors: string[] = []
 
       if (isResult.status === 'fulfilled') {
-        newResults['income_statement'] = {
+        mergeLayer1Result('income_statement', {
           lineItems: isResult.value.lineItems,
           sourceScaling: isResult.value.sourceScaling,
           columnIdentified: isResult.value.columnIdentified,
           sourceSheet: tabName,
-        }
+        })
       } else {
         errors.push(`IS: ${(isResult.reason as Error)?.message ?? 'failed'}`)
       }
 
       if (bsResult.status === 'fulfilled') {
-        newResults['balance_sheet'] = {
+        mergeLayer1Result('balance_sheet', {
           lineItems: bsResult.value.lineItems,
           sourceScaling: bsResult.value.sourceScaling,
           columnIdentified: bsResult.value.columnIdentified,
           sourceSheet: tabName,
-        }
+        })
       } else {
         errors.push(`BS: ${(bsResult.reason as Error)?.message ?? 'failed'}`)
       }
-
-      setLayer1Results(newResults)
 
       if (errors.length > 0 && errors.length < 2) {
         setTabStates((prev) => ({
@@ -542,14 +537,11 @@ export default function Step1Upload() {
     } else {
       try {
         const result = await runLayer1(sessionId, tabName, tabState.sheetType, reportingPeriod)
-        setLayer1Results({
-          ...layer1Results,
-          [tabState.sheetType]: {
-            lineItems: result.lineItems,
-            sourceScaling: result.sourceScaling,
-            columnIdentified: result.columnIdentified,
-            sourceSheet: tabName,
-          },
+        mergeLayer1Result(tabState.sheetType, {
+          lineItems: result.lineItems,
+          sourceScaling: result.sourceScaling,
+          columnIdentified: result.columnIdentified,
+          sourceSheet: tabName,
         })
         setTabStates((prev) => ({
           ...prev,
@@ -799,7 +791,7 @@ export default function Step1Upload() {
               <div className="flex-1 overflow-auto p-4">
                 <Layer1ResultsTable result={layer1Results[pdfActiveTab]} />
               </div>
-            ) : pdfExtracting === pdfActiveTab ? (
+            ) : pdfExtracting[pdfActiveTab] ? (
               <div className="flex-1 flex flex-col items-center justify-center gap-3">
                 <Loader2 className="w-8 h-8 animate-spin" style={{ color: '#030213' }} />
                 <p className="text-[13px] text-muted-foreground">
