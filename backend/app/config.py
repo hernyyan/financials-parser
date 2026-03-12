@@ -34,7 +34,8 @@ CORS_ORIGINS: list[str] = os.getenv("CORS_ORIGINS", "http://localhost:5173").spl
 
 COMPANY_CONTEXT_DIR: Path = BASE_DIR / os.getenv("COMPANY_CONTEXT_DIR", "company_context")
 DATA_DIR: Path = BASE_DIR / os.getenv("DATA_DIR", "data")
+COMPANY_DATASETS_DIR: Path = BASE_DIR / os.getenv("COMPANY_DATASETS_DIR", "company_datasets")
 
 # Ensure required directories exist
-for _dir in [UPLOADS_DIR, PROCESSED_DIR, PROMPTS_DIR, TEMPLATES_DIR, COMPANY_CONTEXT_DIR, DATA_DIR]:
+for _dir in [UPLOADS_DIR, PROCESSED_DIR, PROMPTS_DIR, TEMPLATES_DIR, COMPANY_CONTEXT_DIR, DATA_DIR, COMPANY_DATASETS_DIR]:
     _dir.mkdir(parents=True, exist_ok=True)

@@ -1,6 +1,7 @@
 import type {
   UploadResponse,
   Layer1Response,
+  Layer1Result,
   Layer2Request,
   Layer2Result,
   CorrectionRequest,
@@ -185,4 +186,24 @@ export async function processCorrections(
 export async function getCompanyContextStatus(companyId: number): Promise<CompanyContextStatus> {
   const res = await fetch(`${API_BASE}/companies/${companyId}/context-status`)
   return handleResponse<CompanyContextStatus>(res)
+}
+
+// POST /datasets/append
+export async function appendToCompanyDataset(
+  sessionId: string | null,
+  companyName: string,
+  reportingPeriod: string,
+  layer1Results: Record<string, Layer1Result>,
+): Promise<void> {
+  const res = await fetch(`${API_BASE}/datasets/append`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      session_id: sessionId,
+      company_name: companyName,
+      reporting_period: reportingPeriod,
+      layer1_results: layer1Results,
+    }),
+  })
+  await handleResponse<{ success: boolean }>(res)
 }

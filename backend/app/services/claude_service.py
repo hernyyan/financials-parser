@@ -87,6 +87,18 @@ class ClaudeService:
         print(f"Claude responded: stop_reason={message.stop_reason} length={len(response_text)}")
         return response_text
 
+    def call_claude_raw(self, prompt_text: str, model: str, max_tokens: int = 4096) -> str:
+        """Call Claude with a raw prompt string (no template file lookup)."""
+        print(f"Calling Claude (raw) model={model} max_tokens={max_tokens}")
+        message = self.client.messages.create(
+            model=model,
+            max_tokens=max_tokens,
+            messages=[{"role": "user", "content": prompt_text}],
+        )
+        response_text = message.content[0].text
+        print(f"Claude responded: stop_reason={message.stop_reason} length={len(response_text)}")
+        return response_text
+
     def parse_json_response(self, response_text: str) -> Any:
         """
         Parse JSON from Claude's response text.

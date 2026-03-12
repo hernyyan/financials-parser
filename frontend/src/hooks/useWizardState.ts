@@ -4,6 +4,7 @@ import {
   MOCK_LAYER2_INCOME_STATEMENT,
   MOCK_LAYER2_BALANCE_SHEET,
 } from '../mocks/mockData'
+import { appendToCompanyDataset } from '../api/client'
 
 interface WizardContextType extends WizardState {
   setCompanyName: (name: string) => void
@@ -110,11 +111,19 @@ export function WizardProvider({ children }: { children: ReactNode }) {
   }
 
   function approveStep1() {
-    setState((s) => ({
-      ...s,
-      step1Approved: true,
-      currentStep: 2,
-    }))
+    setState((s) => {
+      // Fire the dataset append (non-blocking, fire-and-forget)
+      if (s.companyName && s.reportingPeriod && Object.keys(s.layer1Results).length > 0) {
+        appendToCompanyDataset(
+          s.sessionId,
+          s.companyName,
+          s.reportingPeriod,
+          s.layer1Results,
+        ).catch((err) => console.error('Dataset append failed:', err))
+      }
+
+      return { ...s, step1Approved: true, currentStep: 2 }
+    })
   }
 
   function setLayer2Results(results: Record<string, Layer2Result>) {

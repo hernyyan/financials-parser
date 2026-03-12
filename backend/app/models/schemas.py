@@ -74,6 +74,13 @@ class Layer1PdfRequest(BaseModel):
     reportingPeriod: str
 
 
+class DatasetAppendRequest(BaseModel):
+    session_id: Optional[str] = None
+    company_name: str
+    reporting_period: str
+    layer1_results: Dict[str, Dict]  # keyed by statement_type, values have lineItems, sourceScaling, etc.
+
+
 # ─── Corrections ──────────────────────────────────────────────────────────────
 
 class CorrectionRequest(BaseModel):
