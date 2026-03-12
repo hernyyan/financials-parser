@@ -22,8 +22,8 @@ MAX_FILE_SIZE = 50 * 1024 * 1024  # 50 MB
 @router.post("/upload", response_model=UploadResponse)
 def upload_file(
     file: UploadFile = File(...),
-    company_name: str = Form(...),
-    reporting_period: str = Form(...),
+    company_name: str = Form(""),
+    reporting_period: str = Form(""),
     db: Session = Depends(get_db),
 ):
     """

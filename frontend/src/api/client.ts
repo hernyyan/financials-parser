@@ -41,8 +41,8 @@ async function handleResponse<T>(res: Response): Promise<T> {
 // POST /upload
 export async function uploadFile(
   file: File,
-  companyName: string,
-  reportingPeriod: string,
+  companyName: string = '',
+  reportingPeriod: string = '',
 ): Promise<UploadResponse> {
   const formData = new FormData()
   formData.append('file', file)

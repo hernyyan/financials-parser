@@ -193,6 +193,7 @@ export function WizardProvider({ children }: { children: ReactNode }) {
       workbookUrl: null,
       layer1Results: {},
       step1Approved: true,
+      useCompanyContext: true,
       layer2Results: {
         income_statement: MOCK_LAYER2_INCOME_STATEMENT,
         balance_sheet: MOCK_LAYER2_BALANCE_SHEET,

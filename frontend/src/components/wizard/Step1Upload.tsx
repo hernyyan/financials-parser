@@ -14,6 +14,7 @@ import {
   FileSpreadsheet,
   CheckCircle2,
   ArrowRight,
+  X,
 } from 'lucide-react'
 import approveSfx from '../../assets/approve.mp3'
 
@@ -22,7 +23,7 @@ const approveAudio = new Audio(approveSfx)
 approveAudio.preload = 'auto'
 approveAudio.load()
 
-type SheetType = 'income_statement' | 'balance_sheet'
+type SheetType = 'income_statement' | 'balance_sheet' | 'combined'
 
 interface TabState {
   sheetType: SheetType
@@ -108,11 +109,17 @@ export default function Step1Upload() {
 
     const destState = tabStates[tab]
     if (destState && destState.status !== 'done') {
-      const doneTypes = new Set(
-        sheetNames
-          .filter((s) => tabStates[s]?.status === 'done')
-          .map((s) => tabStates[s].sheetType),
-      )
+      const doneSheets = sheetNames.filter((s) => tabStates[s]?.status === 'done')
+      const doneTypes = new Set<SheetType>()
+      for (const s of doneSheets) {
+        const t = tabStates[s].sheetType
+        if (t === 'combined') {
+          doneTypes.add('income_statement')
+          doneTypes.add('balance_sheet')
+        } else {
+          doneTypes.add(t)
+        }
+      }
       const isOnly = (t: SheetType) => doneTypes.has(t) && !doneTypes.has(t === 'income_statement' ? 'balance_sheet' : 'income_statement')
       if (isOnly('income_statement')) {
         setTabStates((prev) => ({ ...prev, [tab]: { ...prev[tab], sheetType: 'balance_sheet' } }))
@@ -199,31 +206,27 @@ export default function Step1Upload() {
   }
 
   const activeTabState = tabStates[activeTab]
-  const activeLayer1 = layer1Results[tabStates[activeTab]?.sheetType]
+  const isCombinedTab = activeTabState?.sheetType === 'combined'
+  const activeLayer1 = isCombinedTab ? undefined : layer1Results[tabStates[activeTab]?.sheetType]
+  const combinedIS = isCombinedTab ? layer1Results['income_statement'] : undefined
+  const combinedBS = isCombinedTab ? layer1Results['balance_sheet'] : undefined
 
-  // Approve requires at least one income statement AND one balance sheet extracted
+  // Approve requires at least one statement extracted
   const extractedIS = sheetNames.some(
-    (s) => tabStates[s]?.status === 'done' && tabStates[s]?.sheetType === 'income_statement',
+    (s) => tabStates[s]?.status === 'done' &&
+      (tabStates[s]?.sheetType === 'income_statement' || tabStates[s]?.sheetType === 'combined'),
   )
   const extractedBS = sheetNames.some(
-    (s) => tabStates[s]?.status === 'done' && tabStates[s]?.sheetType === 'balance_sheet',
+    (s) => tabStates[s]?.status === 'done' &&
+      (tabStates[s]?.sheetType === 'balance_sheet' || tabStates[s]?.sheetType === 'combined'),
   )
-  const canApprove = extractedIS && extractedBS
+  const canApprove = extractedIS || extractedBS
 
   const extractedSheetNames = sheetNames.filter((s) => tabStates[s]?.status === 'done')
 
   async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
     if (!file) return
-
-    if (!companyName.trim() || !reportingPeriod.trim()) {
-      setStatus({
-        type: 'error',
-        message: 'Please enter company name and reporting period before uploading.',
-      })
-      if (fileInputRef.current) fileInputRef.current.value = ''
-      return
-    }
 
     setUploading(true)
     setStatus(null)
@@ -274,7 +277,19 @@ export default function Step1Upload() {
     setLayer1Results({})
     setTabStates({})
     setStatus(null)
+    setContextStatus(null)
     setTimeout(() => fileInputRef.current?.click(), 0)
+  }
+
+  function handleClearUpload() {
+    setUploadedFile(null)
+    setSessionId(null)
+    setSheetNames([])
+    setWorkbookUrl(null)
+    setLayer1Results({})
+    setTabStates({})
+    setStatus(null)
+    setContextStatus(null)
   }
 
   function setTabSheetType(tabName: string, sheetType: SheetType) {
@@ -286,6 +301,13 @@ export default function Step1Upload() {
 
   async function handleRunExtraction(tabName: string) {
     if (!sessionId) return
+    if (!reportingPeriod.trim() || !companyName.trim()) {
+      setStatus({
+        type: 'error',
+        message: 'Please enter company name and reporting period before running extraction.',
+      })
+      return
+    }
     const tabState = tabStates[tabName]
     if (!tabState) return
 
@@ -295,31 +317,84 @@ export default function Step1Upload() {
     }))
     setStatus(null)
 
-    try {
-      const result = await runLayer1(sessionId, tabName, tabState.sheetType, reportingPeriod)
-      setLayer1Results({
-        ...layer1Results,
-        [tabState.sheetType]: {
-          lineItems: result.lineItems,
-          sourceScaling: result.sourceScaling,
-          columnIdentified: result.columnIdentified,
+    if (tabState.sheetType === 'combined') {
+      const [isResult, bsResult] = await Promise.allSettled([
+        runLayer1(sessionId, tabName, 'income_statement', reportingPeriod),
+        runLayer1(sessionId, tabName, 'balance_sheet', reportingPeriod),
+      ])
+
+      const newResults = { ...layer1Results }
+      const errors: string[] = []
+
+      if (isResult.status === 'fulfilled') {
+        newResults['income_statement'] = {
+          lineItems: isResult.value.lineItems,
+          sourceScaling: isResult.value.sourceScaling,
+          columnIdentified: isResult.value.columnIdentified,
           sourceSheet: tabName,
-        },
-      })
-      setTabStates((prev) => ({
-        ...prev,
-        [tabName]: { ...prev[tabName], status: 'done' },
-      }))
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Extraction failed.'
-      setTabStates((prev) => ({
-        ...prev,
-        [tabName]: { ...prev[tabName], status: 'error', error: message },
-      }))
-      setStatus({
-        type: 'error',
-        message: `Extraction failed for "${tabName}": ${message}`,
-      })
+        }
+      } else {
+        errors.push(`IS: ${(isResult.reason as Error)?.message ?? 'failed'}`)
+      }
+
+      if (bsResult.status === 'fulfilled') {
+        newResults['balance_sheet'] = {
+          lineItems: bsResult.value.lineItems,
+          sourceScaling: bsResult.value.sourceScaling,
+          columnIdentified: bsResult.value.columnIdentified,
+          sourceSheet: tabName,
+        }
+      } else {
+        errors.push(`BS: ${(bsResult.reason as Error)?.message ?? 'failed'}`)
+      }
+
+      setLayer1Results(newResults)
+
+      if (errors.length > 0 && errors.length < 2) {
+        setTabStates((prev) => ({
+          ...prev,
+          [tabName]: { ...prev[tabName], status: 'done' },
+        }))
+        setStatus({ type: 'info', message: `Partial extraction: ${errors.join('; ')}` })
+      } else if (errors.length === 2) {
+        setTabStates((prev) => ({
+          ...prev,
+          [tabName]: { ...prev[tabName], status: 'error', error: errors.join('; ') },
+        }))
+        setStatus({ type: 'error', message: `Extraction failed: ${errors.join('; ')}` })
+      } else {
+        setTabStates((prev) => ({
+          ...prev,
+          [tabName]: { ...prev[tabName], status: 'done' },
+        }))
+      }
+    } else {
+      try {
+        const result = await runLayer1(sessionId, tabName, tabState.sheetType, reportingPeriod)
+        setLayer1Results({
+          ...layer1Results,
+          [tabState.sheetType]: {
+            lineItems: result.lineItems,
+            sourceScaling: result.sourceScaling,
+            columnIdentified: result.columnIdentified,
+            sourceSheet: tabName,
+          },
+        })
+        setTabStates((prev) => ({
+          ...prev,
+          [tabName]: { ...prev[tabName], status: 'done' },
+        }))
+      } catch (err) {
+        const message = err instanceof Error ? err.message : 'Extraction failed.'
+        setTabStates((prev) => ({
+          ...prev,
+          [tabName]: { ...prev[tabName], status: 'error', error: message },
+        }))
+        setStatus({
+          type: 'error',
+          message: `Extraction failed for "${tabName}": ${message}`,
+        })
+      }
     }
   }
 
@@ -335,14 +410,14 @@ export default function Step1Upload() {
         <div className="relative" ref={comboRef}>
           <div
             className="flex items-center gap-2 bg-white border border-border rounded-lg px-3 py-1.5 cursor-pointer hover:border-gray-300 min-w-[220px]"
-            onClick={() => { if (!hasUpload) setComboOpen(!comboOpen) }}
+            onClick={() => setComboOpen(!comboOpen)}
           >
             <Search className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
             <input
               className="bg-transparent outline-none text-[13px] flex-1 min-w-0 disabled:cursor-not-allowed"
               placeholder={companiesLoading ? 'Loading...' : 'Select company...'}
               value={comboSearch}
-              disabled={hasUpload || creatingCompany}
+              disabled={creatingCompany}
               onChange={(e) => {
                 setComboSearch(e.target.value)
                 setComboOpen(true)
@@ -351,11 +426,11 @@ export default function Step1Upload() {
                   setCompanyId(null)
                 }
               }}
-              onFocus={() => { if (!hasUpload) setComboOpen(true) }}
+              onFocus={() => setComboOpen(true)}
             />
             <ChevronDown className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
           </div>
-          {comboOpen && !hasUpload && (
+          {comboOpen && (
             <div className="absolute top-full left-0 mt-1 w-full bg-white border border-border rounded-lg shadow-lg z-50 max-h-[calc(100vh-120px)] overflow-auto">
               {filteredCompanies.length === 0 && !comboSearch.trim() && (
                 <p className="px-3 py-2 text-[12px] text-muted-foreground italic">
@@ -396,7 +471,6 @@ export default function Step1Upload() {
           className="bg-white border border-border rounded-lg px-3 py-1.5 text-[13px] w-[280px] hover:border-gray-300 focus:outline-none focus:ring-2 focus:ring-primary/20 disabled:bg-gray-50 disabled:text-muted-foreground"
           placeholder="Reporting period, e.g. February 2026"
           value={reportingPeriod}
-          disabled={hasUpload}
           onChange={(e) => setReportingPeriod(e.target.value)}
         />
 
@@ -424,14 +498,23 @@ export default function Step1Upload() {
             {uploading ? 'Uploading...' : 'Upload Excel'}
           </button>
         ) : (
-          <button
-            onClick={handleReupload}
-            className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-[13px] transition-colors bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100"
-            style={{ fontWeight: 500 }}
-          >
-            <FileSpreadsheet className="w-3.5 h-3.5" />
-            {uploadedFile?.name ?? 'Uploaded file'}
-          </button>
+          <div className="flex items-center gap-1.5">
+            <button
+              onClick={handleReupload}
+              className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-[13px] transition-colors bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100"
+              style={{ fontWeight: 500 }}
+            >
+              <FileSpreadsheet className="w-3.5 h-3.5" />
+              {uploadedFile?.name ?? 'Uploaded file'}
+            </button>
+            <button
+              onClick={handleClearUpload}
+              className="p-1 rounded hover:bg-red-50 text-muted-foreground hover:text-red-500 transition-colors"
+              title="Clear upload"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
         )}
 
         {hasUpload && (
@@ -529,62 +612,103 @@ export default function Step1Upload() {
             <div className="flex-1 flex items-center justify-center text-muted-foreground">
               <p className="text-[13px]">Upload a file to begin extraction</p>
             </div>
-          ) : activeTabState?.status === 'done' && activeLayer1 ? (
+          ) : activeTabState?.status === 'done' && (activeLayer1 || isCombinedTab) ? (
             <div className="flex-1 overflow-auto p-4">
-              {/* Metadata bar */}
-              <div className="bg-gray-50 rounded-lg px-3 py-2 mb-3 text-[11px] text-muted-foreground flex flex-wrap gap-x-3 gap-y-1">
-                <span>
-                  Scaling:{' '}
-                  <span style={{ fontWeight: 500 }} className="text-foreground">
-                    {activeLayer1.sourceScaling}
-                  </span>
-                </span>
-                <span>
-                  Column:{' '}
-                  <span style={{ fontWeight: 500 }} className="text-foreground">
-                    {activeLayer1.columnIdentified}
-                  </span>
-                </span>
-                <span>
-                  Items:{' '}
-                  <span style={{ fontWeight: 500 }} className="text-foreground">
-                    {Object.keys(activeLayer1.lineItems).length}
-                  </span>
-                </span>
-              </div>
-              {/* Extracted items table */}
-              <table className="w-full text-[12px]">
-                <thead>
-                  <tr className="border-b border-border">
-                    <th className="text-left py-1.5 px-2 text-muted-foreground" style={{ fontWeight: 500 }}>
-                      Line Item
-                    </th>
-                    <th className="text-right py-1.5 px-2 text-muted-foreground" style={{ fontWeight: 500 }}>
-                      Value
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {Object.entries(activeLayer1.lineItems).map(([label, value], i) => {
-                    const isBold =
-                      label.includes('Total') ||
-                      label.includes('Gross') ||
-                      label.includes('Net') ||
-                      label.includes('Operating Income') ||
-                      label.includes('Pre-Tax')
-                    return (
-                      <tr key={i} className={`border-b border-gray-100 ${isBold ? 'bg-gray-50/50' : ''}`}>
-                        <td className="py-1.5 px-2" style={{ fontWeight: isBold ? 500 : 400 }}>
-                          {label}
-                        </td>
-                        <td className={`py-1.5 px-2 text-right font-mono ${value < 0 ? 'text-red-600' : ''}`}>
-                          {formatLineItemValue(value)}
-                        </td>
+              {isCombinedTab ? (
+                <div className="space-y-5">
+                  {[{ label: 'Income Statement', result: combinedIS }, { label: 'Balance Sheet', result: combinedBS }].map(
+                    ({ label, result }) =>
+                      result ? (
+                        <div key={label}>
+                          <p className="text-[11px] text-muted-foreground mb-1.5" style={{ fontWeight: 600 }}>
+                            {label}
+                          </p>
+                          <div className="bg-gray-50 rounded-lg px-3 py-2 mb-2 text-[11px] text-muted-foreground flex flex-wrap gap-x-3 gap-y-1">
+                            <span>Scaling: <span style={{ fontWeight: 500 }} className="text-foreground">{result.sourceScaling}</span></span>
+                            <span>Column: <span style={{ fontWeight: 500 }} className="text-foreground">{result.columnIdentified}</span></span>
+                            <span>Items: <span style={{ fontWeight: 500 }} className="text-foreground">{Object.keys(result.lineItems).length}</span></span>
+                          </div>
+                          <table className="w-full text-[12px]">
+                            <thead>
+                              <tr className="border-b border-border">
+                                <th className="text-left py-1.5 px-2 text-muted-foreground" style={{ fontWeight: 500 }}>Line Item</th>
+                                <th className="text-right py-1.5 px-2 text-muted-foreground" style={{ fontWeight: 500 }}>Value</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {Object.entries(result.lineItems).map(([lbl, val], i) => {
+                                const bold = lbl.includes('Total') || lbl.includes('Gross') || lbl.includes('Net') || lbl.includes('Operating Income') || lbl.includes('Pre-Tax')
+                                return (
+                                  <tr key={i} className={`border-b border-gray-100 ${bold ? 'bg-gray-50/50' : ''}`}>
+                                    <td className="py-1.5 px-2" style={{ fontWeight: bold ? 500 : 400 }}>{lbl}</td>
+                                    <td className={`py-1.5 px-2 text-right font-mono ${val < 0 ? 'text-red-600' : ''}`}>{formatLineItemValue(val)}</td>
+                                  </tr>
+                                )
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
+                      ) : null,
+                  )}
+                </div>
+              ) : activeLayer1 ? (
+                <>
+                  {/* Metadata bar */}
+                  <div className="bg-gray-50 rounded-lg px-3 py-2 mb-3 text-[11px] text-muted-foreground flex flex-wrap gap-x-3 gap-y-1">
+                    <span>
+                      Scaling:{' '}
+                      <span style={{ fontWeight: 500 }} className="text-foreground">
+                        {activeLayer1.sourceScaling}
+                      </span>
+                    </span>
+                    <span>
+                      Column:{' '}
+                      <span style={{ fontWeight: 500 }} className="text-foreground">
+                        {activeLayer1.columnIdentified}
+                      </span>
+                    </span>
+                    <span>
+                      Items:{' '}
+                      <span style={{ fontWeight: 500 }} className="text-foreground">
+                        {Object.keys(activeLayer1.lineItems).length}
+                      </span>
+                    </span>
+                  </div>
+                  {/* Extracted items table */}
+                  <table className="w-full text-[12px]">
+                    <thead>
+                      <tr className="border-b border-border">
+                        <th className="text-left py-1.5 px-2 text-muted-foreground" style={{ fontWeight: 500 }}>
+                          Line Item
+                        </th>
+                        <th className="text-right py-1.5 px-2 text-muted-foreground" style={{ fontWeight: 500 }}>
+                          Value
+                        </th>
                       </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
+                    </thead>
+                    <tbody>
+                      {Object.entries(activeLayer1.lineItems).map(([label, value], i) => {
+                        const isBold =
+                          label.includes('Total') ||
+                          label.includes('Gross') ||
+                          label.includes('Net') ||
+                          label.includes('Operating Income') ||
+                          label.includes('Pre-Tax')
+                        return (
+                          <tr key={i} className={`border-b border-gray-100 ${isBold ? 'bg-gray-50/50' : ''}`}>
+                            <td className="py-1.5 px-2" style={{ fontWeight: isBold ? 500 : 400 }}>
+                              {label}
+                            </td>
+                            <td className={`py-1.5 px-2 text-right font-mono ${value < 0 ? 'text-red-600' : ''}`}>
+                              {formatLineItemValue(value)}
+                            </td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                </>
+              ) : null}
             </div>
           ) : activeTabState?.status === 'extracting' ? (
             <div className="flex-1 flex flex-col items-center justify-center gap-3">
@@ -621,6 +745,7 @@ export default function Step1Upload() {
                   >
                     <option value="income_statement">Income Statement</option>
                     <option value="balance_sheet">Balance Sheet</option>
+                    <option value="combined">Both (IS + BS)</option>
                   </select>
                 </div>
                 <button
