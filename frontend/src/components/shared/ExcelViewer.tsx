@@ -39,7 +39,6 @@ export default function ExcelViewer({ workbookUrl, activeSheet }: ExcelViewerPro
       .then((buf) => {
         const wb = XLSX.read(buf, {
           type: 'array',
-          cellStyles: true,
           cellDates: true,
           cellNF: true,
         })
@@ -63,6 +62,11 @@ export default function ExcelViewer({ workbookUrl, activeSheet }: ExcelViewerPro
     const numRows = range.e.r - range.s.r + 1
     const numCols = range.e.c - range.s.c + 1
 
+    const MAX_RENDER_ROWS = 300
+    const MAX_RENDER_COLS = 40
+    const renderRows = Math.min(numRows, MAX_RENDER_ROWS)
+    const renderCols = Math.min(numCols, MAX_RENDER_COLS)
+
     // Merge map: "absRow,absCol" → {rowSpan, colSpan}
     const mergeMap = new Map<string, { rowSpan: number; colSpan: number }>()
     const skipped = new Set<string>()
@@ -84,7 +88,7 @@ export default function ExcelViewer({ workbookUrl, activeSheet }: ExcelViewerPro
     const freeze = (sheet['!freeze'] as { r?: number; c?: number } | undefined) ?? {}
     const frozenRows = freeze.r ?? 0
 
-    return { range, numRows, numCols, mergeMap, skipped, colInfos, rowInfos, frozenRows }
+    return { range, numRows, numCols, renderRows, renderCols, mergeMap, skipped, colInfos, rowInfos, frozenRows }
   }, [sheet])
 
   // ── Loading / error / empty states ─────────────────────────────────────────
@@ -121,7 +125,9 @@ export default function ExcelViewer({ workbookUrl, activeSheet }: ExcelViewerPro
     )
   }
 
-  const { range, numRows, numCols, mergeMap, skipped, colInfos, rowInfos, frozenRows } = tableData
+  const { range, numRows, numCols, renderRows, renderCols, mergeMap, skipped, colInfos, rowInfos, frozenRows } = tableData
+
+  const isTruncated = numRows > renderRows || numCols > renderCols
 
   // ── Table rendering ─────────────────────────────────────────────────────────
 
@@ -130,7 +136,7 @@ export default function ExcelViewer({ workbookUrl, activeSheet }: ExcelViewerPro
     const rowHpt = rowInfos[absRow]?.hpt
 
     const cells: React.ReactElement[] = []
-    for (let c = 0; c < numCols; c++) {
+    for (let c = 0; c < renderCols; c++) {
       const absCol = c + range.s.c
       const cellKey = `${absRow},${absCol}`
       if (skipped.has(cellKey)) continue
@@ -178,8 +184,8 @@ export default function ExcelViewer({ workbookUrl, activeSheet }: ExcelViewerPro
     )
   }
 
-  const headerRows = Array.from({ length: frozenRows }, (_, i) => renderRow(i, true))
-  const bodyRows = Array.from({ length: numRows - frozenRows }, (_, i) =>
+  const headerRows = Array.from({ length: Math.min(frozenRows, renderRows) }, (_, i) => renderRow(i, true))
+  const bodyRows = Array.from({ length: renderRows - frozenRows }, (_, i) =>
     renderRow(i + frozenRows, false),
   )
 
@@ -188,6 +194,11 @@ export default function ExcelViewer({ workbookUrl, activeSheet }: ExcelViewerPro
       className="flex-1 overflow-auto"
       style={{ fontFamily: "'Consolas', 'Monaco', 'Courier New', monospace", fontSize: '12px' }}
     >
+      {isTruncated && (
+        <div className="px-3 py-1 bg-blue-50 border-b border-blue-200 text-[11px] text-blue-600 sticky top-0 z-20">
+          Preview showing {renderRows} of {numRows} rows, {renderCols} of {numCols} columns. Full data is used for extraction.
+        </div>
+      )}
       <table
         className="border-collapse border-l border-t border-gray-200"
         style={{ tableLayout: 'auto', borderSpacing: 0 }}

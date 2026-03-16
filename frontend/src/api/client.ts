@@ -1,6 +1,7 @@
 import type {
   UploadResponse,
   Layer1Response,
+  Layer1Result,
   Layer2Request,
   Layer2Result,
   CorrectionRequest,
@@ -11,6 +12,7 @@ import type {
   Company,
   CorrectionProcessRequest,
   CorrectionProcessResponse,
+  CompanyContextStatus,
 } from '../types'
 
 export const API_BASE = import.meta.env.VITE_API_URL || '/api'
@@ -40,8 +42,8 @@ async function handleResponse<T>(res: Response): Promise<T> {
 // POST /upload
 export async function uploadFile(
   file: File,
-  companyName: string,
-  reportingPeriod: string,
+  companyName: string = '',
+  reportingPeriod: string = '',
 ): Promise<UploadResponse> {
   const formData = new FormData()
   formData.append('file', file)
@@ -70,6 +72,21 @@ export async function runLayer1(
   return handleResponse<Layer1Response>(res)
 }
 
+// POST /layer1/run-pdf
+export async function runLayer1Pdf(
+  sessionId: string,
+  pages: number[],
+  statementType: string,
+  reportingPeriod: string,
+): Promise<Layer1Response> {
+  const res = await fetch(`${API_BASE}/layer1/run-pdf`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ sessionId, pages, statementType, reportingPeriod }),
+  })
+  return handleResponse<Layer1Response>(res)
+}
+
 // POST /layer2/run
 // layer1_data is just the lineItems dict (not the full Layer1Result)
 export async function runLayer2(request: Layer2Request): Promise<Layer2Result> {
@@ -81,6 +98,8 @@ export async function runLayer2(request: Layer2Request): Promise<Layer2Result> {
       session_id: request.session_id ?? undefined,
       statement_type: request.statement_type,
       layer1_data: request.layer1_data,
+      company_id: request.company_id ?? undefined,
+      use_company_context: request.use_company_context ?? false,
     }),
   })
   console.log(`[runLayer2] ${request.statement_type} HTTP response: status=${res.status} ok=${res.ok} content-length=${res.headers.get('content-length')}`)
@@ -161,4 +180,30 @@ export async function processCorrections(
     body: JSON.stringify(payload),
   })
   return handleResponse<CorrectionProcessResponse>(res)
+}
+
+// GET /companies/{id}/context-status
+export async function getCompanyContextStatus(companyId: number): Promise<CompanyContextStatus> {
+  const res = await fetch(`${API_BASE}/companies/${companyId}/context-status`)
+  return handleResponse<CompanyContextStatus>(res)
+}
+
+// POST /datasets/append
+export async function appendToCompanyDataset(
+  sessionId: string | null,
+  companyName: string,
+  reportingPeriod: string,
+  layer1Results: Record<string, Layer1Result>,
+): Promise<void> {
+  const res = await fetch(`${API_BASE}/datasets/append`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      session_id: sessionId,
+      company_name: companyName,
+      reporting_period: reportingPeriod,
+      layer1_results: layer1Results,
+    }),
+  })
+  await handleResponse<{ success: boolean }>(res)
 }

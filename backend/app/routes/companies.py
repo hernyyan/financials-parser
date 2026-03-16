@@ -83,6 +83,56 @@ def create_company(request: CompanyCreate, db: Session = Depends(get_db)):
     return CompanyResponse(id=new_id, name=name, markdown_filename=markdown_filename)
 
 
+@router.get("/companies/{company_id}/context-status")
+def get_context_status(company_id: int, db: Session = Depends(get_db)):
+    """Check if a company has a context file with actual rules."""
+    row = db.execute(
+        text("SELECT name, markdown_filename FROM companies WHERE id = :id"),
+        {"id": company_id},
+    ).fetchone()
+
+    if not row:
+        raise HTTPException(status_code=404, detail="Company not found")
+
+    company_name, markdown_filename = row[0], row[1]
+    result = {
+        "company_id": company_id,
+        "company_name": company_name,
+        "has_rules": False,
+        "rule_count": 0,
+        "word_count": 0,
+    }
+
+    if not markdown_filename:
+        return result
+
+    md_path = COMPANY_CONTEXT_DIR / markdown_filename
+    if not md_path.exists():
+        return result
+
+    content = md_path.read_text(encoding="utf-8")
+
+    # Count bullet-point rules (lines starting with "- ")
+    lines = content.split("\n")
+    rule_lines = [l for l in lines if l.strip().startswith("- ")]
+    rule_count = len(rule_lines)
+
+    # A file "has rules" only if it contains actual bullet-point rules
+    # The auto-created template just has the header, no rules
+    has_rules = rule_count > 0
+
+    # Word count of the substantive content (excluding the header line)
+    word_count = len(content.split()) if has_rules else 0
+
+    return {
+        "company_id": company_id,
+        "company_name": company_name,
+        "has_rules": has_rules,
+        "rule_count": rule_count,
+        "word_count": word_count,
+    }
+
+
 @router.post("/companies/{company_id}/reprocess-corrections", response_model=ReprocessResponse)
 def reprocess_corrections(company_id: int, db: Session = Depends(get_db)):
     """

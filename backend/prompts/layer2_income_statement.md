@@ -237,6 +237,14 @@ After populating all line items, verify the following relationships. If any chec
 18. If both a dollar amount and a margin % are reported or computed for the same measure, verify they are consistent. Flag any discrepancy.
 19. If a computed value differs from the source document's reported value for the same line item, flag the discrepancy with both values noted.
 
+## Company-Specific Classification Rules
+
+{company_context}
+
+If the section above contains rules, they are specific to this company and were derived from analyst corrections on prior reporting periods. Apply these rules when they are relevant — they take precedence over the general classification rules above when they conflict on company-specific terminology, labeling patterns, or categorization decisions. However, they do NOT override basic arithmetic, US GAAP fundamentals, or validation checks. If a company-specific rule conflicts with mathematical reality, flag the conflict for analyst review rather than silently following the rule.
+
+If the section above is empty, ignore this section entirely and proceed with only the general classification rules.
+
 ## Output Format
 
 Return a single JSON object with the following top-level keys:

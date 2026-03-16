@@ -7,12 +7,21 @@ export interface WizardState {
   reportingPeriod: string
   sessionId: string | null
 
-  // Step 1
+  // Step 1 — file type
+  uploadFileType: 'excel' | 'pdf' | null
+
+  // Step 1 — Excel
   uploadedFile: File | null
   sheetNames: string[]
   workbookUrl: string | null
   layer1Results: Record<string, Layer1Result>
   step1Approved: boolean
+  useCompanyContext: boolean
+
+  // Step 1 — PDF
+  pdfPageCount: number
+  pdfUrl: string | null
+  pdfPageAssignments: Record<number, 'income_statement' | 'balance_sheet'>
 
   // Step 2
   layer2Results: Record<string, Layer2Result>
@@ -63,6 +72,9 @@ export interface UploadResponse {
   sessionId: string
   sheetNames: string[]
   workbookUrl: string
+  fileType: 'excel' | 'pdf'
+  pdfPageCount?: number
+  pdfUrl?: string
 }
 
 export interface Layer1Request {
@@ -83,6 +95,16 @@ export interface Layer2Request {
   session_id?: string | null
   statement_type: string
   layer1_data: Record<string, number>
+  company_id?: number | null
+  use_company_context?: boolean
+}
+
+export interface CompanyContextStatus {
+  company_id: number
+  company_name: string
+  has_rules: boolean
+  rule_count: number
+  word_count: number
 }
 
 export interface CorrectionRequest {

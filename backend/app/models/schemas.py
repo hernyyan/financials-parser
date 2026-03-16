@@ -43,6 +43,8 @@ class Layer2Request(BaseModel):
     session_id: Optional[str] = None
     statement_type: str       # 'income_statement' | 'balance_sheet'
     layer1_data: Dict[str, float]  # Just the lineItems dict from Layer 1
+    company_id: Optional[int] = None
+    use_company_context: Optional[bool] = False
 
 
 class Layer2Response(BaseModel):
@@ -58,8 +60,25 @@ class Layer2Response(BaseModel):
 
 class UploadResponse(BaseModel):
     sessionId: str
-    sheetNames: List[str]
-    workbookUrl: str          # "/files/{session_id}/workbook"
+    sheetNames: List[str] = []
+    workbookUrl: str = ""
+    fileType: str = "excel"   # "excel" | "pdf"
+    pdfPageCount: int = 0
+    pdfUrl: str = ""
+
+
+class Layer1PdfRequest(BaseModel):
+    sessionId: str
+    pages: List[int]          # 1-indexed page numbers
+    statementType: str        # 'income_statement' | 'balance_sheet'
+    reportingPeriod: str
+
+
+class DatasetAppendRequest(BaseModel):
+    session_id: Optional[str] = None
+    company_name: str
+    reporting_period: str
+    layer1_results: Dict[str, Dict]  # keyed by statement_type, values have lineItems, sourceScaling, etc.
 
 
 # ─── Corrections ──────────────────────────────────────────────────────────────

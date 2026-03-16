@@ -151,6 +151,14 @@ After populating all line items, verify the following. If any check fails, inclu
 11. **Total Liabilities and Equity** = Total Liabilities + Total Equity
 12. **Balance check**: Total Assets = Total Liabilities and Equity
 
+## Company-Specific Classification Rules
+
+{company_context}
+
+If the section above contains rules, they are specific to this company and were derived from analyst corrections on prior reporting periods. Apply these rules when they are relevant — they take precedence over the general classification rules above when they conflict on company-specific terminology, labeling patterns, or categorization decisions. However, they do NOT override basic arithmetic, US GAAP fundamentals, or validation checks. If a company-specific rule conflicts with mathematical reality, flag the conflict for analyst review rather than silently following the rule.
+
+If the section above is empty, ignore this section entirely and proceed with only the general classification rules.
+
 ## Output Format
 
 Return a single JSON object with the following top-level keys:

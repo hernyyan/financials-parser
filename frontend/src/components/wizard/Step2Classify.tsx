@@ -104,6 +104,7 @@ export default function Step2Classify() {
     corrections,
     selectedCell,
     sidePanelOpen,
+    useCompanyContext,
     setLayer2Results,
     addCorrection,
     removeCorrection,
@@ -192,6 +193,8 @@ export default function Step2Classify() {
           session_id: sessionId,
           statement_type: 'income_statement',
           layer1_data: layer1Results['income_statement'].lineItems,
+          company_id: companyId,
+          use_company_context: useCompanyContext,
         })
           .then((result) => {
             console.log('[Step2] IS .then() fired — result truthy:', !!result, 'statementType:', result?.statementType)
@@ -220,6 +223,8 @@ export default function Step2Classify() {
           session_id: sessionId,
           statement_type: 'balance_sheet',
           layer1_data: layer1Results['balance_sheet'].lineItems,
+          company_id: companyId,
+          use_company_context: useCompanyContext,
         })
           .then((result) => {
             console.log('[Step2] BS .then() fired — result truthy:', !!result, 'statementType:', result?.statementType)

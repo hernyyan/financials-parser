@@ -31,8 +31,11 @@ def run_layer2(request: Layer2Request, db: Session = Depends(get_db)):
     service = get_layer2_service()
     try:
         result = service.run_classification(
-            request.statement_type,
-            request.layer1_data,
+            statement_type=request.statement_type,
+            layer1_data=request.layer1_data,
+            company_id=request.company_id,
+            use_company_context=request.use_company_context or False,
+            db=db,
         )
     except anthropic.AuthenticationError:
         raise HTTPException(status_code=401, detail="Invalid Anthropic API key.")

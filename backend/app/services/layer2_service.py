@@ -15,6 +15,9 @@ import json
 import os
 from typing import Any, Dict, List, Optional
 
+from sqlalchemy.orm import Session
+from sqlalchemy import text as sa_text
+from app.config import COMPANY_CONTEXT_DIR
 from app.services.claude_service import ClaudeService, get_claude_service
 
 PROMPT_MAP = {
@@ -27,13 +30,23 @@ class Layer2Service:
     def __init__(self, claude: ClaudeService) -> None:
         self.claude = claude
 
-    def run_classification(self, statement_type: str, layer1_data: Dict[str, float]) -> Dict[str, Any]:
+    def run_classification(
+        self,
+        statement_type: str,
+        layer1_data: Dict[str, float],
+        company_id: Optional[int] = None,
+        use_company_context: bool = False,
+        db: Optional[Any] = None,
+    ) -> Dict[str, Any]:
         """
         Run Layer 2 classification for a single statement type.
 
         Args:
             statement_type: 'income_statement' or 'balance_sheet'
             layer1_data: The lineItems dict from Layer 1 (field_name → float)
+            company_id: Optional company ID for context injection
+            use_company_context: Whether to inject company-specific rules
+            db: Database session (required if use_company_context is True)
 
         Returns:
             Dict with keys: statementType, values, reasoning, validation,
@@ -50,13 +63,51 @@ class Layer2Service:
                 "Expected 'income_statement' or 'balance_sheet'."
             )
 
+        # Load company context if toggled on
+        company_context = ""
+        if use_company_context and company_id and db:
+            company_context = self._load_company_context(company_id, db)
+
         variables = {
             "layer1_output": json.dumps(layer1_data, indent=2),
+            "company_context": company_context,
         }
 
         response_text = self.claude.call_claude(prompt_key, variables, model, max_tokens=32768)
         parsed = self.claude.parse_json_response(response_text)
         return self._split_response(parsed, normalized)
+
+    def _load_company_context(self, company_id: int, db: Any) -> str:
+        """
+        Load the company's markdown context file and return its content,
+        but only if it contains actual rules (bullet points).
+        Returns empty string if no rules exist.
+        """
+        try:
+            row = db.execute(
+                sa_text("SELECT markdown_filename FROM companies WHERE id = :id"),
+                {"id": company_id},
+            ).fetchone()
+
+            if not row or not row[0]:
+                return ""
+
+            md_path = COMPANY_CONTEXT_DIR / row[0]
+            if not md_path.exists():
+                return ""
+
+            content = md_path.read_text(encoding="utf-8")
+
+            # Check if file has actual rules (bullet points), not just the header
+            lines = content.split("\n")
+            has_rules = any(l.strip().startswith("- ") for l in lines)
+
+            if not has_rules:
+                return ""
+
+            return content
+        except Exception:
+            return ""
 
     def _split_response(self, parsed: Any, statement_type: str) -> Dict[str, Any]:
         """
