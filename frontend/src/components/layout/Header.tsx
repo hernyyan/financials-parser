@@ -13,7 +13,7 @@ export default function Header() {
           <div className="w-8 h-8 bg-amber-500 rounded-lg flex items-center justify-center">
             <PiggyBank className="w-5 h-5 text-white" />
           </div>
-          <span className="text-[17px] tracking-tight" style={{ fontWeight: 600 }}>Henry</span>
+          <span className="text-[17px] tracking-tight" style={{ fontWeight: 600 }}>Henry Jr</span>
         </div>
         <div className="flex items-center gap-4 text-[13px] text-muted-foreground">
           {companyName && (
