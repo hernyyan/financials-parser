@@ -2,11 +2,16 @@
 FastAPI application entry point.
 Sets up CORS, mounts routers, and initializes the database.
 """
+import logging
+
 from fastapi import FastAPI, Request
+from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
+
+logger = logging.getLogger(__name__)
 
 from app.config import PROCESSED_DIR
 from app.db.database import init_db
@@ -22,14 +27,8 @@ app = FastAPI(
 
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(request: Request, exc: RequestValidationError):
-    print(f"422 VALIDATION ERROR on {request.method} {request.url.path}")
-    print(f"  errors: {exc.errors()}")
-    try:
-        body = await request.body()
-        print(f"  raw body: {body[:500]}")
-    except Exception:
-        pass
-    return JSONResponse(status_code=422, content={"detail": exc.errors()})
+    logger.warning("422 VALIDATION ERROR on %s %s: %s", request.method, request.url.path, exc.errors())
+    return JSONResponse(status_code=422, content={"detail": jsonable_encoder(exc.errors())})
 
 
 # CORS — allow the Vite dev server origin
@@ -60,9 +59,13 @@ app.mount("/files", StaticFiles(directory=str(PROCESSED_DIR)), name="files")
 @app.on_event("startup")
 async def startup_event():
     """Initialize database tables, load prompt files, and parse template on startup."""
-    init_db()
-    load_prompts()          # Cache AI prompts from backend/prompts/
-    get_template_service()  # Parse loader_template.csv into memory
+    try:
+        init_db()
+        load_prompts()          # Cache AI prompts from backend/prompts/
+        get_template_service()  # Parse loader_template.csv into memory
+    except Exception as exc:
+        logger.critical("Startup failed: %s", exc)
+        raise
 
 
 @app.get("/health")
