@@ -58,16 +58,13 @@ The reasoning trace must create a complete chain from every output value back to
     "Net Income (Loss)": 0 },
   "EBITDA": {
     "EBIT": 0,
-    "EBITDA - Standard": 0,
+    "EBITDA": 0,
     "EBITDA Adjustments": 0,
-    "Adjusted EBITDA - Standard": 0,
-    "EBITDA - Reported": 0,
-    "Adjusted EBITDA - Reported": 0,
+    "Adjusted EBITDA": 0,
     "Covenant EBITDA": 0 },
   "MARGINS": {
-    "EBITDA - Standard Margin %": 0,
-    "Adjusted EBITDA - Standard Margin %": 0,
-    "Adjusted EBITDA - Reported Margin %": 0,
+    "EBITDA Margin %": 0,
+    "Adjusted EBITDA Margin %": 0,
     "Covenant EBITDA Margin %": 0 }
 }
 ```
@@ -76,7 +73,7 @@ The reasoning trace must create a complete chain from every output value back to
 
 Classify every line item from the Layer 1 extraction according to US GAAP standards. Do NOT simply mirror how the source financials categorized an item. Apply the following principles:
 
-**General Principle — Best Effort with Analyst Review**: The income statement involves significantly more subjectivity than the balance sheet, particularly in the below-the-line section and EBITDA calculations. Make a best effort classification based on available information, but err on the side of flagging items for analyst review rather than making uncertain judgment calls. Many fields — particularly EBITDA Adjustments, Adjusted EBITDA (both Standard and Reported), and Covenant EBITDA — are inherently analyst-populated and should only be filled if the source document explicitly provides them.
+**General Principle — Best Effort with Analyst Review**: The income statement involves significantly more subjectivity than the balance sheet, particularly in the below-the-line section and EBITDA calculations. Make a best effort classification based on available information, but err on the side of flagging items for analyst review rather than making uncertain judgment calls. Many fields — particularly EBITDA Adjustments, Adjusted EBITDA, and Covenant EBITDA — are inherently analyst-populated and should only be filled if the source document explicitly provides them.
 
 **General Principle — Respect Source Document Placement**: When classifying income statement line items, the item's placement within the source document's own structure is a strong signal. If the source document lists an item within its operating expenses section, classify it as an operating expense — do NOT reroute it to a below-the-line category simply because the label contains words like "income," "gain," or "other." The source document's structure reflects the company's own judgment about where an item belongs operationally, and that should be respected unless there is a clear US GAAP reason to override it. When in doubt about whether an item is operating or non-operating, keep it where the source placed it and flag for analyst review.
 
@@ -168,15 +165,11 @@ If multiple computation paths produce different results, or if a computed value 
 
 **EBIT**: Earnings before interest and taxes. EBIT = Income Before Taxes + Interest Expense/(Income). Equivalently: Net Income + Taxes + Interest Expense/(Income). Verify using both methods.
 
-**EBITDA - Standard**: EBIT + ALL depreciation & amortization from all three locations in the income statement (COGS - D&A + D&A + Non-Operating Expenses - D&A). This is the firm's calculated EBITDA using a standardized methodology.
+**EBITDA**: EBIT + ALL depreciation & amortization from all three locations in the income statement (COGS - D&A + D&A + Non-Operating Expenses - D&A). This is the firm's calculated EBITDA using a standardized methodology.
 
 **EBITDA Adjustments**: Analyst-determined adjustments. Do NOT populate unless the source document explicitly provides EBITDA adjustments. Leave at 0 for analyst review.
 
-**Adjusted EBITDA - Standard**: EBITDA - Standard + EBITDA Adjustments. Only calculable if EBITDA Adjustments is populated. Otherwise leave at 0.
-
-**EBITDA - Reported**: The company's self-reported EBITDA as stated in the source document. Only populate if the source explicitly provides this figure. Do NOT calculate it — take it directly from the source. If the source provides an EBITDA figure, populate it here regardless of whether it matches EBITDA - Standard.
-
-**Adjusted EBITDA - Reported**: The company's self-reported adjusted EBITDA. Only populate if the source explicitly provides this. Do NOT calculate.
+**Adjusted EBITDA**: EBITDA + EBITDA Adjustments. Only calculable if EBITDA Adjustments is populated. Otherwise leave at 0.
 
 **Covenant EBITDA**: EBITDA as defined in the credit agreement. Only populate if the source explicitly provides this. Do NOT calculate.
 
@@ -184,11 +177,9 @@ If multiple computation paths produce different results, or if a computed value 
 
 All margin percentages are calculated as the relevant EBITDA measure ÷ Total Revenue × 100. Only populate a margin if the corresponding EBITDA measure is populated.
 
-**EBITDA - Standard Margin %**: EBITDA - Standard ÷ Total Revenue × 100.
+**EBITDA Margin %**: EBITDA ÷ Total Revenue × 100.
 
-**Adjusted EBITDA - Standard Margin %**: Adjusted EBITDA - Standard ÷ Total Revenue × 100.
-
-**Adjusted EBITDA - Reported Margin %**: Adjusted EBITDA - Reported ÷ Total Revenue × 100.
+**Adjusted EBITDA Margin %**: Adjusted EBITDA ÷ Total Revenue × 100.
 
 **Covenant EBITDA Margin %**: Covenant EBITDA ÷ Total Revenue × 100.
 
@@ -223,19 +214,19 @@ After populating all line items, verify the following relationships. If any chec
 ### EBITDA
 9. **EBIT** = Income Before Taxes + Interest Expense/(Income)
 10. **EBIT (cross-check)** = Net Income + Taxes + Interest Expense/(Income)
-11. **EBITDA - Standard** = EBIT + COGS D&A + D&A + Non-Operating D&A
-12. **Adjusted EBITDA - Standard** = EBITDA - Standard + EBITDA Adjustments (only if Adjustments populated)
+11. **EBITDA** = EBIT + COGS D&A + D&A + Non-Operating D&A
+12. **Adjusted EBITDA** = EBITDA + EBITDA Adjustments (only if Adjustments populated)
 
 ### Margins
 13. **Gross Profit Margin %** = Gross Profit ÷ Total Revenue × 100
-14. **EBITDA - Standard Margin %** = EBITDA - Standard ÷ Total Revenue × 100
-15. **Adjusted EBITDA - Standard Margin %** = Adjusted EBITDA - Standard ÷ Total Revenue × 100
-16. **Adjusted EBITDA - Reported Margin %** = Adjusted EBITDA - Reported ÷ Total Revenue × 100
-17. **Covenant EBITDA Margin %** = Covenant EBITDA ÷ Total Revenue × 100
+14. **EBITDA Margin %** = EBITDA ÷ Total Revenue × 100
+15. **Adjusted EBITDA Margin %** = Adjusted EBITDA ÷ Total Revenue × 100
+16. **Covenant EBITDA Margin %** = Covenant EBITDA ÷ Total Revenue × 100
 
 ### Cross-Verification
-18. If both a dollar amount and a margin % are reported or computed for the same measure, verify they are consistent. Flag any discrepancy.
-19. If a computed value differs from the source document's reported value for the same line item, flag the discrepancy with both values noted.
+17. If both a dollar amount and a margin % are reported or computed for the same measure, verify they are consistent. Flag any discrepancy.
+18. If a computed value differs from the source document's reported value for the same line item, flag the discrepancy with both values noted.
+19. **Reported EBITDA cross-check**: If the source reports its own EBITDA or Adjusted EBITDA figure, compare against the calculated value. If they differ, flag the calculated field and include both values in the VALIDATION details.
 
 ## Company-Specific Classification Rules
 

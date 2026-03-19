@@ -101,15 +101,12 @@ export const MOCK_LAYER2_INCOME_STATEMENT: Layer2Result = {
     'Taxes': 12109.85,
     'Net Income (Loss)': -942385.19,
     'EBIT': -356599.3,
-    'EBITDA - Standard': -256987.74,
+    'EBITDA': -256987.74,
     'EBITDA Adjustments': null,
-    'Adjusted EBITDA - Standard': null,
-    'EBITDA - Reported': -256987.74,
-    'Adjusted EBITDA - Reported': null,
+    'Adjusted EBITDA': null,
     'Covenant EBITDA': null,
-    'EBITDA - Standard Margin %': -7.1,
-    'Adjusted EBITDA - Standard Margin %': null,
-    'Adjusted EBITDA - Reported Margin %': null,
+    'EBITDA Margin %': -7.1,
+    'Adjusted EBITDA Margin %': null,
     'Covenant EBITDA Margin %': null,
   },
   reasoning: {
@@ -124,7 +121,7 @@ export const MOCK_LAYER2_INCOME_STATEMENT: Layer2Result = {
       'Aggregation: Direct Operating Expense ($75,853.47) + Indirect Operating Expense ($745,332.70) = $821,186.17. These did not clearly fit other OpEx categories.',
     'Net Income (Loss)':
       "Verified: (1) Source 'Net Profit/Loss' (-$942,385.19); (2) Calculated: -$930,275.34 - $12,109.85 = -$942,385.19. Both agree.",
-    'EBITDA - Standard':
+    'EBITDA':
       "Source 'Reported EBITDA Before Extraordinary Expense' (-$256,987.74) used. Consistent with EBIT (-$356,599.30) + D&A ($99,611.56) = -$256,987.74.",
     'Interest Expense/(Income)':
       "Source 'Total Interest Expense / (Income)' ($573,676.04) mapped directly.",
@@ -284,15 +281,12 @@ export const IS_TEMPLATE_FIELDS = [
   'Taxes',
   'Net Income (Loss)',
   'EBIT',
-  'EBITDA - Standard',
+  'EBITDA',
   'EBITDA Adjustments',
-  'Adjusted EBITDA - Standard',
-  'EBITDA - Reported',
-  'Adjusted EBITDA - Reported',
+  'Adjusted EBITDA',
   'Covenant EBITDA',
-  'EBITDA - Standard Margin %',
-  'Adjusted EBITDA - Standard Margin %',
-  'Adjusted EBITDA - Reported Margin %',
+  'EBITDA Margin %',
+  'Adjusted EBITDA Margin %',
   'Covenant EBITDA Margin %',
 ]
 
