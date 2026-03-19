@@ -301,6 +301,8 @@ export default function Step2Classify() {
   async function handleSaveCorrection(correctionData: Omit<Correction, 'timestamp'>) {
     const correction: Correction = { ...correctionData, timestamp: new Date().toISOString() }
     addCorrection(correction)
+
+    // 1. Save correction to reviews table
     try {
       await saveCorrection({
         sessionId,
@@ -314,6 +316,40 @@ export default function Step2Classify() {
     } catch {
       // Non-fatal
     }
+
+    // 2. Immediately route if tag needs processing
+    if (correctionData.tag === 'company_specific' || correctionData.tag === 'general_fix') {
+      const stmtType = selectedCellType ?? 'income_statement'
+      const layer2 = layer2Results[stmtType]
+      const valKeys = layer2?.fieldValidations[correctionData.fieldName] ?? []
+      const validationStr = valKeys.length > 0
+        ? valKeys
+            .map((k) => {
+              const chk = layer2?.validation[k]
+              return chk ? `${k}: ${chk.status} — ${chk.details}` : k
+            })
+            .join('; ')
+        : null
+
+      processCorrections({
+        company_id: companyId,
+        company_name: companyName,
+        period: reportingPeriod,
+        corrections: [{
+          field_name: correctionData.fieldName,
+          statement_type: stmtType,
+          layer2_value: layer2?.values[correctionData.fieldName] ?? null,
+          layer2_reasoning: layer2?.reasoning[correctionData.fieldName] ?? null,
+          layer2_validation: validationStr,
+          corrected_value: correctionData.correctedValue,
+          analyst_reasoning: correctionData.reasoning,
+          tag: correctionData.tag,
+        }],
+      }).catch((err) => {
+        console.error(`Correction processing failed for "${correctionData.fieldName}":`, err)
+      })
+    }
+
     setStatus({ type: 'success', message: `Correction saved for "${correctionData.fieldName}".` })
   }
 
@@ -323,44 +359,6 @@ export default function Step2Classify() {
   }
 
   async function handleApproveStep2() {
-    if (corrections.length > 0) {
-      setApprovingStep2(true)
-      try {
-        const processItems: CorrectionProcessItem[] = corrections.map((c) => {
-          const stmtType = isAllFields.includes(c.fieldName) ? 'income_statement' : 'balance_sheet'
-          const layer2 = layer2Results[stmtType]
-          const valKeys = layer2?.fieldValidations[c.fieldName] ?? []
-          const validationStr = valKeys.length > 0
-            ? valKeys
-                .map((k) => {
-                  const chk = layer2?.validation[k]
-                  return chk ? `${k}: ${chk.status} — ${chk.details}` : k
-                })
-                .join('; ')
-            : null
-          return {
-            field_name: c.fieldName,
-            statement_type: stmtType,
-            layer2_value: layer2?.values[c.fieldName] ?? null,
-            layer2_reasoning: layer2?.reasoning[c.fieldName] ?? null,
-            layer2_validation: validationStr,
-            corrected_value: c.correctedValue,
-            analyst_reasoning: c.reasoning,
-            tag: c.tag,
-          }
-        })
-        await processCorrections({
-          company_id: companyId,
-          company_name: companyName,
-          period: reportingPeriod,
-          corrections: processItems,
-        })
-      } catch {
-        // Non-fatal — proceed regardless
-      } finally {
-        setApprovingStep2(false)
-      }
-    }
     approveStep2()
   }
 
