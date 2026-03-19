@@ -155,9 +155,9 @@ export default function PdfPageViewer({
                       renderTextLayer={false}
                       renderAnnotationLayer={false}
                     />
-                    {/* Checkbox — top-left, click-only selection */}
+                    {/* Checkbox — top-right, click-only selection */}
                     <div
-                      className={`absolute top-1.5 left-1.5 z-10 w-4 h-4 rounded-sm border flex items-center justify-center transition-all hover:ring-2 hover:ring-offset-1 ${
+                      className={`absolute top-1.5 right-1.5 z-10 w-4 h-4 rounded-sm border flex items-center justify-center transition-all hover:ring-2 hover:ring-offset-1 ${
                         assignment === 'income_statement'
                           ? 'bg-blue-500 border-blue-500 hover:ring-blue-300'
                           : assignment === 'balance_sheet'
@@ -172,17 +172,6 @@ export default function PdfPageViewer({
                         </svg>
                       )}
                     </div>
-                    {/* IS/BS badge — top-right, display only */}
-                    {assignment && (
-                      <span
-                        className={`absolute top-1 right-1 px-1 py-0.5 rounded text-[9px] text-white ${
-                          assignment === 'income_statement' ? 'bg-blue-500' : 'bg-emerald-500'
-                        }`}
-                        style={{ fontWeight: 600 }}
-                      >
-                        {assignment === 'income_statement' ? 'IS' : 'BS'}
-                      </span>
-                    )}
                   </div>
                   <span
                     className={`text-[10px] mt-0.5 ${isActive ? 'text-foreground' : 'text-muted-foreground'}`}
@@ -230,9 +219,9 @@ export default function PdfPageViewer({
                     renderTextLayer={true}
                     renderAnnotationLayer={false}
                   />
-                  {/* Checkbox — top-left, click-only selection */}
+                  {/* Checkbox — top-right, click-only selection */}
                   <div
-                    className={`absolute top-2 left-2 z-10 w-4 h-4 rounded-sm border flex items-center justify-center transition-all cursor-pointer hover:ring-2 hover:ring-offset-1 ${
+                    className={`absolute top-2 right-2 z-10 w-4 h-4 rounded-sm border flex items-center justify-center transition-all cursor-pointer hover:ring-2 hover:ring-offset-1 ${
                       assignment === 'income_statement'
                         ? 'bg-blue-500 border-blue-500 hover:ring-blue-300'
                         : assignment === 'balance_sheet'
