@@ -329,3 +329,187 @@ def _read_jsonl(path) -> list:
     except OSError:
         return []
     return entries
+
+
+# ── Endpoint 8: PUT /admin/company-context/{company_id} ───────────────────────
+
+from datetime import datetime, timezone
+from app.models.schemas import AdminContextUpdateRequest, AdminWriteRuleRequest
+from app.services.claude_service import get_claude_service
+from app.config import LAYER_A_MODEL, LAYER_B_MODEL
+
+@router.put("/company-context/{company_id}")
+def admin_update_company_context(
+    company_id: int,
+    request: AdminContextUpdateRequest,
+    db: Session = Depends(get_db),
+):
+    """Directly overwrite the company's markdown context file."""
+    row = db.execute(
+        text("SELECT markdown_filename FROM companies WHERE id = :id"),
+        {"id": company_id},
+    ).fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="Company not found.")
+
+    md_path = COMPANY_CONTEXT_DIR / row[0]
+    md_path.write_text(request.content, encoding="utf-8")
+
+    return {"success": True, "word_count": len(request.content.split())}
+
+
+# ── Endpoint 9: POST /admin/write-rule ────────────────────────────────────────
+
+@router.post("/admin/write-rule")
+def admin_write_rule(
+    request: AdminWriteRuleRequest,
+    db: Session = Depends(get_db),
+):
+    """Submit a rule through Layer A → Layer B pipeline."""
+    row = db.execute(
+        text("SELECT id, name, markdown_filename FROM companies WHERE id = :company_id"),
+        {"company_id": request.company_id},
+    ).fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="Company not found.")
+
+    company_id, company_name, markdown_filename = row
+
+    claude = get_claude_service()
+    timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S")
+
+    layer_a_raw = claude.call_claude(
+        prompt_key="layer_a_instruction_rewriter",
+        variables={
+            "field_name": request.field_name,
+            "statement_type": request.statement_type,
+            "layer2_value": "N/A (admin-authored rule)",
+            "layer2_reasoning": "N/A (admin-authored rule)",
+            "corrected_value": "N/A (admin-authored rule)",
+            "analyst_reasoning": request.rule_text,
+        },
+        model=LAYER_A_MODEL,
+        max_tokens=2048,
+    )
+    layer_a_parsed = claude.parse_json_response(layer_a_raw)
+    instruction = layer_a_parsed.get("instruction", "")
+    referenced_fields = layer_a_parsed.get("referenced_fields", [request.field_name])
+
+    md_path = COMPANY_CONTEXT_DIR / markdown_filename
+    current_markdown = md_path.read_text(encoding="utf-8") if md_path.exists() else f"# {company_name} — Classification Context\n\n"
+
+    layer_b_raw = claude.call_claude(
+        prompt_key="layer_b_markdown_integrator",
+        variables={
+            "new_instruction": instruction,
+            "referenced_fields": json.dumps(referenced_fields),
+            "current_markdown": current_markdown,
+        },
+        model=LAYER_B_MODEL,
+        max_tokens=8192,
+    )
+    layer_b_parsed = claude.parse_json_response(layer_b_raw)
+    action = layer_b_parsed.get("action", "UNKNOWN")
+    detail = layer_b_parsed.get("detail", "")
+    updated_markdown = layer_b_parsed.get("updated_markdown")
+
+    if updated_markdown and action != "DISCARD":
+        md_path.write_text(updated_markdown, encoding="utf-8")
+
+    changelog_entry = {
+        "timestamp": timestamp,
+        "company_id": company_id,
+        "company_name": company_name,
+        "source": "admin_portal",
+        "field_name": request.field_name,
+        "statement_type": request.statement_type,
+        "layer_a_instruction": instruction,
+        "layer_b_action": action,
+        "layer_b_detail": detail,
+    }
+    changelog_path = DATA_DIR / "company_context_changelog.jsonl"
+    with changelog_path.open("a", encoding="utf-8") as f:
+        f.write(json.dumps(changelog_entry) + "\n")
+
+    return {
+        "success": True,
+        "layer_a_instruction": instruction,
+        "layer_a_referenced_fields": referenced_fields,
+        "layer_b_action": action,
+        "layer_b_detail": detail,
+        "updated_markdown": updated_markdown if action != "DISCARD" else current_markdown,
+    }
+
+
+# ── Endpoint 10: GET /admin/company-data/{company_id} ─────────────────────────
+
+@router.get("/company-data/{company_id}")
+def admin_company_data(company_id: int, db: Session = Depends(get_db)):
+    """Return all L1/L2 data for a company across all review sessions."""
+    company = db.execute(
+        text("SELECT name FROM companies WHERE id = :id"),
+        {"id": company_id},
+    ).fetchone()
+    if not company:
+        raise HTTPException(status_code=404, detail="Company not found.")
+
+    rows = db.execute(
+        text("""
+            SELECT session_id, reporting_period, layer1_data, layer2_data,
+                   status, created_at, finalized_at
+            FROM reviews
+            WHERE company_name = :name
+            ORDER BY created_at ASC
+        """),
+        {"name": company[0]},
+    ).fetchall()
+
+    periods = []
+    for row in rows:
+        periods.append({
+            "session_id": row[0],
+            "reporting_period": row[1],
+            "layer1_data": json.loads(row[2]) if row[2] else None,
+            "layer2_data": json.loads(row[3]) if row[3] else None,
+            "status": row[4],
+            "created_at": str(row[5]) if row[5] else None,
+            "finalized_at": str(row[6]) if row[6] else None,
+        })
+
+    return {"company_id": company_id, "company_name": company[0], "periods": periods}
+
+
+# ── Endpoint 11: GET /admin/company-corrections/{company_id} ──────────────────
+
+@router.get("/company-corrections/{company_id}")
+def admin_company_corrections(company_id: int, db: Session = Depends(get_db)):
+    """Return all company_specific_corrections for a company."""
+    rows = db.execute(
+        text("""
+            SELECT id, period, statement_type, field_name,
+                   layer2_value, corrected_value, analyst_reasoning,
+                   processed, created_at
+            FROM company_specific_corrections
+            WHERE company_id = :company_id
+            ORDER BY created_at DESC
+        """),
+        {"company_id": company_id},
+    ).fetchall()
+
+    return {
+        "company_id": company_id,
+        "corrections": [
+            {
+                "id": r[0],
+                "period": r[1],
+                "statement_type": r[2],
+                "field_name": r[3],
+                "layer2_value": r[4],
+                "corrected_value": r[5],
+                "analyst_reasoning": r[6],
+                "processed": r[7],
+                "created_at": str(r[8]) if r[8] else None,
+            }
+            for r in rows
+        ],
+    }

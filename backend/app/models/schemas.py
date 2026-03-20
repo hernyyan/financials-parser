@@ -207,3 +207,15 @@ class ReprocessResponse(BaseModel):
     company_name: str
     corrections_reprocessed: int
     results: List[ReprocessCorrectionResult]
+
+
+# ─── Admin ────────────────────────────────────────────────────────────────────
+
+class AdminContextUpdateRequest(BaseModel):
+    content: str
+
+class AdminWriteRuleRequest(BaseModel):
+    company_id: int
+    field_name: str
+    statement_type: str  # 'income_statement' | 'balance_sheet'
+    rule_text: str
