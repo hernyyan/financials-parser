@@ -226,3 +226,7 @@ class AdminRenameCompanyRequest(BaseModel):
 class ContinuePreviousRequest(BaseModel):
     company_id: int
     reporting_period: str
+
+class AlertStatusUpdateRequest(BaseModel):
+    index: int
+    new_status: str  # "open", "resolved", "fixed"

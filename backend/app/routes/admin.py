@@ -135,17 +135,106 @@ def admin_changelog(
 
 @router.get("/alerts")
 def admin_alerts(
-    resolved: Optional[bool] = Query(default=False),
+    status_filter: Optional[str] = Query(default="open", alias="status"),
+    db: Session = Depends(get_db),
 ):
-    """Return entries from alerts.jsonl, newest first. Filters by resolved status."""
+    """Return all alerts. Runs duplicate company scan on each call to detect new duplicates."""
+    _scan_duplicate_companies(db)
+
     entries = _read_jsonl(ALERTS_PATH)
 
-    if resolved is not None:
-        entries = [e for e in entries if e.get("resolved") == resolved]
+    # Migrate old format: boolean 'resolved' → string 'status'
+    for e in entries:
+        if "resolved" in e and "status" not in e:
+            e["status"] = "resolved" if e["resolved"] else "open"
+
+    # Tag each entry with its original file index before filtering/reversing
+    for i, e in enumerate(entries):
+        e["_file_index"] = i
+
+    if status_filter and status_filter != "all":
+        entries = [e for e in entries if e.get("status") == status_filter]
 
     entries.reverse()
 
     return {"total_alerts": len(entries), "alerts": entries}
+
+
+def _scan_duplicate_companies(db: Session) -> None:
+    """Detect normalized name collisions among all companies. Append new alerts for untracked pairs."""
+    all_companies = db.execute(
+        text("SELECT id, name FROM companies ORDER BY id ASC")
+    ).fetchall()
+
+    norm_map: dict[str, list[tuple[int, str]]] = {}
+    for cid, cname in all_companies:
+        norm = _normalize_company_name(cname)
+        norm_map.setdefault(norm, []).append((cid, cname))
+
+    colliding_pairs: set[tuple[int, int]] = set()
+    for group in norm_map.values():
+        if len(group) < 2:
+            continue
+        for i in range(len(group)):
+            for j in range(i + 1, len(group)):
+                pair = (min(group[i][0], group[j][0]), max(group[i][0], group[j][0]))
+                colliding_pairs.add(pair)
+
+    existing_alerts = _read_jsonl(ALERTS_PATH)
+    tracked_pairs: dict[tuple[int, int], str] = {}
+    for alert in existing_alerts:
+        if alert.get("type") == "duplicate_company_name":
+            a = alert.get("company_id_a", 0)
+            b = alert.get("company_id_b", 0)
+            pair = (min(a, b), max(a, b))
+            tracked_pairs[pair] = alert.get("status", "open")
+
+    timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S")
+    id_to_name = {cid: cname for cid, cname in all_companies}
+    new_alerts = []
+
+    for pair in colliding_pairs:
+        existing_status = tracked_pairs.get(pair)
+        if existing_status in ("resolved", "open"):
+            continue
+        norm = _normalize_company_name(id_to_name.get(pair[0], ""))
+        new_alerts.append({
+            "timestamp": timestamp,
+            "type": "duplicate_company_name",
+            "company_id_a": pair[0],
+            "company_name_a": id_to_name.get(pair[0], ""),
+            "company_id_b": pair[1],
+            "company_name_b": id_to_name.get(pair[1], ""),
+            "normalized_name": norm,
+            "message": f"Possible duplicate companies: '{id_to_name.get(pair[0], '')}' and '{id_to_name.get(pair[1], '')}'.",
+            "status": "open",
+        })
+
+    if new_alerts:
+        with ALERTS_PATH.open("a", encoding="utf-8") as f:
+            for alert in new_alerts:
+                f.write(json.dumps(alert) + "\n")
+
+
+@router.put("/alerts/update-status")
+def admin_update_alert_status(request: AlertStatusUpdateRequest):
+    """Update the status of an alert by its line index in alerts.jsonl."""
+    entries = _read_jsonl(ALERTS_PATH)
+
+    if request.index < 0 or request.index >= len(entries):
+        raise HTTPException(status_code=404, detail="Alert index out of range.")
+
+    valid_statuses = {"open", "resolved", "fixed"}
+    if request.new_status not in valid_statuses:
+        raise HTTPException(status_code=422, detail=f"Status must be one of: {valid_statuses}")
+
+    entries[request.index]["status"] = request.new_status
+
+    with ALERTS_PATH.open("w", encoding="utf-8") as f:
+        for entry in entries:
+            f.write(json.dumps(entry) + "\n")
+
+    return {"success": True, "index": request.index, "new_status": request.new_status}
 
 
 # ── Endpoint 5: GET /admin/general-fixes ──────────────────────────────────────
@@ -335,7 +424,7 @@ def _read_jsonl(path) -> list:
 # ── Endpoint 8: PUT /admin/company-context/{company_id} ───────────────────────
 
 from datetime import datetime, timezone
-from app.models.schemas import AdminContextUpdateRequest, AdminWriteRuleRequest, AdminRenameCompanyRequest
+from app.models.schemas import AdminContextUpdateRequest, AdminWriteRuleRequest, AdminRenameCompanyRequest, AlertStatusUpdateRequest
 from app.routes.companies import _normalize_company_name, _derive_markdown_filename, _create_markdown_file
 from app.services.claude_service import get_claude_service
 from app.config import LAYER_A_MODEL, LAYER_B_MODEL

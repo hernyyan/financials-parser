@@ -174,9 +174,18 @@ export async function adminGetChangelog(params?: { company_id?: number; limit?: 
 
 // ── Alerts ─────────────────────────────────────────────────────────────────
 
-export async function adminGetAlerts(resolved?: boolean): Promise<{ total_alerts: number; alerts: Record<string, unknown>[] }> {
-  const query = new URLSearchParams()
-  if (resolved !== undefined) query.set('resolved', String(resolved))
-  const res = await fetch(`${API_BASE}/admin/alerts?${query}`)
+export async function adminGetAlerts(status: string = 'open'): Promise<{ total_alerts: number; alerts: Record<string, unknown>[] }> {
+  const params = new URLSearchParams({ status })
+  const res = await fetch(`${API_BASE}/admin/alerts?${params}`)
   return handleResponse(res)
+}
+
+export async function adminUpdateAlertStatus(index: number, newStatus: string): Promise<{ success: boolean; index: number; new_status: string }> {
+  const res = await fetch(`${API_BASE}/admin/alerts/update-status`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ index, new_status: newStatus }),
+  })
+  if (!res.ok) throw new Error('Failed to update alert status')
+  return res.json()
 }
