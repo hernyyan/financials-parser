@@ -19,7 +19,7 @@ router = APIRouter()
 
 
 @router.post("/layer1/run", response_model=Layer1Response)
-async def run_layer1(
+def run_layer1(
     request: Layer1Request,
     db: Session = Depends(get_db),
 ):

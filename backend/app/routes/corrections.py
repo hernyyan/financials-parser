@@ -22,7 +22,7 @@ router = APIRouter()
 
 
 @router.post("/corrections", response_model=CorrectionResponse)
-async def save_correction(request: CorrectionRequest, db: Session = Depends(get_db)):
+def save_correction(request: CorrectionRequest, db: Session = Depends(get_db)):
     """
     Persist a single analyst correction.
     If a correction for the same fieldName already exists in the session,

@@ -16,7 +16,7 @@ router = APIRouter()
 
 
 @router.post("/finalize", response_model=FinalizeResponse)
-async def finalize_output(request: FinalizeRequest, db: Session = Depends(get_db)):
+def finalize_output(request: FinalizeRequest, db: Session = Depends(get_db)):
     """
     Merge the Layer 2 classified values with any analyst corrections, order by
     template field sequence, persist to SQLite, and return the final output.
