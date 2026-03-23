@@ -451,7 +451,7 @@ def admin_update_company_context(
 
 # ── Endpoint 9: POST /admin/write-rule ────────────────────────────────────────
 
-@router.post("/admin/write-rule")
+@router.post("/write-rule")
 def admin_write_rule(
     request: AdminWriteRuleRequest,
     db: Session = Depends(get_db),
