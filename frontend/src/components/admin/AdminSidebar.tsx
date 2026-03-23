@@ -17,7 +17,7 @@ interface Props {
 
 export default function AdminSidebar({ active, onChange }: Props) {
   return (
-    <div className="w-[220px] shrink-0 bg-gray-50 border-r border-border flex flex-col h-full">
+    <div className="w-[180px] shrink-0 bg-gray-50 border-r border-border flex flex-col h-full">
       <nav className="flex-1 py-3">
         {NAV_ITEMS.map(({ id, label, Icon }) => (
           <button
