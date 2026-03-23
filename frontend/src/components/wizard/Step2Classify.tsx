@@ -16,6 +16,7 @@ import {
   XCircle,
   Edit3,
   ArrowRight,
+  Flag,
 } from 'lucide-react'
 
 type RunStatus = 'idle' | 'loading' | 'done' | 'error'
@@ -301,6 +302,10 @@ export default function Step2Classify() {
   const allValidation = { ...(isLayer2?.validation ?? {}), ...(bsLayer2?.validation ?? {}) }
   const passCount = Object.values(allValidation).filter((v) => v.status === 'PASS').length
   const failCount = Object.values(allValidation).filter((v) => v.status === 'FAIL').length
+  const flaggedCount = [
+    ...(isLayer2?.flaggedFields ?? []),
+    ...(bsLayer2?.flaggedFields ?? []),
+  ].length
 
   async function handleSaveCorrection(correctionData: Omit<Correction, 'timestamp'>) {
     const correction: Correction = { ...correctionData, timestamp: new Date().toISOString() }
@@ -464,8 +469,14 @@ export default function Step2Classify() {
                 {failCount} failed
               </span>
             )}
+            {flaggedCount > 0 && (
+              <span className="flex items-center gap-1 text-amber-500">
+                <Flag className="w-3.5 h-3.5" />
+                {flaggedCount} flagged
+              </span>
+            )}
             {corrections.length > 0 && (
-              <span className="flex items-center gap-1 text-amber-600">
+              <span className="flex items-center gap-1 text-purple-600">
                 <Edit3 className="w-3.5 h-3.5" />
                 {corrections.length} correction{corrections.length !== 1 ? 's' : ''}
               </span>
