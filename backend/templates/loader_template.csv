@@ -1,44 +1,24 @@
 Income Statement
-Gross Revenue
-Net Revenue
 Total Revenue
 COGS
-COGS - Depreciation & Amortization
 Gross Profit
-Gross Profit Margin %
-Sales & Marketing Expenses
-Administrative Expenses
-Compensation & Benefits Expense
-Research & Development
-Rent Expense
-Management Fee Expense
-Other Operating Expenses
 Total Operating Expenses
-Net Operating Income
+EBITDA - Standard
+EBITDA Adjustments
+Adjusted EBITDA - Standard
 Depreciation & Amortization
-"Loss/(Gain) on Assets, Debt, FX"
-Non-Operating Expenses
-Non-Operating Expenses - Depreciation & Amortization
 Interest Expense/(Income)
-Other Income
-Other Expenses
-Total Expense/(Income)
-Income (Loss) Before Taxes
+Other Expense / (Income)
 Taxes
 Net Income (Loss)
-EBIT
-EBITDA
-EBITDA Adjustments
-Adjusted EBITDA
+LTM - Adj EBITDA items
+Equity Cure
+Adjusted EBITDA - Including Cures
 Covenant EBITDA
-EBITDA Margin %
-Adjusted EBITDA Margin %
-Covenant EBITDA Margin %
 
 Balance Sheet
 ASSETS
 Cash & Cash Equivalents
-Short Term Investments
 Accounts Receivable
 Inventory
 Prepaid Expenses
@@ -46,37 +26,29 @@ Other Current Assets
 Total Current Assets
 "Property, Plant & Equipment"
 Accumulated Depreciation
-Total Fixed Assets
-Other Non-Current Assets
 Goodwill & Intangibles
+Other non-current assets
 Total Non-Current Assets
 Total Assets
 
 LIABILITIES
 Accounts Payable
-Short Term Loans
-Short Term Capitalized Leases
-Short Term Mortgages
-Short Term Debt
 Accrued Liabilities
+Deferred Revenue
+Revolver - Balance Sheet
+Current Maturities
 Other Current Liabilities
 Total Current Liabilities
 Long Term Loans
-Long Term Capitalized Leases
-Long Term Mortgages
-Long Term Debt
-Deferred Liabilities
+Long Term Leases
 Other Non-Current Liabilities
 Total Non-Current Liabilities
 Total Liabilities
 
 EQUITY
-Preferred Stock
-Common Stock
 Paid in Capital
-Other Comprehensive Income
 Retained Earnings
-Minority Interest
+Other Equity
 Total Equity
 Total Liabilities and Equity
 Check

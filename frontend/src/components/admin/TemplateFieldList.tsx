@@ -1,5 +1,6 @@
 import { getTemplate } from '../../api/client'
 import { useEffect, useState } from 'react'
+import { BOLD_FIELDS, ITALIC_FIELDS, isIndented } from '../../utils/templateStyling'
 import type { TemplateResponse } from '../../types'
 
 interface Props {
@@ -52,11 +53,15 @@ export default function TemplateFieldList({ contextContent, selectedField, onSel
                     <button
                       key={field}
                       onClick={() => onSelectField({ name: field, statementType: key })}
-                      className={`w-full flex items-center justify-between px-4 py-1.5 text-left text-[12px] border-b border-gray-50 transition-colors ${
+                      className={`w-full flex items-center justify-between py-1.5 text-left text-[12px] border-b border-gray-50 transition-colors ${
                         isSelected ? 'bg-blue-50 text-blue-700' : 'hover:bg-gray-50 text-foreground'
                       }`}
+                      style={{ paddingLeft: isIndented(field) ? '1.5rem' : '1rem', paddingRight: '1rem' }}
                     >
-                      <span>{field}</span>
+                      <span
+                        className={ITALIC_FIELDS.has(field) ? 'italic' : ''}
+                        style={{ fontWeight: BOLD_FIELDS.has(field) ? 600 : 400 }}
+                      >{field}</span>
                       {hasRule && (
                         <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" />
                       )}

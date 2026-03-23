@@ -141,8 +141,8 @@ export default function CompanyDetail({ companyId, onBack }: Props) {
 
       {/* Three-panel section */}
       <div className="flex border-b border-border shrink-0" style={{ height: 340 }}>
-        {/* Left: Context Editor (400px) */}
-        <div className="w-[400px] border-r border-border flex flex-col overflow-hidden shrink-0">
+        {/* Left: Context Editor — ~35% */}
+        <div className="flex-[4] border-r border-border flex flex-col overflow-hidden min-w-[280px]">
           <CompanyContextEditor
             companyId={companyId}
             content={contextContent}
@@ -150,8 +150,8 @@ export default function CompanyDetail({ companyId, onBack }: Props) {
           />
         </div>
 
-        {/* Center: Template Fields (300px) */}
-        <div className="w-[300px] border-r border-border flex flex-col overflow-hidden shrink-0">
+        {/* Center: Template Fields — ~25% */}
+        <div className="flex-[3] border-r border-border flex flex-col overflow-hidden min-w-[220px]">
           <TemplateFieldList
             contextContent={contextContent}
             selectedField={selectedField}
@@ -159,8 +159,8 @@ export default function CompanyDetail({ companyId, onBack }: Props) {
           />
         </div>
 
-        {/* Right: Rule Writer (350px) */}
-        <div className="w-[350px] flex flex-col overflow-hidden shrink-0">
+        {/* Right: Rule Writer — ~30% */}
+        <div className="flex-[3.5] flex flex-col overflow-hidden min-w-[280px]">
           <RuleWriter
             companyId={companyId}
             selectedField={selectedField}

@@ -7,6 +7,7 @@ import StatusBanner from '../shared/StatusBanner'
 import { runLayer2, saveCorrection, getTemplate, processCorrections } from '../../api/client'
 import { IS_TEMPLATE_FIELDS, BS_TEMPLATE_FIELDS } from '../../mocks/mockData'
 import { formatFieldValue } from '../../utils/formatters'
+import { BOLD_FIELDS, ITALIC_FIELDS, isIndented } from '../../utils/templateStyling'
 import type { Correction, Layer2Result, TemplateResponse, TemplateSection, CorrectionProcessItem } from '../../types'
 import {
   ArrowLeft,
@@ -80,6 +81,9 @@ function buildTemplateRows(
         hasValidationFail,
         isClickable: true,
         isEdited: !!correction,
+        isBold: BOLD_FIELDS.has(field),
+        isIndented: isIndented(field),
+        isItalic: ITALIC_FIELDS.has(field),
       })
     }
   }

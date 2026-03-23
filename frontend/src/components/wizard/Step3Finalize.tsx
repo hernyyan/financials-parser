@@ -4,6 +4,7 @@ import LoadingSpinner from '../shared/LoadingSpinner'
 import { finalizeOutput, getTemplate } from '../../api/client'
 import { formatFieldValue, formatDollar } from '../../utils/formatters'
 import { IS_TEMPLATE_FIELDS, BS_TEMPLATE_FIELDS } from '../../mocks/mockData'
+import { BOLD_FIELDS, ITALIC_FIELDS, isIndented } from '../../utils/templateStyling'
 import type { TemplateResponse, TemplateSection } from '../../types'
 import {
   ArrowLeft,
@@ -41,6 +42,9 @@ interface TableRow {
   corrected?: boolean
   flagged?: boolean
   validationFail?: boolean
+  isBold?: boolean
+  isIndented?: boolean
+  isItalic?: boolean
 }
 
 export default function Step3Finalize() {
@@ -147,6 +151,9 @@ export default function Step3Finalize() {
           corrected,
           flagged,
           validationFail,
+          isBold: BOLD_FIELDS.has(field),
+          isIndented: isIndented(field),
+          isItalic: ITALIC_FIELDS.has(field),
         })
       }
     }
@@ -172,6 +179,9 @@ export default function Step3Finalize() {
           corrected,
           flagged,
           validationFail,
+          isBold: BOLD_FIELDS.has(field),
+          isIndented: isIndented(field),
+          isItalic: ITALIC_FIELDS.has(field),
         })
       }
     }
@@ -397,12 +407,6 @@ export default function Step3Finalize() {
                   ? 'bg-red-50/30'
                   : ''
 
-                const isBold =
-                  row.label.includes('Total') ||
-                  row.label.includes('Gross') ||
-                  row.label.includes('Net') ||
-                  row.label === 'EBITDA'
-
                 const isNegFinal =
                   row.rawFinalValue !== null &&
                   row.rawFinalValue !== undefined &&
@@ -415,7 +419,13 @@ export default function Step3Finalize() {
                       {row.validationFail && <AlertTriangle className="w-3 h-3 text-red-500" />}
                       {row.corrected && <Edit3 className="w-3 h-3 text-purple-500" />}
                     </td>
-                    <td className="px-4 py-1.5" style={{ fontWeight: isBold ? 500 : 400 }}>
+                    <td
+                      className={`py-1.5${row.isItalic ? ' italic' : ''}`}
+                      style={{
+                        fontWeight: row.isBold ? 600 : 400,
+                        paddingLeft: row.isIndented ? '1.75rem' : '1rem',
+                      }}
+                    >
                       {row.label}
                     </td>
                     <td

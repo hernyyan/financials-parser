@@ -9,6 +9,9 @@ interface DataTableRow {
   hasValidationFail?: boolean
   isClickable?: boolean
   isEdited?: boolean
+  isBold?: boolean
+  isIndented?: boolean
+  isItalic?: boolean
 }
 
 interface DataTableProps {
@@ -115,16 +118,10 @@ export default function DataTable({
                       <Edit3 className="w-3 h-3 text-purple-500 shrink-0" />
                     )}
                     <span
-                      className="truncate"
+                      className={`truncate${row.isItalic ? ' italic' : ''}`}
                       style={{
-                        fontWeight:
-                          typeof row.label === 'string' &&
-                          (row.label.includes('Total') ||
-                            row.label.includes('Gross') ||
-                            row.label.includes('Net') ||
-                            row.label === 'EBITDA')
-                            ? 500
-                            : 400,
+                        fontWeight: row.isBold ? 600 : 400,
+                        paddingLeft: row.isIndented ? '0.75rem' : undefined,
                       }}
                     >
                       {row.label}

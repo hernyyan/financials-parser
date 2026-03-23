@@ -12,63 +12,25 @@ from app.config import TEMPLATES_DIR
 # The IS portion of loader_template.csv has no explicit sub-section headers,
 # so we define them here based on the Layer 2 prompt structure.
 IS_SECTION_MAP: List[Tuple[Optional[str], List[str]]] = [
-    ("REVENUE", ["Gross Revenue", "Net Revenue", "Total Revenue"]),
+    (None, ["Total Revenue", "COGS"]),
+    (None, ["Gross Profit"]),
+    (None, ["Total Operating Expenses"]),
+    (None, ["EBITDA - Standard"]),
+    (None, ["EBITDA Adjustments"]),
+    (None, ["Adjusted EBITDA - Standard"]),
+    (None, [
+        "Depreciation & Amortization",
+        "Interest Expense/(Income)",
+        "Other Expense / (Income)",
+        "Taxes",
+    ]),
+    (None, ["Net Income (Loss)"]),
     (
-        "COST OF GOODS SOLD",
+        "LTM - Adj EBITDA items",
         [
-            "COGS",
-            "COGS - Depreciation & Amortization",
-            "Gross Profit",
-            "Gross Profit Margin %",
-        ],
-    ),
-    (
-        "OPERATING EXPENSES",
-        [
-            "Sales & Marketing Expenses",
-            "Administrative Expenses",
-            "Compensation & Benefits Expense",
-            "Research & Development",
-            "Rent Expense",
-            "Management Fee Expense",
-            "Other Operating Expenses",
-            "Total Operating Expenses",
-        ],
-    ),
-    (None, ["Net Operating Income"]),
-    (
-        "BELOW THE LINE",
-        [
-            "Depreciation & Amortization",
-            "Loss/(Gain) on Assets, Debt, FX",
-            "Non-Operating Expenses",
-            "Non-Operating Expenses - Depreciation & Amortization",
-            "Interest Expense/(Income)",
-            "Other Income",
-            "Other Expenses",
-            "Total Expense/(Income)",
-        ],
-    ),
-    (
-        "PRE-TAX AND NET INCOME",
-        ["Income (Loss) Before Taxes", "Taxes", "Net Income (Loss)"],
-    ),
-    (
-        "EBITDA",
-        [
-            "EBIT",
-            "EBITDA",
-            "EBITDA Adjustments",
-            "Adjusted EBITDA",
+            "Equity Cure",
+            "Adjusted EBITDA - Including Cures",
             "Covenant EBITDA",
-        ],
-    ),
-    (
-        "MARGINS",
-        [
-            "EBITDA Margin %",
-            "Adjusted EBITDA Margin %",
-            "Covenant EBITDA Margin %",
         ],
     ),
 ]

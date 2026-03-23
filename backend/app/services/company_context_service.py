@@ -50,7 +50,7 @@ def _check_markdown_word_count(
             "markdown_filename": markdown_filename,
             "word_count": word_count,
             "message": "Company context file exceeds 5,000 word limit. Manual review and condensing recommended.",
-            "resolved": False,
+            "status": "open",
         }
         with ALERTS_PATH.open("a", encoding="utf-8") as f:
             f.write(json.dumps(alert) + "\n")

@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { CompanyPeriodData } from './AdminApiClient'
 import { getTemplate } from '../../api/client'
 import { useEffect } from 'react'
+import { BOLD_FIELDS, ITALIC_FIELDS, isIndented } from '../../utils/templateStyling'
 import type { TemplateResponse } from '../../types'
 
 interface Props {
@@ -166,7 +167,14 @@ export default function CompanyDataTable({ periods }: Props) {
           <tbody>
             {labels.map((label, i) => (
               <tr key={label} className={i % 2 === 0 ? '' : 'bg-gray-50/50'}>
-                <td className="px-3 py-1.5 border-r border-gray-100 text-foreground">{label}</td>
+                <td
+                  className={`py-1.5 border-r border-gray-100 text-foreground${view === 'l2' && ITALIC_FIELDS.has(label) ? ' italic' : ''}`}
+                  style={{
+                    fontWeight: view === 'l2' && BOLD_FIELDS.has(label) ? 600 : 400,
+                    paddingLeft: view === 'l2' && isIndented(label) ? '1.25rem' : '0.75rem',
+                    paddingRight: '0.75rem',
+                  }}
+                >{label}</td>
                 {columns.map((col) => {
                   const val = getCellValue(col.key, label)
                   const display = formatVal(val)

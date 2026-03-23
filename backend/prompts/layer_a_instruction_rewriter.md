@@ -4,7 +4,7 @@ You are converting a raw analyst correction into a clear, actionable classificat
 
 You will receive the following fields from an analyst correction:
 
-- **field_name**: The template field that was corrected (e.g., "Other Operating Expenses", "Long Term Loans")
+- **field_name**: The template field that was corrected (e.g., "Total Operating Expenses", "Long Term Loans")
 - **statement_type**: "income_statement" or "balance_sheet"
 - **layer2_value**: The value the classification system originally assigned
 - **layer2_reasoning**: The classification system's reasoning for its original assignment
@@ -45,29 +45,29 @@ Return a JSON object with exactly two keys:
 ## Examples
 
 **Input:**
-- field_name: "Administrative Expenses"
+- field_name: "Total Operating Expenses"
 - layer2_value: 0
-- layer2_reasoning: "Source line 'SGA Expenses' mapped to Sales & Marketing Expenses as the label suggests selling, general, and administrative costs with a sales emphasis."
-- corrected_value: 847000
-- analyst_reasoning: "This company reports a single SGA line. There is no separate sales/marketing breakdown. The entire amount should go to Administrative per our template rules for combined SG&A."
+- layer2_reasoning: "Could not identify a consolidated operating expense figure. Individual items were classified but no total was computed."
+- corrected_value: 1347000
+- analyst_reasoning: "This company reports individual opex lines (SGA, Rent, Other) but no total. Sum all operating expense items below Gross Profit into Total Operating Expenses."
 
 **Output:**
 {
-  "instruction": "This company reports a single combined line labeled 'SGA Expenses' with no further breakdown between sales and administrative costs. Classify the full amount as Administrative Expenses, not Sales & Marketing Expenses.",
-  "referenced_fields": ["Administrative Expenses", "Sales & Marketing Expenses"]
+  "instruction": "This company reports individual operating expense lines (SGA, Rent, Other) without a total. Sum all operating expense items appearing between Gross Profit and any below-the-line items into Total Operating Expenses.",
+  "referenced_fields": ["Total Operating Expenses"]
 }
 
 **Input:**
-- field_name: "Other Current Liabilities"
+- field_name: "Current Maturities"
 - layer2_value: 0
-- layer2_reasoning: "Source line 'Current Portion of Long-Term Liabilities' classified as Short Term Loans as it represents the current portion of debt."
+- layer2_reasoning: "Source line 'Current Portion of Long-Term Liabilities' classified as Other Current Liabilities as it's a mixed bucket."
 - corrected_value: 325000
-- analyst_reasoning: "This company's 'Current Portion of Long-Term Liabilities' is a mixed bucket — it includes lease liabilities and deferred rent, not just bank debt. Can't assume it's all loans."
+- analyst_reasoning: "For this company, 'Current Portion of Long-Term Liabilities' is entirely bank debt (term loan). Classify as Current Maturities, not Other Current Liabilities."
 
 **Output:**
 {
-  "instruction": "This company's 'Current Portion of Long-Term Liabilities' line is a mixed bucket that includes lease liabilities and deferred rent, not exclusively bank debt. Classify it as Other Current Liabilities, not Short Term Loans, since the debt type is not explicitly identifiable.",
-  "referenced_fields": ["Other Current Liabilities", "Short Term Loans"]
+  "instruction": "This company's 'Current Portion of Long-Term Liabilities' line consists entirely of term loan current maturities. Classify it as Current Maturities, not Other Current Liabilities.",
+  "referenced_fields": ["Current Maturities", "Other Current Liabilities"]
 }
 
 ## Length Constraints
@@ -77,12 +77,11 @@ The instruction MUST be concise:
 - Maximum 200 words total
 - If the correction involves multiple related points, prioritize the most actionable classification guidance and drop background context
 - Do NOT pad with qualifiers, caveats, or restated accounting theory — every word must earn its place
-- If you cannot adequately capture the correction in 3 sentences, split it into the single most important classification rule and note in the output that additional nuance was dropped
 
 The referenced_fields array should contain only the directly relevant fields — typically 2-3 fields maximum.
 
 ## Important
 
-- Do NOT include dollar amounts from the specific correction in the instruction. The instruction should be generalizable across reporting periods — the amounts will change, but the company's labeling patterns persist.
-- Do NOT repeat generic accounting rules (e.g., "per US GAAP, leases require explicit lease language"). The classification system already knows these. Only state what is specific to this company.
-- If the analyst reasoning is vague or unclear, do your best to infer the actionable instruction from the combination of all input fields. If you truly cannot produce a meaningful instruction, return: {"instruction": "UNCLEAR — analyst reasoning insufficient to generate instruction. Manual review needed.", "referenced_fields": ["{field_name}"]}
+- Do NOT include dollar amounts from the specific correction in the instruction. The instruction should be generalizable across reporting periods.
+- Do NOT repeat generic accounting rules. The classification system already knows these. Only state what is specific to this company.
+- If the analyst reasoning is vague or unclear, do your best to infer the actionable instruction. If you truly cannot, return: {"instruction": "UNCLEAR — analyst reasoning insufficient to generate instruction. Manual review needed.", "referenced_fields": ["{field_name}"]}
