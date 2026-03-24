@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
-import { Loader2, X } from 'lucide-react'
+import { Loader2, X, Download } from 'lucide-react'
 import { adminGetGeneralFixes } from './AdminApiClient'
+import { exportToCsv } from '../../utils/csvExport'
 
 type SortField = 'timestamp' | 'period' | 'statement_type' | 'field_name' | 'company'
 
@@ -62,7 +63,18 @@ export default function GeneralFixesList() {
     <div className="p-6">
       <div className="flex items-center justify-between mb-5">
         <h2 className="text-[15px]" style={{ fontWeight: 600 }}>General Fixes</h2>
-        <span className="text-[12px] text-muted-foreground">{filtered.length} of {total}</span>
+        <div className="flex items-center gap-3">
+          <span className="text-[12px] text-muted-foreground">{filtered.length} of {total}</span>
+          {filtered.length > 0 && (
+            <button
+              onClick={() => exportToCsv(filtered as Record<string, unknown>[], 'general_fixes.csv')}
+              className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[12px] border border-border bg-white hover:bg-gray-50 transition-colors text-muted-foreground hover:text-foreground"
+            >
+              <Download className="w-3.5 h-3.5" />
+              Export CSV
+            </button>
+          )}
+        </div>
       </div>
 
       <div className="flex items-center gap-3 mb-5 flex-wrap">
