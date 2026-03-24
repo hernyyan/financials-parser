@@ -9,6 +9,7 @@ GET /admin/reviews/{session_id}/export  — Download finalized output as a CSV f
 """
 import csv
 import json
+import os
 import re
 import shutil
 from io import StringIO
@@ -46,12 +47,15 @@ def admin_list_companies(db: Session = Depends(get_db)):
         # Markdown file stats
         word_count = 0
         file_size_bytes = 0
+        last_modified = None
         if markdown_filename:
             path = COMPANY_CONTEXT_DIR / markdown_filename
             if path.exists():
                 content = path.read_text(encoding="utf-8")
-                word_count = len(content.split())
+                word_count = _count_markdown_words(content)
                 file_size_bytes = path.stat().st_size
+                mtime = os.path.getmtime(path)
+                last_modified = datetime.fromtimestamp(mtime, tz=timezone.utc).isoformat()
 
         # Correction counts
         counts = db.execute(
@@ -75,6 +79,7 @@ def admin_list_companies(db: Session = Depends(get_db)):
             "total_corrections": total,
             "processed_corrections": processed,
             "pending_corrections": total - processed,
+            "last_modified": last_modified,
         })
 
     return results
@@ -101,7 +106,7 @@ def admin_company_context(company_id: int, db: Session = Depends(get_db)):
         path = COMPANY_CONTEXT_DIR / markdown_filename
         if path.exists():
             content = path.read_text(encoding="utf-8")
-            word_count = len(content.split())
+            word_count = _count_markdown_words(content)
 
     return {
         "id": company_id,
@@ -358,8 +363,8 @@ def admin_export_review(session_id: str, db: Session = Depends(get_db)):
 
     company_name: str = row[0]
     reporting_period: str = row[1]
-    final_output: dict = json.loads(row[2] or "{}")
-    corrections: list = json.loads(row[3] or "[]")
+    final_output: dict = json.loads(row[2]) if isinstance(row[2], str) else (row[2] or {})
+    corrections: list = json.loads(row[3]) if isinstance(row[3], str) else (row[3] or [])
     corrected_fields = {c.get("fieldName", "") for c in corrections}
 
     template_svc = get_template_service()
@@ -400,6 +405,19 @@ def admin_export_review(session_id: str, db: Session = Depends(get_db)):
 
 
 # ── Shared helpers ─────────────────────────────────────────────────────────────
+
+def _count_markdown_words(content: str) -> int:
+    """Count words in markdown content, excluding the title line (# Company — ...)."""
+    body_lines = []
+    skipped_title = False
+    for line in content.split("\n"):
+        if not skipped_title and line.strip().startswith("#"):
+            skipped_title = True
+            continue
+        body_lines.append(line)
+    body = "\n".join(body_lines).strip()
+    return len(body.split()) if body else 0
+
 
 def _read_jsonl(path) -> list:
     """Read a JSONL file and return a list of parsed objects, skipping bad lines."""
@@ -446,7 +464,7 @@ def admin_update_company_context(
     md_path = COMPANY_CONTEXT_DIR / row[0]
     md_path.write_text(request.content, encoding="utf-8")
 
-    return {"success": True, "word_count": len(request.content.split())}
+    return {"success": True, "word_count": _count_markdown_words(request.content)}
 
 
 # ── Endpoint 9: POST /admin/write-rule ────────────────────────────────────────
