@@ -79,6 +79,8 @@ export interface CompanyPeriodData {
   layer1_data: Record<string, unknown> | null
   layer2_data: Record<string, unknown> | null
   finalized_at: string | null
+  status: string | null
+  created_at: string | null
 }
 
 export async function adminGetCompanyData(id: number): Promise<{ company_id: number; company_name: string; periods: CompanyPeriodData[] }> {
