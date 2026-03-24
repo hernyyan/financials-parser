@@ -19,8 +19,12 @@ from fastapi.responses import Response
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 
-from app.config import COMPANY_CONTEXT_DIR, COMPANY_DATASETS_DIR, DATA_DIR
+from datetime import datetime, timezone
+from app.config import COMPANY_CONTEXT_DIR, COMPANY_DATASETS_DIR, DATA_DIR, LAYER_A_MODEL, LAYER_B_MODEL
 from app.db.database import get_db
+from app.models.schemas import AdminContextUpdateRequest, AdminWriteRuleRequest, AdminRenameCompanyRequest, AlertStatusUpdateRequest
+from app.routes.companies import _normalize_company_name, _derive_markdown_filename, _create_markdown_file
+from app.services.claude_service import get_claude_service
 from app.services.template_service import get_template_service
 
 router = APIRouter(prefix="/admin")
@@ -422,12 +426,6 @@ def _read_jsonl(path) -> list:
 
 
 # ── Endpoint 8: PUT /admin/company-context/{company_id} ───────────────────────
-
-from datetime import datetime, timezone
-from app.models.schemas import AdminContextUpdateRequest, AdminWriteRuleRequest, AdminRenameCompanyRequest, AlertStatusUpdateRequest
-from app.routes.companies import _normalize_company_name, _derive_markdown_filename, _create_markdown_file
-from app.services.claude_service import get_claude_service
-from app.config import LAYER_A_MODEL, LAYER_B_MODEL
 
 @router.put("/company-context/{company_id}")
 def admin_update_company_context(
