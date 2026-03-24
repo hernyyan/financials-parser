@@ -19,6 +19,19 @@ router = APIRouter()
 CHANGELOG_PATH = DATA_DIR / "company_context_changelog.jsonl"
 
 
+def _count_markdown_words(content: str) -> int:
+    """Count words in markdown content, excluding the title line (# Company — ...)."""
+    body_lines = []
+    skipped_title = False
+    for line in content.split("\n"):
+        if not skipped_title and line.strip().startswith("#"):
+            skipped_title = True
+            continue
+        body_lines.append(line)
+    body = "\n".join(body_lines).strip()
+    return len(body.split()) if body else 0
+
+
 def _normalize_company_name(name: str) -> str:
     """Strip to lowercase alphanumeric for fuzzy duplicate detection."""
     return re.sub(r'[^a-z0-9]', '', name.lower())
@@ -139,8 +152,8 @@ def get_context_status(company_id: int, db: Session = Depends(get_db)):
     # The auto-created template just has the header, no rules
     has_rules = rule_count > 0
 
-    # Word count of the substantive content (excluding the header line)
-    word_count = len(content.split()) if has_rules else 0
+    # Word count of the substantive content (excluding the title line)
+    word_count = _count_markdown_words(content) if has_rules else 0
 
     return {
         "company_id": company_id,
