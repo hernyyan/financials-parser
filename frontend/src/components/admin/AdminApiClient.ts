@@ -21,6 +21,7 @@ export interface AdminCompany {
   total_corrections: number
   processed_corrections: number
   pending_corrections: number
+  last_modified: string | null
 }
 
 export async function adminGetCompanies(): Promise<AdminCompany[]> {

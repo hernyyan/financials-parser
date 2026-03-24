@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
-import { Search, Building2, Loader2, Plus, Check, X, Trash2 } from 'lucide-react'
+import { Search, Building2, Loader2, Plus, Check, X, Trash2, ChevronUp, ChevronDown } from 'lucide-react'
 import { adminGetCompanies, adminCreateCompany, adminDeleteCompany, AdminCompany } from './AdminApiClient'
+
+type SortField = 'name' | 'markdown_word_count' | 'total_corrections' | 'last_modified'
 
 interface Props {
   onSelect: (id: number) => void
@@ -13,6 +15,8 @@ export default function CompanyList({ onSelect }: Props) {
   const [adding, setAdding] = useState(false)
   const [addText, setAddText] = useState('')
   const [addSaving, setAddSaving] = useState(false)
+  const [sortField, setSortField] = useState<SortField>('name')
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
   const addInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
@@ -47,6 +51,7 @@ export default function CompanyList({ onSelect }: Props) {
         total_corrections: 0,
         processed_corrections: 0,
         pending_corrections: 0,
+        last_modified: null,
       }])
       setAdding(false)
       setAddText('')
@@ -68,9 +73,47 @@ export default function CompanyList({ onSelect }: Props) {
     }
   }
 
-  const filtered = companies.filter((c) =>
-    c.name.toLowerCase().includes(search.toLowerCase()),
-  )
+  function handleSort(field: SortField) {
+    if (sortField === field) {
+      setSortDir((d) => d === 'asc' ? 'desc' : 'asc')
+    } else {
+      setSortField(field)
+      setSortDir(field === 'name' ? 'asc' : 'desc')
+    }
+  }
+
+  function SortIcon({ field }: { field: SortField }) {
+    if (sortField !== field) return <ChevronUp className="w-3 h-3 opacity-20" />
+    return sortDir === 'asc'
+      ? <ChevronUp className="w-3 h-3 text-blue-600" />
+      : <ChevronDown className="w-3 h-3 text-blue-600" />
+  }
+
+  const filtered = companies
+    .filter((c) => c.name.toLowerCase().includes(search.toLowerCase()))
+    .sort((a, b) => {
+      let av: string | number, bv: string | number
+      if (sortField === 'name') {
+        av = a.name.toLowerCase()
+        bv = b.name.toLowerCase()
+      } else if (sortField === 'last_modified') {
+        av = a.last_modified ?? ''
+        bv = b.last_modified ?? ''
+      } else {
+        av = a[sortField]
+        bv = b[sortField]
+      }
+      if (av < bv) return sortDir === 'asc' ? -1 : 1
+      if (av > bv) return sortDir === 'asc' ? 1 : -1
+      return 0
+    })
+
+  const SORT_OPTIONS: { field: SortField; label: string }[] = [
+    { field: 'name', label: 'Name' },
+    { field: 'markdown_word_count', label: 'Words' },
+    { field: 'total_corrections', label: 'Corrections' },
+    { field: 'last_modified', label: 'Last edited' },
+  ]
 
   return (
     <div className="p-6">
@@ -79,7 +122,7 @@ export default function CompanyList({ onSelect }: Props) {
         <span className="text-[12px] text-muted-foreground">{companies.length} total</span>
       </div>
 
-      <div className="flex items-center gap-3 mb-5">
+      <div className="flex items-center gap-3 mb-3">
         <div className="flex items-center gap-2 bg-white border border-border rounded-lg px-3 py-1.5 max-w-sm flex-1">
           <Search className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
           <input
@@ -97,6 +140,25 @@ export default function CompanyList({ onSelect }: Props) {
           <Plus className="w-3.5 h-3.5" />
           Add Company
         </button>
+      </div>
+
+      <div className="flex items-center gap-1 mb-5">
+        <span className="text-[11px] text-muted-foreground mr-1">Sort:</span>
+        {SORT_OPTIONS.map(({ field, label }) => (
+          <button
+            key={field}
+            onClick={() => handleSort(field)}
+            className={`flex items-center gap-0.5 px-2 py-1 rounded text-[11px] transition-colors ${
+              sortField === field
+                ? 'bg-blue-50 text-blue-700 border border-blue-200'
+                : 'bg-white border border-border text-muted-foreground hover:text-foreground'
+            }`}
+            style={{ fontWeight: sortField === field ? 600 : 400 }}
+          >
+            {label}
+            <SortIcon field={field} />
+          </button>
+        ))}
       </div>
 
       {loading ? (
@@ -142,6 +204,9 @@ export default function CompanyList({ onSelect }: Props) {
               <div className="flex items-center gap-4 text-[11px] text-muted-foreground shrink-0">
                 <span>{c.markdown_word_count} words</span>
                 <span>{c.total_corrections} corrections</span>
+                {c.last_modified && (
+                  <span>{new Date(c.last_modified).toLocaleDateString()}</span>
+                )}
                 {c.pending_corrections > 0 && (
                   <span className="px-1.5 py-0.5 bg-amber-50 text-amber-700 rounded text-[10px]" style={{ fontWeight: 500 }}>
                     {c.pending_corrections} pending
