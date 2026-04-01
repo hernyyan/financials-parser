@@ -52,6 +52,7 @@ def run_layer1_pdf(request: Layer1PdfRequest, db: Session = Depends(get_db)):
     prompt_map = {
         "income_statement": "layer1_pdf_income_statement",
         "balance_sheet": "layer1_pdf_balance_sheet",
+        "cash_flow_statement": "layer1_pdf_cash_flow_statement",
     }
     normalized = request.statementType.lower().replace(" ", "_")
     prompt_key = prompt_map.get(normalized)
