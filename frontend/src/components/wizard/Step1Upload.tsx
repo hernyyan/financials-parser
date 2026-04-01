@@ -247,6 +247,7 @@ export default function Step1Upload() {
     setPdfUrl,
     setPdfPageAssignments,
     setIsTabConfig,
+    setFieldTabAssignments,
     approveStep1,
   } = useWizardState()
 
@@ -741,6 +742,7 @@ export default function Step1Upload() {
     try {
       await Promise.allSettled(tasks)
       setExtractionStatus('done')
+      setFieldTabAssignments(fieldAssignments)
       // Save IS tab config if multi-tab IS was used
       if (companyId && assignments.income_statement.length >= 2) {
         const config: ISTabConfig = {

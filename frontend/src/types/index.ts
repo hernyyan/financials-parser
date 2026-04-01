@@ -28,6 +28,7 @@ export interface WizardState {
   corrections: Correction[]
   step2Approved: boolean
   isTabConfig: ISTabConfig | null
+  fieldTabAssignments: Record<string, Record<string, string>>
 
   // Current state
   currentStep: 1 | 2 | 3
