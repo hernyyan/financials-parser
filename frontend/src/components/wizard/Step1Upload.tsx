@@ -4,7 +4,18 @@ import TabSelector from '../shared/TabSelector'
 import ExcelViewer from '../shared/ExcelViewer'
 import PdfPageViewer from '../shared/PdfPageViewer'
 import StatusBanner from '../shared/StatusBanner'
-import { uploadFile, runLayer1, runLayer1Pdf, getCompanies, createCompany, getCompanyContextStatus, checkExistingReview, continuePreviousReview, getISTabConfig, saveISTabConfig } from '../../api/client'
+import {
+  uploadFile,
+  runLayer1,
+  runLayer1Pdf,
+  getCompanies,
+  createCompany,
+  getCompanyContextStatus,
+  checkExistingReview,
+  continuePreviousReview,
+  getISTabConfig,
+  saveISTabConfig,
+} from '../../api/client'
 import { API_BASE } from '../../api/client'
 import type { Company, CompanyContextStatus, Layer1Result, Layer2Result, Correction, ISTabConfig } from '../../types'
 import {
@@ -25,21 +36,50 @@ const approveAudio = new Audio(approveSfx)
 approveAudio.preload = 'auto'
 approveAudio.load()
 
-type SheetType = 'income_statement' | 'balance_sheet' | 'cash_flow_statement' | 'unassigned'
-
-interface TabState {
-  sheetType: SheetType
-  status: 'idle' | 'extracting' | 'done' | 'error'
-  error?: string
-}
-
 type StatusMessage = { type: 'success' | 'error' | 'info'; message: string } | null
+type ExtractionStatus = 'idle' | 'running' | 'done' | 'error'
 
-function detectSheetType(_name: string): SheetType {
-  return 'unassigned'
-}
+// ── Field definitions for the assignment panel ────────────────────────────
 
-// Format line item values: negatives as (123,456.78), positives as 123,456.78
+const IS_FIELDS = [
+  'Total Revenue', 'COGS', 'Gross Profit', 'Total Operating Expenses',
+  'EBITDA - Standard', 'EBITDA Adjustments', 'Adjusted EBITDA - Standard',
+  'Depreciation & Amortization', 'Interest Expense/(Income)',
+  'Other Expense / (Income)', 'Taxes', 'Net Income (Loss)',
+  'LTM - Adj EBITDA items', 'Equity Cure', 'Adjusted EBITDA - Including Cures',
+  'Covenant EBITDA',
+]
+const IS_BOLD = new Set([
+  'Gross Profit', 'Total Operating Expenses', 'EBITDA - Standard',
+  'Adjusted EBITDA - Standard', 'Net Income (Loss)', 'Adjusted EBITDA - Including Cures',
+])
+
+const BS_FIELDS = [
+  'Cash & Cash Equivalents', 'Accounts Receivable', 'Inventory',
+  'Prepaid Expenses', 'Other Current Assets', 'Total Current Assets',
+  'Property, Plant & Equipment', 'Accumulated Depreciation',
+  'Goodwill & Intangibles', 'Other non-current assets', 'Total Non-Current Assets',
+  'Total Assets', 'Accounts Payable', 'Accrued Liabilities', 'Deferred Revenue',
+  'Revolver - Balance Sheet', 'Current Maturities', 'Other Current Liabilities',
+  'Total Current Liabilities', 'Long Term Loans', 'Long Term Leases',
+  'Other Non-Current Liabilities', 'Total Non-Current Liabilities', 'Total Liabilities',
+  'Paid in Capital', 'Retained Earnings', 'Other Equity', 'Total Equity',
+  'Total Liabilities and Equity', 'Check',
+]
+const BS_BOLD = new Set([
+  'Total Current Assets', 'Total Non-Current Assets', 'Total Assets',
+  'Total Current Liabilities', 'Total Non-Current Liabilities',
+  'Total Liabilities', 'Total Equity', 'Total Liabilities and Equity',
+])
+
+const CFS_FIELDS = [
+  'Operating Cash Flow (Working Capital)', 'Operating Cash Flow (Non-Working Capital)',
+  'Operating Cash Flow', 'Investing Cash Flow', 'Financing Cash Flow', 'CAPEX',
+]
+const CFS_BOLD = new Set(['Operating Cash Flow', 'Investing Cash Flow', 'Financing Cash Flow'])
+
+// ── Helpers ───────────────────────────────────────────────────────────────
+
 function formatLineItemValue(value: number): string {
   if (value === 0) return '—'
   const abs = Math.abs(value)
@@ -50,7 +90,7 @@ function formatLineItemValue(value: number): string {
   return value < 0 ? `(${formatted})` : formatted
 }
 
-// Shared results table used by both Excel and PDF modes
+// Results table used in PDF mode
 function Layer1ResultsTable({ result, label }: { result: Layer1Result; label?: string }) {
   return (
     <div>
@@ -115,6 +155,64 @@ function Layer1ResultsTable({ result, label }: { result: Layer1Result; label?: s
   )
 }
 
+// ── FieldAssignmentTable ──────────────────────────────────────────────────
+
+interface FieldAssignmentTableProps {
+  fields: string[]
+  boldSet: Set<string>
+  checkedTabs: string[]
+  assignments: Record<string, string>
+  onChange: (field: string, tab: string) => void
+}
+
+function FieldAssignmentTable({
+  fields, boldSet, checkedTabs, assignments, onChange,
+}: FieldAssignmentTableProps) {
+  return (
+    <div className="mx-[14px] mb-2 border border-gray-200 rounded-lg overflow-hidden text-[11px]">
+      <div className="flex justify-between items-center px-2 py-1 bg-gray-100 border-b border-gray-200">
+        <span className="text-muted-foreground" style={{ fontWeight: 600 }}>Field</span>
+        <span className="text-muted-foreground" style={{ fontWeight: 600 }}>Tab</span>
+      </div>
+      <div style={{ maxHeight: 180, overflowY: 'auto' }}>
+        {fields.map((field) => {
+          const isBold = boldSet.has(field)
+          return (
+            <div
+              key={field}
+              className="flex justify-between items-center px-2 py-1 border-b border-gray-100 last:border-b-0"
+              style={{ background: isBold ? '#f9fafb' : undefined }}
+            >
+              <span
+                className={isBold ? '' : 'text-muted-foreground'}
+                style={{
+                  fontWeight: isBold ? 500 : 400,
+                  paddingLeft: isBold ? 0 : 8,
+                }}
+              >
+                {field}
+              </span>
+              <select
+                value={assignments[field] ?? ''}
+                onChange={(e) => onChange(field, e.target.value)}
+                className="text-[11px] border border-gray-200 rounded px-1 py-0.5 bg-white focus:outline-none"
+                style={{ minWidth: 120 }}
+              >
+                <option value="">— pick tab —</option>
+                {checkedTabs.map((tab) => (
+                  <option key={tab} value={tab}>{tab}</option>
+                ))}
+              </select>
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+// ── Main component ────────────────────────────────────────────────────────
+
 export default function Step1Upload() {
   const {
     companyName,
@@ -153,23 +251,26 @@ export default function Step1Upload() {
   } = useWizardState()
 
   const fileInputRef = useRef<HTMLInputElement>(null)
-  const tableScrollRef = useRef<HTMLDivElement>(null)
-  const tabScrollPositions = useRef<Record<string, number>>({})
   const comboRef = useRef<HTMLDivElement>(null)
+  const splitContainerRef = useRef<HTMLDivElement>(null)
+
   const [uploading, setUploading] = useState(false)
   const [status, setStatus] = useState<StatusMessage>(null)
-  const [tabStates, setTabStates] = useState<Record<string, TabState>>({})
   const [contextStatus, setContextStatus] = useState<CompanyContextStatus | null>(null)
   const [contextLoading, setContextLoading] = useState(false)
 
-  // IS tab config local state
-  const [isTabConfigLocal, setIsTabConfigLocal] = useState<ISTabConfig>({
-    multiTab: false,
-    tabs: [],
-    fieldAssignments: {},
-  })
-  const [isTabConfigSaving, setIsTabConfigSaving] = useState(false)
-  const [isTabConfigSaved, setIsTabConfigSaved] = useState(false)
+  // Assignment panel state
+  const [assignments, setAssignments] = useState<{
+    income_statement: string[]
+    balance_sheet: string[]
+    cash_flow_statement: string[]
+  }>({ income_statement: [], balance_sheet: [], cash_flow_statement: [] })
+  const [fieldAssignments, setFieldAssignments] = useState<Record<string, Record<string, string>>>({})
+  const [extractionStatus, setExtractionStatus] = useState<ExtractionStatus>('idle')
+  const [extractionError, setExtractionError] = useState<string | null>(null)
+
+  // Resizable divider — left panel width as percentage
+  const [leftPct, setLeftPct] = useState(65)
 
   // PDF-specific local state
   const [pdfActiveTab, setPdfActiveTab] = useState<'income_statement' | 'balance_sheet'>('income_statement')
@@ -186,9 +287,9 @@ export default function Step1Upload() {
     sessionId: string
     finalizedAt: string | null
   } | null>(null)
-  const [pendingExtraction, setPendingExtraction] = useState<{
-    type: 'excel'; tabName: string
-  } | { type: 'pdf' } | null>(null)
+  const [pendingExtraction, setPendingExtraction] = useState<
+    { type: 'pdf' } | { type: 'global' } | null
+  >(null)
 
   const hasUpload = uploadFileType === 'excel'
     ? sheetNames.length > 0
@@ -198,20 +299,11 @@ export default function Step1Upload() {
 
   const activeTab = activeSheetTab || sheetNames[0] || ''
 
-  // Preserve scroll position per tab when switching tabs.
   function handleTabChange(tab: string) {
-    tabScrollPositions.current[activeTab] = tableScrollRef.current?.scrollTop ?? 0
     setActiveSheetTab(tab)
   }
 
-  useEffect(() => {
-    const pos = tabScrollPositions.current[activeTab] ?? 0
-    requestAnimationFrame(() => {
-      if (tableScrollRef.current) tableScrollRef.current.scrollTop = pos
-    })
-  }, [activeTab])
-
-  // Load companies from API on mount
+  // Load companies on mount
   useEffect(() => {
     setCompaniesLoading(true)
     getCompanies()
@@ -225,8 +317,14 @@ export default function Step1Upload() {
     if (!companyId) return
     getISTabConfig(companyId)
       .then((cfg) => {
-        setIsTabConfigLocal(cfg)
         setIsTabConfig(cfg)
+        if (cfg.multiTab && cfg.tabs.length > 0) {
+          setAssignments((prev) => ({ ...prev, income_statement: cfg.tabs }))
+          setFieldAssignments((prev) => ({
+            ...prev,
+            income_statement: cfg.fieldAssignments,
+          }))
+        }
       })
       .catch(() => {})
   }, [companyId])
@@ -263,16 +361,16 @@ export default function Step1Upload() {
     (c) => c.name.toLowerCase() === comboSearch.trim().toLowerCase(),
   )
   const filteredIds = new Set(filteredCompanies.map((c) => c.id))
-  const fuzzyMatches = comboSearch.trim() && !hasExactMatch
-    ? findFuzzyMatches(comboSearch.trim(), companies).filter((c) => !filteredIds.has(c.id))
-    : []
+  const fuzzyMatches =
+    comboSearch.trim() && !hasExactMatch
+      ? findFuzzyMatches(comboSearch.trim(), companies).filter((c) => !filteredIds.has(c.id))
+      : []
 
   function handleSelectCompany(company: Company) {
     setCompanyName(company.name)
     setCompanyId(company.id)
     setComboSearch(company.name)
     setComboOpen(false)
-    // Fetch context status if file already uploaded
     if (hasUpload) {
       setContextLoading(true)
       getCompanyContextStatus(company.id)
@@ -312,28 +410,88 @@ export default function Step1Upload() {
     }
   }
 
-  const activeTabState = tabStates[activeTab]
-  const activeLayer1 = layer1Results[tabStates[activeTab]?.sheetType]
+  // canApprove: any statement has a completed layer1 result
+  const canApprove = !!(
+    layer1Results['income_statement'] ||
+    layer1Results['balance_sheet'] ||
+    layer1Results['cash_flow_statement']
+  )
 
-  // Approve requires at least one statement extracted
-  const extractedIS = uploadFileType === 'pdf'
-    ? !!layer1Results['income_statement']
-    : sheetNames.some(
-        (s) => tabStates[s]?.status === 'done' && tabStates[s]?.sheetType === 'income_statement',
-      )
-  const extractedBS = uploadFileType === 'pdf'
-    ? !!layer1Results['balance_sheet']
-    : sheetNames.some(
-        (s) => tabStates[s]?.status === 'done' && tabStates[s]?.sheetType === 'balance_sheet',
-      )
-  const extractedCFS = uploadFileType === 'pdf'
-    ? !!layer1Results['cash_flow_statement']
-    : sheetNames.some(
-        (s) => tabStates[s]?.status === 'done' && tabStates[s]?.sheetType === 'cash_flow_statement',
-      )
-  const canApprove = extractedIS || extractedBS || extractedCFS
+  // extractedSheetNames: tabs whose statement type has a completed layer1Result
+  const extractedSheetNames = sheetNames.filter((s) => {
+    for (const [stmtType, tabs] of Object.entries(assignments)) {
+      if (tabs.includes(s) && layer1Results[stmtType]) return true
+    }
+    return false
+  })
 
-  const extractedSheetNames = sheetNames.filter((s) => tabStates[s]?.status === 'done')
+  // Any tabs assigned at all
+  const anyAssigned =
+    assignments.income_statement.length > 0 ||
+    assignments.balance_sheet.length > 0 ||
+    assignments.cash_flow_statement.length > 0
+
+  const canRunExtraction =
+    hasUpload &&
+    anyAssigned &&
+    !!sessionId &&
+    reportingPeriod.trim() !== '' &&
+    companyName.trim() !== '' &&
+    extractionStatus !== 'running'
+
+  // ── Tab assignment toggle ───────────────────────────────────────────────
+
+  function toggleTabAssignment(
+    stmtType: 'income_statement' | 'balance_sheet' | 'cash_flow_statement',
+    tab: string,
+  ) {
+    const current = assignments[stmtType]
+    const isRemoving = current.includes(tab)
+    const updated = isRemoving ? current.filter((t) => t !== tab) : [...current, tab]
+    setAssignments((prev) => ({ ...prev, [stmtType]: updated }))
+    if (isRemoving) {
+      setFieldAssignments((prev) => {
+        const stmtFa = { ...(prev[stmtType] ?? {}) }
+        for (const [field, assignedTab] of Object.entries(stmtFa)) {
+          if (assignedTab === tab) delete stmtFa[field]
+        }
+        return { ...prev, [stmtType]: stmtFa }
+      })
+    }
+  }
+
+  function setFieldTabAssignment(stmtType: string, field: string, tab: string) {
+    setFieldAssignments((prev) => ({
+      ...prev,
+      [stmtType]: { ...(prev[stmtType] ?? {}), [field]: tab },
+    }))
+  }
+
+  // ── Resizable divider ───────────────────────────────────────────────────
+
+  function handleDividerMouseDown(e: React.MouseEvent) {
+    e.preventDefault()
+    const container = splitContainerRef.current
+    if (!container) return
+    const containerRect = container.getBoundingClientRect()
+
+    function onMouseMove(ev: MouseEvent) {
+      const newPct = ((ev.clientX - containerRect.left) / containerRect.width) * 100
+      const minLeft = (300 / containerRect.width) * 100
+      const maxLeft = ((containerRect.width - 320) / containerRect.width) * 100
+      setLeftPct(Math.min(Math.max(newPct, minLeft), maxLeft))
+    }
+
+    function onMouseUp() {
+      window.removeEventListener('mousemove', onMouseMove)
+      window.removeEventListener('mouseup', onMouseUp)
+    }
+
+    window.addEventListener('mousemove', onMouseMove)
+    window.addEventListener('mouseup', onMouseUp)
+  }
+
+  // ── File upload ─────────────────────────────────────────────────────────
 
   async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
@@ -362,12 +520,11 @@ export default function Step1Upload() {
         setPdfPageCount(0)
         setPdfUrl(null)
         setPdfPageAssignments({})
-
-        const initialTabStates: Record<string, TabState> = {}
-        for (const name of response.sheetNames) {
-          initialTabStates[name] = { sheetType: detectSheetType(name), status: 'idle' }
-        }
-        setTabStates(initialTabStates)
+        // Reset assignment state for new file
+        setAssignments({ income_statement: [], balance_sheet: [], cash_flow_statement: [] })
+        setFieldAssignments({})
+        setExtractionStatus('idle')
+        setExtractionError(null)
       }
 
       setStatus({
@@ -377,7 +534,6 @@ export default function Step1Upload() {
           : `Uploaded "${file.name}" — ${response.sheetNames.length} sheet(s) found.`,
       })
 
-      // Fetch company context status after successful upload
       if (companyId) {
         setContextLoading(true)
         getCompanyContextStatus(companyId)
@@ -403,7 +559,10 @@ export default function Step1Upload() {
     setSheetNames([])
     setWorkbookUrl(null)
     setLayer1Results({})
-    setTabStates({})
+    setAssignments({ income_statement: [], balance_sheet: [], cash_flow_statement: [] })
+    setFieldAssignments({})
+    setExtractionStatus('idle')
+    setExtractionError(null)
     setStatus(null)
     setContextStatus(null)
     setUploadFileType(null)
@@ -419,7 +578,10 @@ export default function Step1Upload() {
     setSheetNames([])
     setWorkbookUrl(null)
     setLayer1Results({})
-    setTabStates({})
+    setAssignments({ income_statement: [], balance_sheet: [], cash_flow_statement: [] })
+    setFieldAssignments({})
+    setExtractionStatus('idle')
+    setExtractionError(null)
     setStatus(null)
     setContextStatus(null)
     setUploadFileType(null)
@@ -428,32 +590,7 @@ export default function Step1Upload() {
     setPdfPageAssignments({})
   }
 
-  function setTabSheetType(tabName: string, sheetType: SheetType) {
-    setTabStates((prev) => ({
-      ...prev,
-      [tabName]: { ...prev[tabName], sheetType },
-    }))
-  }
-
-  async function handleSaveIsTabConfig() {
-    if (!companyId) return
-    setIsTabConfigSaving(true)
-    try {
-      await saveISTabConfig(companyId, isTabConfigLocal)
-      setIsTabConfig(isTabConfigLocal)
-      setIsTabConfigSaved(true)
-      setTimeout(() => setIsTabConfigSaved(false), 2000)
-    } catch {
-      setStatus({ type: 'error', message: 'Failed to save IS tab config.' })
-    } finally {
-      setIsTabConfigSaving(false)
-    }
-  }
-
-  // IS tabs among currently uploaded sheets
-  const isAssignedTabs = sheetNames.filter(
-    (s) => tabStates[s]?.sheetType === 'income_statement',
-  )
+  // ── PDF extraction ──────────────────────────────────────────────────────
 
   function handlePdfPageClick(pageNumber: number) {
     const current = pdfPageAssignments[pageNumber]
@@ -516,87 +653,133 @@ export default function Step1Upload() {
       try {
         const existing = await checkExistingReview(companyId, reportingPeriod)
         if (existing.exists) {
-          setDuplicateCheck({ exists: true, sessionId: existing.session_id!, finalizedAt: existing.finalized_at ?? null })
+          setDuplicateCheck({
+            exists: true,
+            sessionId: existing.session_id!,
+            finalizedAt: existing.finalized_at ?? null,
+          })
           setPendingExtraction({ type: 'pdf' })
           return
         }
       } catch {
-        // If check fails, proceed with extraction anyway
+        // proceed on check failure
       }
     }
 
     handlePdfExtractionInner()
   }
 
-  async function handleRunExtractionInner(tabName: string) {
-    if (!sessionId) return
-    const tabState = tabStates[tabName]
-    if (!tabState) return
+  // ── Excel extraction ────────────────────────────────────────────────────
 
-    setTabStates((prev) => ({
-      ...prev,
-      [tabName]: { ...prev[tabName], status: 'extracting', error: undefined },
-    }))
-    setStatus(null)
+  async function runExtractionInner() {
+    setExtractionStatus('running')
+    setExtractionError(null)
 
-    if (tabState.sheetType === 'unassigned') {
-      setTabStates((prev) => ({
-        ...prev,
-        [tabName]: { ...prev[tabName], status: 'idle' },
-      }))
-      setStatus({ type: 'error', message: 'Please assign a statement type before running extraction.' })
-      return
+    const tasks: Promise<void>[] = []
+
+    for (const stmtType of [
+      'income_statement',
+      'balance_sheet',
+      'cash_flow_statement',
+    ] as const) {
+      const tabs = assignments[stmtType]
+      if (tabs.length === 0) continue
+
+      if (tabs.length === 1) {
+        tasks.push(
+          runLayer1(sessionId!, tabs[0], stmtType, reportingPeriod).then((result) =>
+            mergeLayer1Result(stmtType, {
+              lineItems: result.lineItems,
+              sourceScaling: result.sourceScaling,
+              columnIdentified: result.columnIdentified,
+              sourceSheet: tabs[0],
+            }),
+          ),
+        )
+      } else {
+        // Multi-tab: run once per unique tab with fields_filter for that tab
+        const tabFieldMap: Record<string, string[]> = {}
+        const perFieldAssignments = fieldAssignments[stmtType] ?? {}
+        for (const [field, tab] of Object.entries(perFieldAssignments)) {
+          if (!tabFieldMap[tab]) tabFieldMap[tab] = []
+          tabFieldMap[tab].push(field)
+        }
+        for (const tab of tabs) {
+          if (!tabFieldMap[tab]) tabFieldMap[tab] = []
+        }
+
+        const perTabResults: Record<string, Record<string, number>> = {}
+        const tabPromises = Object.entries(tabFieldMap).map(([tab, fields]) =>
+          runLayer1(
+            sessionId!,
+            tab,
+            stmtType,
+            reportingPeriod,
+            fields.length > 0 ? fields : undefined,
+          ).then((result) => {
+            perTabResults[tab] = result.lineItems
+          }),
+        )
+
+        tasks.push(
+          Promise.all(tabPromises).then(() => {
+            const merged: Record<string, number> = {}
+            for (const items of Object.values(perTabResults)) {
+              Object.assign(merged, items)
+            }
+            mergeLayer1Result(stmtType, {
+              lineItems: merged,
+              sourceScaling: 'multi-tab',
+              columnIdentified: tabs.join(', '),
+              sourceSheet: tabs.join(', '),
+            })
+          }),
+        )
+      }
     }
 
     try {
-      const result = await runLayer1(sessionId, tabName, tabState.sheetType, reportingPeriod)
-      mergeLayer1Result(tabState.sheetType, {
-        lineItems: result.lineItems,
-        sourceScaling: result.sourceScaling,
-        columnIdentified: result.columnIdentified,
-        sourceSheet: tabName,
-      })
-      setTabStates((prev) => ({
-        ...prev,
-        [tabName]: { ...prev[tabName], status: 'done' },
-      }))
+      await Promise.allSettled(tasks)
+      setExtractionStatus('done')
+      // Save IS tab config if multi-tab IS was used
+      if (companyId && assignments.income_statement.length >= 2) {
+        const config: ISTabConfig = {
+          multiTab: true,
+          tabs: assignments.income_statement,
+          fieldAssignments: fieldAssignments['income_statement'] ?? {},
+        }
+        saveISTabConfig(companyId, config).catch(() => {})
+        setIsTabConfig(config)
+      }
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Extraction failed.'
-      setTabStates((prev) => ({
-        ...prev,
-        [tabName]: { ...prev[tabName], status: 'error', error: message },
-      }))
-      setStatus({
-        type: 'error',
-        message: `Extraction failed for "${tabName}": ${message}`,
-      })
+      const msg = err instanceof Error ? err.message : 'Extraction failed.'
+      setExtractionStatus('error')
+      setExtractionError(msg)
+      setStatus({ type: 'error', message: msg })
     }
   }
 
-  async function handleRunExtraction(tabName: string) {
-    if (!sessionId) return
-    if (!reportingPeriod.trim() || !companyName.trim()) {
-      setStatus({
-        type: 'error',
-        message: 'Please enter company name and reporting period before running extraction.',
-      })
-      return
-    }
+  async function handleRunExtraction() {
+    if (!sessionId || !reportingPeriod.trim() || !companyName.trim()) return
 
     if (companyId) {
       try {
         const existing = await checkExistingReview(companyId, reportingPeriod)
         if (existing.exists) {
-          setDuplicateCheck({ exists: true, sessionId: existing.session_id!, finalizedAt: existing.finalized_at ?? null })
-          setPendingExtraction({ type: 'excel', tabName })
+          setDuplicateCheck({
+            exists: true,
+            sessionId: existing.session_id!,
+            finalizedAt: existing.finalized_at ?? null,
+          })
+          setPendingExtraction({ type: 'global' })
           return
         }
       } catch {
-        // If check fails, proceed with extraction anyway
+        // proceed on check failure
       }
     }
 
-    handleRunExtractionInner(tabName)
+    runExtractionInner()
   }
 
   async function handleContinuePrevious() {
@@ -625,10 +808,10 @@ export default function Step1Upload() {
 
   function handleOverwrite() {
     setDuplicateCheck(null)
-    if (pendingExtraction?.type === 'excel') {
-      handleRunExtractionInner(pendingExtraction.tabName)
-    } else if (pendingExtraction?.type === 'pdf') {
+    if (pendingExtraction?.type === 'pdf') {
       handlePdfExtractionInner()
+    } else if (pendingExtraction?.type === 'global') {
+      runExtractionInner()
     }
     setPendingExtraction(null)
   }
@@ -636,6 +819,8 @@ export default function Step1Upload() {
   const placeholderTabs = ['Sheet 1', 'Sheet 2']
   const displayTabs = hasUpload && uploadFileType === 'excel' ? sheetNames : placeholderTabs
   const displayActiveTab = activeTab || displayTabs[0]
+
+  // ── Render ──────────────────────────────────────────────────────────────
 
   return (
     <div className="flex flex-col h-full">
@@ -683,7 +868,9 @@ export default function Step1Upload() {
               ))}
               {fuzzyMatches.length > 0 && (
                 <div className="border-t border-border">
-                  <p className="text-[11px] text-muted-foreground italic px-3 py-1">Did you mean?</p>
+                  <p className="text-[11px] text-muted-foreground italic px-3 py-1">
+                    Did you mean?
+                  </p>
                   {fuzzyMatches.map((company) => (
                     <div
                       key={company.id}
@@ -785,7 +972,8 @@ export default function Step1Upload() {
               ) : contextStatus ? (
                 contextStatus.has_rules ? (
                   <span className="text-emerald-600 ml-1.5" style={{ fontWeight: 500 }}>
-                    {contextStatus.rule_count} rule{contextStatus.rule_count !== 1 ? 's' : ''} · {contextStatus.word_count} words
+                    {contextStatus.rule_count} rule{contextStatus.rule_count !== 1 ? 's' : ''} ·{' '}
+                    {contextStatus.word_count} words
                   </span>
                 ) : (
                   <span className="text-muted-foreground ml-1.5">No rules yet</span>
@@ -801,7 +989,10 @@ export default function Step1Upload() {
         {canApprove && (
           <button
             onClick={() => {
-              if (Math.random() < 0.01) { approveAudio.currentTime = 0; approveAudio.play() }
+              if (Math.random() < 0.01) {
+                approveAudio.currentTime = 0
+                approveAudio.play()
+              }
               approveStep1()
             }}
             className="flex items-center gap-2 bg-emerald-600 text-white px-4 py-1.5 rounded-lg text-[13px] hover:bg-emerald-700 transition-colors"
@@ -826,9 +1017,12 @@ export default function Step1Upload() {
       )}
 
       {/* Split pane */}
-      <div className="flex flex-1 min-h-0">
+      <div ref={splitContainerRef} className="flex flex-1 min-h-0">
         {/* Left: Preview */}
-        <div className="flex-[2] border-r border-border flex flex-col min-w-0">
+        <div
+          className="border-r border-border flex flex-col min-w-0 shrink-0"
+          style={{ width: `${leftPct}%` }}
+        >
           {uploadFileType === 'pdf' ? (
             <PdfPageViewer
               pdfUrl={pdfUrl ? `${API_BASE}${pdfUrl}` : null}
@@ -857,13 +1051,29 @@ export default function Step1Upload() {
           )}
         </div>
 
-        {/* Right: Extraction panel */}
+        {/* Resizable divider */}
+        {uploadFileType !== 'pdf' && (
+          <div
+            onMouseDown={handleDividerMouseDown}
+            className="shrink-0 hover:bg-gray-300 transition-colors"
+            style={{ width: 4, cursor: 'col-resize', background: '#e5e7eb' }}
+          />
+        )}
+
+        {/* Right panel */}
         {uploadFileType === 'pdf' ? (
+          /* PDF extraction panel — unchanged */
           <div className="flex-1 flex flex-col min-w-[320px] max-w-[420px]">
             <TabSelector
               tabs={['Income Statement', 'Balance Sheet']}
-              activeTab={pdfActiveTab === 'income_statement' ? 'Income Statement' : 'Balance Sheet'}
-              onChange={(tab) => setPdfActiveTab(tab === 'Income Statement' ? 'income_statement' : 'balance_sheet')}
+              activeTab={
+                pdfActiveTab === 'income_statement' ? 'Income Statement' : 'Balance Sheet'
+              }
+              onChange={(tab) =>
+                setPdfActiveTab(
+                  tab === 'Income Statement' ? 'income_statement' : 'balance_sheet',
+                )
+              }
               extractedTabs={[
                 ...(layer1Results['income_statement'] ? ['Income Statement'] : []),
                 ...(layer1Results['balance_sheet'] ? ['Balance Sheet'] : []),
@@ -890,8 +1100,6 @@ export default function Step1Upload() {
                     {pdfActiveTab === 'income_statement' ? 'Income Statement' : 'Balance Sheet'},
                     then run extraction.
                   </p>
-
-                  {/* Selected page chips */}
                   <div className="flex flex-wrap gap-1.5">
                     {Object.entries(pdfPageAssignments)
                       .filter(([, type]) => type === pdfActiveTab)
@@ -910,7 +1118,6 @@ export default function Step1Upload() {
                         </span>
                       ))}
                   </div>
-
                   <button
                     onClick={handlePdfExtraction}
                     disabled={!Object.values(pdfPageAssignments).includes(pdfActiveTab)}
@@ -924,153 +1131,95 @@ export default function Step1Upload() {
             )}
           </div>
         ) : (
-          <div className="flex-1 flex flex-col min-w-[320px] max-w-[420px]">
-            <TabSelector
-              tabs={displayTabs}
-              activeTab={displayActiveTab}
-              onChange={handleTabChange}
-              extractedTabs={extractedSheetNames}
-              smallText
-            />
+          /* Excel assignment panel */
+          <div className="flex-1 flex flex-col overflow-hidden min-w-[320px] bg-white">
+            {/* Panel header */}
+            <div
+              className="shrink-0 px-[14px] py-2.5 border-b border-gray-200 bg-white"
+              style={{ position: 'sticky', top: 0, zIndex: 10 }}
+            >
+              <p className="text-[11px] text-muted-foreground">
+                Assign tabs to statements, then run extraction
+              </p>
+            </div>
 
-            {!hasUpload ? (
-              <div className="flex-1 flex items-center justify-center text-muted-foreground">
-                <p className="text-[13px]">Upload a file to begin extraction</p>
-              </div>
-            ) : activeTabState?.status === 'done' && activeLayer1 ? (
-              <div className="flex-1 overflow-auto p-4">
-                <Layer1ResultsTable result={activeLayer1} />
-              </div>
-            ) : activeTabState?.status === 'extracting' ? (
-              <div className="flex-1 flex flex-col items-center justify-center gap-3">
-                <Loader2 className="w-8 h-8 animate-spin" style={{ color: '#030213' }} />
-                <p className="text-[13px] text-muted-foreground">
-                  Running AI extraction on "{activeTab}"...
-                </p>
-              </div>
-            ) : activeTabState?.status === 'error' ? (
-              <div className="flex-1 flex flex-col items-center justify-center text-center px-4">
-                <p className="text-[13px] text-red-600" style={{ fontWeight: 500 }}>
-                  Extraction failed
-                </p>
-                <p className="text-[12px] text-red-400 mt-1">{activeTabState.error}</p>
+            {/* Scrollable content */}
+            <div className="flex-1 overflow-y-auto">
+              {/* Income Statement block */}
+              <AssignmentBlock
+                label="Income Statement"
+                stmtType="income_statement"
+                checkedTabs={assignments.income_statement}
+                sheetNames={sheetNames}
+                fields={IS_FIELDS}
+                boldSet={IS_BOLD}
+                fieldAssignments={fieldAssignments['income_statement'] ?? {}}
+                onToggleTab={(tab) => toggleTabAssignment('income_statement', tab)}
+                onFieldAssign={(field, tab) =>
+                  setFieldTabAssignment('income_statement', field, tab)
+                }
+              />
+
+              {/* Balance Sheet block */}
+              <AssignmentBlock
+                label="Balance Sheet"
+                stmtType="balance_sheet"
+                checkedTabs={assignments.balance_sheet}
+                sheetNames={sheetNames}
+                fields={BS_FIELDS}
+                boldSet={BS_BOLD}
+                fieldAssignments={fieldAssignments['balance_sheet'] ?? {}}
+                onToggleTab={(tab) => toggleTabAssignment('balance_sheet', tab)}
+                onFieldAssign={(field, tab) =>
+                  setFieldTabAssignment('balance_sheet', field, tab)
+                }
+              />
+
+              {/* Cash Flow Statement block */}
+              <AssignmentBlock
+                label="Cash Flow Statement"
+                stmtType="cash_flow_statement"
+                checkedTabs={assignments.cash_flow_statement}
+                sheetNames={sheetNames}
+                fields={CFS_FIELDS}
+                boldSet={CFS_BOLD}
+                fieldAssignments={fieldAssignments['cash_flow_statement'] ?? {}}
+                onToggleTab={(tab) => toggleTabAssignment('cash_flow_statement', tab)}
+                onFieldAssign={(field, tab) =>
+                  setFieldTabAssignment('cash_flow_statement', field, tab)
+                }
+              />
+
+              {/* Run Extraction button */}
+              <div style={{ margin: '12px 14px' }}>
                 <button
-                  onClick={() => handleRunExtraction(activeTab)}
-                  className="mt-3 text-[12px] text-blue-500 hover:text-blue-700 underline"
+                  onClick={handleRunExtraction}
+                  disabled={!canRunExtraction}
+                  className="w-full flex items-center justify-center gap-2 rounded-lg text-[13px] transition-colors disabled:opacity-50"
+                  style={{
+                    backgroundColor: '#030213',
+                    color: 'white',
+                    fontWeight: 500,
+                    padding: '8px 0',
+                    borderRadius: 8,
+                  }}
                 >
-                  Retry
+                  {extractionStatus === 'running' ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      Running...
+                    </>
+                  ) : (
+                    'Run Extraction'
+                  )}
                 </button>
               </div>
-            ) : (
-              <div className="flex-1 overflow-auto p-4">
-                <div className="space-y-4">
-                  <div>
-                    <label className="text-[12px] text-muted-foreground block mb-1.5">
-                      Statement Type
-                    </label>
-                    <select
-                      value={activeTabState?.sheetType ?? 'income_statement'}
-                      onChange={(e) => setTabSheetType(activeTab, e.target.value as SheetType)}
-                      disabled={!hasUpload}
-                      className="w-full bg-white border border-border rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:ring-2 focus:ring-primary/20 disabled:opacity-50"
-                    >
-                      <option value="unassigned">-- Unassigned --</option>
-                      <option value="income_statement">Income Statement</option>
-                      <option value="balance_sheet">Balance Sheet</option>
-                      <option value="cash_flow_statement">Cash Flow Statement</option>
-                    </select>
-                  </div>
-                  <button
-                    onClick={() => handleRunExtraction(activeTab)}
-                    disabled={!hasUpload || activeTabState?.sheetType === 'unassigned'}
-                    className="w-full py-2 rounded-lg text-[13px] transition-colors disabled:opacity-50"
-                    style={{ backgroundColor: '#030213', color: 'white', fontWeight: 500 }}
-                  >
-                    Run Extraction
-                  </button>
-
-                  {/* Multi-tab IS Config */}
-                  {hasUpload && companyId && isAssignedTabs.length > 0 && (
-                    <div className="border border-border rounded-lg p-3 space-y-3">
-                      <div className="flex items-center justify-between">
-                        <label className="text-[12px] text-muted-foreground" style={{ fontWeight: 500 }}>
-                          Multi-tab Income Statement
-                        </label>
-                        <button
-                          onClick={() =>
-                            setIsTabConfigLocal((prev) => ({
-                              ...prev,
-                              multiTab: !prev.multiTab,
-                              tabs: !prev.multiTab ? isAssignedTabs : [],
-                            }))
-                          }
-                          className={`relative w-8 h-[18px] rounded-full transition-colors ${
-                            isTabConfigLocal.multiTab ? 'bg-blue-500' : 'bg-gray-300'
-                          }`}
-                        >
-                          <div
-                            className={`absolute top-[2px] w-[14px] h-[14px] rounded-full bg-white shadow-sm transition-transform ${
-                              isTabConfigLocal.multiTab ? 'left-[17px]' : 'left-[2px]'
-                            }`}
-                          />
-                        </button>
-                      </div>
-
-                      {isTabConfigLocal.multiTab && (
-                        <>
-                          <div>
-                            <p className="text-[11px] text-muted-foreground mb-1.5">IS tabs:</p>
-                            <div className="space-y-1">
-                              {isAssignedTabs.map((tab) => {
-                                const included = isTabConfigLocal.tabs.includes(tab)
-                                return (
-                                  <label
-                                    key={tab}
-                                    className="flex items-center gap-2 text-[12px] cursor-pointer"
-                                  >
-                                    <input
-                                      type="checkbox"
-                                      checked={included}
-                                      onChange={() =>
-                                        setIsTabConfigLocal((prev) => ({
-                                          ...prev,
-                                          tabs: included
-                                            ? prev.tabs.filter((t) => t !== tab)
-                                            : [...prev.tabs, tab],
-                                        }))
-                                      }
-                                      className="w-3 h-3"
-                                    />
-                                    <span className="truncate">{tab}</span>
-                                  </label>
-                                )
-                              })}
-                            </div>
-                          </div>
-                        </>
-                      )}
-
-                      <button
-                        onClick={handleSaveIsTabConfig}
-                        disabled={isTabConfigSaving || !companyId}
-                        className="w-full py-1.5 rounded-lg text-[12px] transition-colors border border-blue-200 text-blue-700 bg-blue-50 hover:bg-blue-100 disabled:opacity-50"
-                        style={{ fontWeight: 500 }}
-                      >
-                        {isTabConfigSaving
-                          ? 'Saving...'
-                          : isTabConfigSaved
-                          ? 'Saved!'
-                          : 'Save IS Config'}
-                      </button>
-                    </div>
-                  )}
-                </div>
-              </div>
-            )}
+            </div>
           </div>
         )}
       </div>
 
+      {/* Duplicate check modal */}
       {duplicateCheck?.exists && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
           <div className="bg-white rounded-xl shadow-xl max-w-md w-full mx-4 p-6">
@@ -1082,7 +1231,8 @@ export default function Step1Upload() {
               already loaded and finalized
               {duplicateCheck.finalizedAt
                 ? ` on ${new Date(duplicateCheck.finalizedAt).toLocaleDateString()}`
-                : ''}.
+                : ''}
+              .
             </p>
             <div className="flex flex-col gap-2">
               <button
@@ -1100,7 +1250,10 @@ export default function Step1Upload() {
                 Upload New &amp; Overwrite
               </button>
               <button
-                onClick={() => { setDuplicateCheck(null); setPendingExtraction(null) }}
+                onClick={() => {
+                  setDuplicateCheck(null)
+                  setPendingExtraction(null)
+                }}
                 className="w-full py-2 rounded-lg text-[13px] text-muted-foreground hover:text-foreground transition-colors"
                 style={{ fontWeight: 500 }}
               >
@@ -1109,6 +1262,101 @@ export default function Step1Upload() {
             </div>
           </div>
         </div>
+      )}
+    </div>
+  )
+}
+
+// ── AssignmentBlock ───────────────────────────────────────────────────────
+
+interface AssignmentBlockProps {
+  label: string
+  stmtType: string
+  checkedTabs: string[]
+  sheetNames: string[]
+  fields: string[]
+  boldSet: Set<string>
+  fieldAssignments: Record<string, string>
+  onToggleTab: (tab: string) => void
+  onFieldAssign: (field: string, tab: string) => void
+}
+
+function AssignmentBlock({
+  label,
+  checkedTabs,
+  sheetNames,
+  fields,
+  boldSet,
+  fieldAssignments,
+  onToggleTab,
+  onFieldAssign,
+}: AssignmentBlockProps) {
+  const showFieldTable = checkedTabs.length >= 2
+
+  return (
+    <div className="border-b border-gray-200">
+      {/* Section label */}
+      <div className="flex items-center gap-2 px-[14px] pt-3 pb-1.5">
+        <span
+          className="text-muted-foreground uppercase"
+          style={{ fontSize: 10, fontWeight: 500, letterSpacing: '0.05em' }}
+        >
+          {label}
+        </span>
+        {checkedTabs.length >= 2 && (
+          <span
+            className="bg-blue-50 text-blue-700 rounded px-1 py-0.5"
+            style={{ fontSize: 10, fontWeight: 500 }}
+          >
+            {checkedTabs.length} tabs
+          </span>
+        )}
+      </div>
+
+      {/* Listbox */}
+      {sheetNames.length === 0 ? (
+        <p className="px-[14px] pb-2 text-[11px] text-muted-foreground italic">
+          Upload a file to assign tabs
+        </p>
+      ) : (
+        <div
+          className="mx-[14px] mb-2 border border-gray-200 rounded-lg overflow-y-auto"
+          style={{ maxHeight: 130 }}
+        >
+          {sheetNames.map((tab) => {
+            const checked = checkedTabs.includes(tab)
+            return (
+              <label
+                key={tab}
+                className="flex items-center gap-2 cursor-pointer border-b border-gray-100 last:border-b-0"
+                style={{
+                  padding: '5px 9px',
+                  background: checked ? '#eff6ff' : undefined,
+                  color: checked ? '#1d4ed8' : undefined,
+                }}
+              >
+                <input
+                  type="checkbox"
+                  checked={checked}
+                  onChange={() => onToggleTab(tab)}
+                  style={{ accentColor: '#185FA5', width: 13, height: 13, flexShrink: 0 }}
+                />
+                <span className="truncate text-[12px]">{tab}</span>
+              </label>
+            )
+          })}
+        </div>
+      )}
+
+      {/* Field assignment table — only when 2+ tabs checked */}
+      {showFieldTable && (
+        <FieldAssignmentTable
+          fields={fields}
+          boldSet={boldSet}
+          checkedTabs={checkedTabs}
+          assignments={fieldAssignments}
+          onChange={onFieldAssign}
+        />
       )}
     </div>
   )

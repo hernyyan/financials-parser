@@ -65,11 +65,18 @@ export async function runLayer1(
   sheetName: string,
   sheetType: string,
   reportingPeriod: string,
+  fieldsFilter?: string[],
 ): Promise<Layer1Response> {
   const res = await fetch(`${API_BASE}/layer1/run`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ sessionId, sheetName, sheetType, reportingPeriod }),
+    body: JSON.stringify({
+      sessionId,
+      sheetName,
+      sheetType,
+      reportingPeriod,
+      ...(fieldsFilter && fieldsFilter.length > 0 ? { fieldsFilter } : {}),
+    }),
   })
   return handleResponse<Layer1Response>(res)
 }
