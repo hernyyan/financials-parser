@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useCallback } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Document, Page, pdfjs } from 'react-pdf'
 import 'react-pdf/dist/Page/AnnotationLayer.css'
 import 'react-pdf/dist/Page/TextLayer.css'
@@ -31,7 +31,7 @@ export default function PdfPageViewer({
   const mainViewRef = useRef<HTMLDivElement>(null)
   const pageRefs = useRef<Record<number, HTMLDivElement | null>>({})
   const thumbnailRefs = useRef<Record<number, HTMLDivElement | null>>({})
-  const observerRef = useRef<IntersectionObserver | null>(null)
+  const currentPageRef = useRef(1)
 
   function zoomIn() { setZoom((z) => Math.min(+(z + 0.1).toFixed(1), 2.0)) }
   function zoomOut() { setZoom((z) => Math.max(+(z - 0.1).toFixed(1), 0.5)) }
@@ -49,16 +49,15 @@ export default function PdfPageViewer({
     return () => ro.disconnect()
   }, [])
 
-  // IntersectionObserver: track which page is most visible in the main view
-  const setupObserver = useCallback(() => {
-    if (observerRef.current) observerRef.current.disconnect()
+  // Set up IntersectionObserver once after pages render, never reconnect on page change
+  useEffect(() => {
     const root = mainViewRef.current
-    if (!root) return
+    if (!root || pageCount === 0) return
 
-    observerRef.current = new IntersectionObserver(
+    const observer = new IntersectionObserver(
       (entries) => {
         let maxRatio = 0
-        let mostVisible = currentPage
+        let mostVisible = currentPageRef.current
         for (const entry of entries) {
           if (entry.intersectionRatio > maxRatio) {
             maxRatio = entry.intersectionRatio
@@ -66,22 +65,28 @@ export default function PdfPageViewer({
             mostVisible = num
           }
         }
-        if (maxRatio > 0) setCurrentPage(mostVisible)
+        if (maxRatio > 0 && mostVisible !== currentPageRef.current) {
+          currentPageRef.current = mostVisible
+          setCurrentPage(mostVisible)
+        }
       },
-      { root, threshold: [0, 0.25, 0.5, 0.75, 1.0] },
+      { root, threshold: [0, 0.1, 0.25, 0.5, 0.75, 1.0] },
     )
 
-    for (const el of Object.values(pageRefs.current)) {
-      if (el) observerRef.current.observe(el)
+    // Small delay to let react-pdf render page elements into the DOM
+    const timer = setTimeout(() => {
+      for (const el of Object.values(pageRefs.current)) {
+        if (el) observer.observe(el)
+      }
+    }, 300)
+
+    return () => {
+      clearTimeout(timer)
+      observer.disconnect()
     }
-  }, [currentPage])
+  }, [pageCount])
 
-  useEffect(() => {
-    setupObserver()
-    return () => observerRef.current?.disconnect()
-  }, [pageCount, setupObserver])
-
-  // Scroll thumbnail sidebar to keep active thumbnail in view
+  // Scroll thumbnail into view when currentPage changes
   useEffect(() => {
     thumbnailRefs.current[currentPage]?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
   }, [currentPage])
