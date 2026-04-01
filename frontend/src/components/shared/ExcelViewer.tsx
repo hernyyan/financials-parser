@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import * as XLSX from 'xlsx'
+import ExcelJS from 'exceljs'
 import LoadingSpinner from './LoadingSpinner'
 import { API_BASE } from '../../api/client'
 
@@ -8,16 +8,13 @@ interface ExcelViewerProps {
   activeSheet: string
 }
 
-function formatCellValue(cell: XLSX.CellObject | undefined): string {
-  if (!cell) return ''
-  // Use Excel's pre-formatted text (respects number formats, accounting notation, etc.)
-  if (cell.w !== undefined && cell.w !== null) return cell.w
-  if (cell.v === null || cell.v === undefined) return ''
-  return String(cell.v)
+function formatCellValue(cell: ExcelJS.Cell): string {
+  if (!cell || cell.type === ExcelJS.ValueType.Null) return ''
+  return cell.text ?? String(cell.value ?? '')
 }
 
 export default function ExcelViewer({ workbookUrl, activeSheet }: ExcelViewerProps) {
-  const [workbook, setWorkbook] = useState<XLSX.WorkBook | null>(null)
+  const [workbook, setWorkbook] = useState<ExcelJS.Workbook | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -36,12 +33,9 @@ export default function ExcelViewer({ workbookUrl, activeSheet }: ExcelViewerPro
         if (!res.ok) throw new Error(`HTTP ${res.status}`)
         return res.arrayBuffer()
       })
-      .then((buf) => {
-        const wb = XLSX.read(buf, {
-          type: 'array',
-          cellDates: true,
-          cellNF: true,
-        })
+      .then(async (buf) => {
+        const wb = new ExcelJS.Workbook()
+        await wb.xlsx.load(buf)
         setWorkbook(wb)
       })
       .catch(() => {
@@ -52,43 +46,51 @@ export default function ExcelViewer({ workbookUrl, activeSheet }: ExcelViewerPro
       .finally(() => setLoading(false))
   }, [workbookUrl])
 
-  const sheet = workbook?.Sheets[activeSheet] ?? null
+  const sheet = workbook?.getWorksheet(activeSheet) ?? null
 
   // Pre-compute merge and layout data so render is fast
   const tableData = useMemo(() => {
-    if (!sheet || !sheet['!ref']) return null
+    if (!sheet) return null
 
-    const range = XLSX.utils.decode_range(sheet['!ref'])
-    const numRows = range.e.r - range.s.r + 1
-    const numCols = range.e.c - range.s.c + 1
+    const dims = sheet.dimensions as { top: number; left: number; bottom: number; right: number } | null | undefined
+    if (!dims || typeof dims.top !== 'number') return null
+
+    const { top, left, bottom, right } = dims
+    const numRows = bottom - top + 1
+    const numCols = right - left + 1
 
     const MAX_RENDER_ROWS = 300
     const MAX_RENDER_COLS = 40
     const renderRows = Math.min(numRows, MAX_RENDER_ROWS)
     const renderCols = Math.min(numCols, MAX_RENDER_COLS)
 
-    // Merge map: "absRow,absCol" → {rowSpan, colSpan}
+    // Merge map: "absRow,absCol" (0-indexed) → {rowSpan, colSpan}
     const mergeMap = new Map<string, { rowSpan: number; colSpan: number }>()
     const skipped = new Set<string>()
-    for (const m of (sheet['!merges'] as XLSX.Range[] | undefined) ?? []) {
-      mergeMap.set(`${m.s.r},${m.s.c}`, {
-        rowSpan: m.e.r - m.s.r + 1,
-        colSpan: m.e.c - m.s.c + 1,
-      })
-      for (let r = m.s.r; r <= m.e.r; r++) {
-        for (let c = m.s.c; c <= m.e.c; c++) {
-          if (r === m.s.r && c === m.s.c) continue
+    const mergesRaw = (sheet as unknown as { model?: { merges?: string[] } }).model?.merges ?? []
+    for (const mergeStr of mergesRaw) {
+      const [startRef, endRef] = mergeStr.split(':')
+      if (!startRef || !endRef) continue
+      const startCell = sheet.getCell(startRef)
+      const endCell = sheet.getCell(endRef)
+      const r1 = Number(startCell.row) - 1
+      const c1 = Number(startCell.col) - 1
+      const r2 = Number(endCell.row) - 1
+      const c2 = Number(endCell.col) - 1
+      mergeMap.set(`${r1},${c1}`, { rowSpan: r2 - r1 + 1, colSpan: c2 - c1 + 1 })
+      for (let r = r1; r <= r2; r++) {
+        for (let c = c1; c <= c2; c++) {
+          if (r === r1 && c === c1) continue
           skipped.add(`${r},${c}`)
         }
       }
     }
 
-    const colInfos = (sheet['!cols'] as XLSX.ColInfo[] | undefined) ?? []
-    const rowInfos = (sheet['!rows'] as XLSX.RowInfo[] | undefined) ?? []
-    const freeze = (sheet['!freeze'] as { r?: number; c?: number } | undefined) ?? {}
-    const frozenRows = freeze.r ?? 0
+    // Frozen rows from sheet views
+    const views = sheet.views as ExcelJS.WorksheetView[]
+    const frozenRows = views.find((v) => v.state === 'frozen')?.ySplit ?? 0
 
-    return { range, numRows, numCols, renderRows, renderCols, mergeMap, skipped, colInfos, rowInfos, frozenRows }
+    return { top, left, numRows, numCols, renderRows, renderCols, mergeMap, skipped, frozenRows }
   }, [sheet])
 
   // ── Loading / error / empty states ─────────────────────────────────────────
@@ -125,37 +127,31 @@ export default function ExcelViewer({ workbookUrl, activeSheet }: ExcelViewerPro
     )
   }
 
-  const { range, numRows, numCols, renderRows, renderCols, mergeMap, skipped, colInfos, rowInfos, frozenRows } = tableData
+  const { top, left, numRows, numCols, renderRows, renderCols, mergeMap, skipped, frozenRows } = tableData
 
   const isTruncated = numRows > renderRows || numCols > renderCols
 
   // ── Table rendering ─────────────────────────────────────────────────────────
 
   function renderRow(r: number, isHeader: boolean): React.ReactElement {
-    const absRow = r + range.s.r
-    const rowHpt = rowInfos[absRow]?.hpt
+    const absRow = r + top   // 1-indexed ExcelJS row
+    const rowObj = sheet!.getRow(absRow)
+    const rowHpt = rowObj.height
 
     const cells: React.ReactElement[] = []
     for (let c = 0; c < renderCols; c++) {
-      const absCol = c + range.s.c
-      const cellKey = `${absRow},${absCol}`
+      const absCol = c + left  // 1-indexed ExcelJS col
+      const cellKey = `${absRow - 1},${absCol - 1}`  // 0-indexed for maps
       if (skipped.has(cellKey)) continue
 
-      const cellAddr = XLSX.utils.encode_cell({ r: absRow, c: absCol })
-      const cell: XLSX.CellObject | undefined = sheet![cellAddr]
+      const cell = sheet!.getCell(absRow, absCol)
       const text = formatCellValue(cell)
-      const isNum = cell?.t === 'n'
-
-      let isBold = false
-      try {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        isBold = !!((cell?.s as any)?.font?.bold)
-      } catch {
-        /* style info not available in community edition */
-      }
+      const isNum = cell.type === ExcelJS.ValueType.Number
+      const isBold = (cell.font as ExcelJS.Font | undefined)?.bold ?? false
 
       const merge = mergeMap.get(cellKey)
-      const colWch = colInfos[absCol]?.wch
+      const colObj = sheet!.getColumn(absCol)
+      const colWch = colObj.width
 
       cells.push(
         <td
@@ -184,7 +180,9 @@ export default function ExcelViewer({ workbookUrl, activeSheet }: ExcelViewerPro
     )
   }
 
-  const headerRows = Array.from({ length: Math.min(frozenRows, renderRows) }, (_, i) => renderRow(i, true))
+  const headerRows = Array.from({ length: Math.min(frozenRows, renderRows) }, (_, i) =>
+    renderRow(i, true),
+  )
   const bodyRows = Array.from({ length: renderRows - frozenRows }, (_, i) =>
     renderRow(i + frozenRows, false),
   )
