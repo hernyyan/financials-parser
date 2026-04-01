@@ -604,49 +604,48 @@ export default function Step1Upload() {
     setPdfPageAssignments(newAssignments)
   }
 
-  async function handlePdfExtractionInner() {
-    if (!sessionId) return
-    const pages = Object.entries(pdfPageAssignments)
-      .filter(([, type]) => type === pdfActiveTab)
-      .map(([page]) => parseInt(page))
-      .sort((a, b) => a - b)
+  async function handlePdfRunAllInner() {
+    const stmtTypes: ('income_statement' | 'balance_sheet' | 'cash_flow_statement')[] =
+      ['income_statement', 'balance_sheet', 'cash_flow_statement']
 
-    if (pages.length === 0) {
-      const stmtLabel = pdfActiveTab === 'income_statement' ? 'Income Statement'
-        : pdfActiveTab === 'balance_sheet' ? 'Balance Sheet'
-        : 'Cash Flow Statement'
-      setStatus({ type: 'error', message: `No pages selected for ${stmtLabel}.` })
+    const toRun = stmtTypes.filter((type) =>
+      Object.values(pdfPageAssignments).includes(type),
+    )
+
+    if (toRun.length === 0) {
+      setStatus({ type: 'error', message: 'Select pages for at least one statement before running extraction.' })
       return
     }
 
-    setPdfExtracting((prev) => ({ ...prev, [pdfActiveTab]: true }))
+    const extracting: Record<string, boolean> = {}
+    for (const type of toRun) extracting[type] = true
+    setPdfExtracting(extracting)
     setStatus(null)
 
-    try {
-      const result = await runLayer1Pdf(sessionId, pages, pdfActiveTab, reportingPeriod)
-      mergeLayer1Result(pdfActiveTab, {
-        lineItems: result.lineItems,
-        sourceScaling: result.sourceScaling,
-        columnIdentified: result.columnIdentified,
-        sourceSheet: `PDF pages ${pages.join(', ')}`,
-      })
-      setPdfExtracting((prev) => ({ ...prev, [pdfActiveTab]: false }))
-    } catch (err) {
-      setPdfExtracting((prev) => ({ ...prev, [pdfActiveTab]: false }))
-      setStatus({
-        type: 'error',
-        message: `Extraction failed: ${err instanceof Error ? err.message : 'Unknown error'}`,
-      })
-    }
+    await Promise.allSettled(toRun.map(async (type) => {
+      const pages = Object.entries(pdfPageAssignments)
+        .filter(([, t]) => t === type)
+        .map(([p]) => parseInt(p))
+        .sort((a, b) => a - b)
+      try {
+        const result = await runLayer1Pdf(sessionId!, pages, type, reportingPeriod)
+        mergeLayer1Result(type, {
+          lineItems: result.lineItems,
+          sourceScaling: result.sourceScaling,
+          columnIdentified: result.columnIdentified,
+          sourceSheet: `PDF pages ${pages.join(', ')}`,
+        })
+      } catch (err) {
+        setStatus({ type: 'error', message: `Extraction failed for ${type}: ${err instanceof Error ? err.message : 'Unknown error'}` })
+      } finally {
+        setPdfExtracting((prev) => ({ ...prev, [type]: false }))
+      }
+    }))
   }
 
-  async function handlePdfExtraction() {
-    if (!sessionId) return
-    if (!reportingPeriod.trim() || !companyName.trim()) {
-      setStatus({
-        type: 'error',
-        message: 'Please enter company name and reporting period before running extraction.',
-      })
+  async function handlePdfRunAll() {
+    if (!sessionId || !reportingPeriod.trim() || !companyName.trim()) {
+      setStatus({ type: 'error', message: 'Please enter company name and reporting period before running extraction.' })
       return
     }
 
@@ -667,7 +666,7 @@ export default function Step1Upload() {
       }
     }
 
-    handlePdfExtractionInner()
+    handlePdfRunAllInner()
   }
 
   // ── Excel extraction ────────────────────────────────────────────────────
@@ -811,7 +810,7 @@ export default function Step1Upload() {
   function handleOverwrite() {
     setDuplicateCheck(null)
     if (pendingExtraction?.type === 'pdf') {
-      handlePdfExtractionInner()
+      handlePdfRunAllInner()
     } else if (pendingExtraction?.type === 'global') {
       runExtractionInner()
     }
@@ -1065,7 +1064,27 @@ export default function Step1Upload() {
         {/* Right panel */}
         {uploadFileType === 'pdf' ? (
           /* PDF extraction panel — unchanged */
-          <div className="flex-1 flex flex-col min-w-[320px] max-w-[420px]">
+          <div className="flex-1 flex flex-col min-w-[320px]">
+            {/* Global Run Extraction button — always visible at top */}
+            <div className="px-4 py-2.5 border-b border-border shrink-0">
+              <button
+                onClick={handlePdfRunAll}
+                disabled={
+                  Object.keys(pdfPageAssignments).length === 0 ||
+                  Object.values(pdfExtracting).some(Boolean)
+                }
+                className="w-full flex items-center justify-center gap-2 py-2 rounded-lg text-[13px] transition-colors disabled:opacity-50"
+                style={{ backgroundColor: '#030213', color: 'white', fontWeight: 500 }}
+              >
+                {Object.values(pdfExtracting).some(Boolean) ? (
+                  <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Running...</>
+                ) : (
+                  'Run Extraction'
+                )}
+              </button>
+            </div>
+
+            {/* Tab selector */}
             <TabSelector
               tabs={['Income Statement', 'Balance Sheet', 'Cash Flow Statement']}
               activeTab={
@@ -1088,6 +1107,7 @@ export default function Step1Upload() {
               smallText
             />
 
+            {/* Tab content — results or instructions */}
             {layer1Results[pdfActiveTab] ? (
               <div className="flex-1 overflow-auto p-4">
                 <Layer1ResultsTable result={layer1Results[pdfActiveTab]} />
@@ -1101,13 +1121,13 @@ export default function Step1Upload() {
               </div>
             ) : (
               <div className="flex-1 overflow-auto p-4">
-                <div className="space-y-4">
+                <div className="space-y-3">
                   <p className="text-[12px] text-muted-foreground">
                     Select pages from the PDF that contain the{' '}
                     {pdfActiveTab === 'income_statement' ? 'Income Statement'
                       : pdfActiveTab === 'balance_sheet' ? 'Balance Sheet'
                       : 'Cash Flow Statement'},
-                    then run extraction.
+                    then click Run Extraction above.
                   </p>
                   <div className="flex flex-wrap gap-1.5">
                     {Object.entries(pdfPageAssignments)
@@ -1129,14 +1149,6 @@ export default function Step1Upload() {
                         </span>
                       ))}
                   </div>
-                  <button
-                    onClick={handlePdfExtraction}
-                    disabled={!Object.values(pdfPageAssignments).includes(pdfActiveTab)}
-                    className="w-full py-2 rounded-lg text-[13px] transition-colors disabled:opacity-50"
-                    style={{ backgroundColor: '#030213', color: 'white', fontWeight: 500 }}
-                  >
-                    Run Extraction
-                  </button>
                 </div>
               </div>
             )}
@@ -1152,6 +1164,25 @@ export default function Step1Upload() {
               <p className="text-[11px] text-muted-foreground">
                 Assign tabs to statements, then run extraction
               </p>
+            </div>
+
+            {/* Run Extraction button — always visible, not scrolled away */}
+            <div className="shrink-0 px-[14px] py-2.5 border-b border-border">
+              <button
+                onClick={handleRunExtraction}
+                disabled={!canRunExtraction}
+                className="w-full flex items-center justify-center gap-2 rounded-lg text-[13px] transition-colors disabled:opacity-50"
+                style={{ backgroundColor: '#030213', color: 'white', fontWeight: 500, padding: '8px 0', borderRadius: 8 }}
+              >
+                {extractionStatus === 'running' ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    Running...
+                  </>
+                ) : (
+                  'Run Extraction'
+                )}
+              </button>
             </div>
 
             {/* Scrollable content */}
@@ -1200,31 +1231,6 @@ export default function Step1Upload() {
                   setFieldTabAssignment('cash_flow_statement', field, tab)
                 }
               />
-
-              {/* Run Extraction button */}
-              <div style={{ margin: '12px 14px' }}>
-                <button
-                  onClick={handleRunExtraction}
-                  disabled={!canRunExtraction}
-                  className="w-full flex items-center justify-center gap-2 rounded-lg text-[13px] transition-colors disabled:opacity-50"
-                  style={{
-                    backgroundColor: '#030213',
-                    color: 'white',
-                    fontWeight: 500,
-                    padding: '8px 0',
-                    borderRadius: 8,
-                  }}
-                >
-                  {extractionStatus === 'running' ? (
-                    <>
-                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                      Running...
-                    </>
-                  ) : (
-                    'Run Extraction'
-                  )}
-                </button>
-              </div>
             </div>
           </div>
         )}
