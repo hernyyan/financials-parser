@@ -9,6 +9,7 @@ interface DataTableRow {
   hasValidationFail?: boolean
   isClickable?: boolean
   isEdited?: boolean
+  isPending?: boolean
   isBold?: boolean
   isIndented?: boolean
   isItalic?: boolean

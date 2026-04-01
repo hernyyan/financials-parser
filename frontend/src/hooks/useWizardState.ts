@@ -30,7 +30,7 @@ interface WizardContextType extends WizardState {
   setUploadFileType: (type: 'excel' | 'pdf' | null) => void
   setPdfPageCount: (count: number) => void
   setPdfUrl: (url: string | null) => void
-  setPdfPageAssignments: (assignments: Record<number, 'income_statement' | 'balance_sheet'>) => void
+  setPdfPageAssignments: (assignments: Record<number, 'income_statement' | 'balance_sheet' | 'cash_flow_statement'>) => void
   setIsTabConfig: (config: import('../types').ISTabConfig | null) => void
   setFieldTabAssignments: (assignments: Record<string, Record<string, string>>) => void
   resetWizard: () => void
@@ -225,7 +225,7 @@ export function WizardProvider({ children }: { children: ReactNode }) {
     setState((s) => ({ ...s, pdfUrl: url }))
   }
 
-  function setPdfPageAssignments(assignments: Record<number, 'income_statement' | 'balance_sheet'>) {
+  function setPdfPageAssignments(assignments: Record<number, 'income_statement' | 'balance_sheet' | 'cash_flow_statement'>) {
     setState((s) => ({ ...s, pdfPageAssignments: assignments }))
   }
 
