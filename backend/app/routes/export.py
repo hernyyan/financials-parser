@@ -46,30 +46,32 @@ def get_export(session_id: str, db: Session = Depends(get_db)):
 
     output = io.StringIO()
     writer = csv.writer(output)
-    writer.writerow(["Field Name", "Value", "Status"])
+    # NO header row
 
     flat_values: dict = {}
 
     for stmt_label, stmt_key in [
         ("Income Statement", "income_statement"),
         ("Balance Sheet", "balance_sheet"),
+        ("Cash Flow Statement", "cash_flow_statement"),
     ]:
-        writer.writerow([stmt_label, "", ""])
-        sections = template_svc.template.get(stmt_key, {}).get("sections", [])
         stmt_values: dict = final_output.get(stmt_label, {})
+        if not stmt_values:
+            continue
+
         flat_values.update(stmt_values)
+        writer.writerow([stmt_label, ""])
+        sections = template_svc.template.get(stmt_key, {}).get("sections", [])
 
         for section in sections:
             header = section.get("header")
             if header:
-                writer.writerow([header, "", ""])
+                writer.writerow([header, ""])
             for field in section.get("fields", []):
                 value = stmt_values.get(field)
                 value_str = f"{value:.2f}" if value is not None else ""
-                status = "corrected" if field in corrected_fields else ""
-                writer.writerow([field, value_str, status])
-
-        writer.writerow(["", "", ""])  # blank separator between statements
+                writer.writerow([field, value_str])
+            writer.writerow(["", ""])  # blank row after each section
 
     return ExportResponse(
         session_id=session_id,

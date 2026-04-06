@@ -412,11 +412,15 @@ export default function Step1Upload() {
     }
   }
 
-  // canApprove: any statement has a completed layer1 result
+  // canApprove: any statement has a completed layer1 result and no extraction is running
   const canApprove = !!(
-    layer1Results['income_statement'] ||
-    layer1Results['balance_sheet'] ||
-    layer1Results['cash_flow_statement']
+    (
+      layer1Results['income_statement'] ||
+      layer1Results['balance_sheet'] ||
+      layer1Results['cash_flow_statement']
+    ) &&
+    extractionStatus !== 'running' &&
+    !Object.values(pdfExtracting).some(Boolean)
   )
 
   // extractedSheetNames: tabs whose statement type has a completed layer1Result

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useWizardState } from '../../hooks/useWizardState'
 import LoadingSpinner from '../shared/LoadingSpinner'
-import { finalizeOutput, getTemplate } from '../../api/client'
+import { finalizeOutput, getTemplate, getExport } from '../../api/client'
 import { formatFieldValue, formatDollar } from '../../utils/formatters'
 import { IS_TEMPLATE_FIELDS, BS_TEMPLATE_FIELDS } from '../../mocks/mockData'
 import { BOLD_FIELDS, ITALIC_FIELDS, isIndented } from '../../utils/templateStyling'
@@ -59,6 +59,7 @@ export default function Step3Finalize() {
   } = useWizardState()
 
   const [saving, setSaving] = useState(false)
+  const [exporting, setExporting] = useState(false)
   const [status, setStatus] = useState<StatusMessage>(null)
   const [finalized, setFinalized] = useState(false)
   const [finalizedAt, setFinalizedAt] = useState<string | null>(null)
@@ -224,6 +225,25 @@ export default function Step3Finalize() {
 
   const rows = buildRows()
 
+  async function handleExportCsv() {
+    if (!sessionId) return
+    setExporting(true)
+    try {
+      const data = await getExport(sessionId)
+      const blob = new Blob([data.csv_content], { type: 'text/csv' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `${companyName}_${reportingPeriod}.csv`.replace(/\s+/g, '_')
+      a.click()
+      URL.revokeObjectURL(url)
+    } catch {
+      setStatus({ type: 'error', message: 'Export failed.' })
+    } finally {
+      setExporting(false)
+    }
+  }
+
   async function handleFinalize() {
     setSaving(true)
     setStatus(null)
@@ -286,6 +306,19 @@ export default function Step3Finalize() {
               <CheckCircle2 className="w-3.5 h-3.5" />
               Finalized
             </span>
+            <button
+              onClick={handleExportCsv}
+              disabled={exporting}
+              className="flex items-center gap-2 px-4 py-1.5 rounded-lg border border-border text-[13px] hover:bg-gray-50 transition-colors disabled:opacity-50"
+              style={{ fontWeight: 500 }}
+            >
+              {exporting ? (
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              ) : (
+                <Download className="w-3.5 h-3.5" />
+              )}
+              {exporting ? 'Exporting...' : 'Download CSV'}
+            </button>
             <button
               onClick={resetWizard}
               className="flex items-center gap-2 bg-primary text-white px-4 py-1.5 rounded-lg text-[13px] hover:bg-primary/90 transition-colors"
