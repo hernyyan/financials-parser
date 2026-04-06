@@ -373,9 +373,21 @@ def admin_export_review(session_id: str, db: Session = Depends(get_db)):
 
     template_svc = get_template_service()
 
+    BLANK_ROW_BEFORE = {
+        "Total Revenue",
+        "LTM - Adj EBITDA items",
+        "Balance Sheet",
+        "Property, Plant & Equipment",
+        "LIABILITIES",
+        "Total Current Liabilities",
+        "Long Term Loans",
+        "EQUITY",
+        "Cash Flow Statement",
+        "CAPEX",
+    }
+
     output = StringIO()
     writer = csv.writer(output)
-    # NO header row
 
     for stmt_label, stmt_key in [
         ("Income Statement", "income_statement"),
@@ -386,18 +398,24 @@ def admin_export_review(session_id: str, db: Session = Depends(get_db)):
         if not stmt_values:
             continue
 
+        if stmt_label in BLANK_ROW_BEFORE:
+            writer.writerow(["", ""])
         writer.writerow([stmt_label, ""])
+
         sections = template_svc.template.get(stmt_key, {}).get("sections", [])
 
         for section in sections:
             header = section.get("header")
             if header:
+                if header in BLANK_ROW_BEFORE:
+                    writer.writerow(["", ""])
                 writer.writerow([header, ""])
             for field in section.get("fields", []):
+                if field in BLANK_ROW_BEFORE:
+                    writer.writerow(["", ""])
                 value = stmt_values.get(field)
                 value_str = f"{value:.2f}" if value is not None else ""
                 writer.writerow([field, value_str])
-            writer.writerow(["", ""])  # blank row after each section
 
     safe_company = re.sub(r"[^\w\s-]", "", company_name).strip().replace(" ", "_")
     safe_period = re.sub(r"[^\w\s-]", "", reporting_period).strip().replace(" ", "_")

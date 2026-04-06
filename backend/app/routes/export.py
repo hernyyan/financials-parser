@@ -47,9 +47,21 @@ def get_export(session_id: str, db: Session = Depends(get_db)):
 
     template_svc = get_template_service()
 
+    BLANK_ROW_BEFORE = {
+        "Total Revenue",
+        "LTM - Adj EBITDA items",
+        "Balance Sheet",
+        "Property, Plant & Equipment",
+        "LIABILITIES",
+        "Total Current Liabilities",
+        "Long Term Loans",
+        "EQUITY",
+        "Cash Flow Statement",
+        "CAPEX",
+    }
+
     output = io.StringIO()
     writer = csv.writer(output)
-    # NO header row
 
     flat_values: dict = {}
 
@@ -63,18 +75,25 @@ def get_export(session_id: str, db: Session = Depends(get_db)):
             continue
 
         flat_values.update(stmt_values)
+
+        if stmt_label in BLANK_ROW_BEFORE:
+            writer.writerow(["", ""])
         writer.writerow([stmt_label, ""])
+
         sections = template_svc.template.get(stmt_key, {}).get("sections", [])
 
         for section in sections:
             header = section.get("header")
             if header:
+                if header in BLANK_ROW_BEFORE:
+                    writer.writerow(["", ""])
                 writer.writerow([header, ""])
             for field in section.get("fields", []):
+                if field in BLANK_ROW_BEFORE:
+                    writer.writerow(["", ""])
                 value = stmt_values.get(field)
                 value_str = f"{value:.2f}" if value is not None else ""
                 writer.writerow([field, value_str])
-            writer.writerow(["", ""])  # blank row after each section
 
     return ExportResponse(
         session_id=session_id,
