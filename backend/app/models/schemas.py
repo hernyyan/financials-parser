@@ -124,6 +124,7 @@ class TemplateStatement(BaseModel):
 class TemplateResponse(BaseModel):
     income_statement: TemplateStatement
     balance_sheet: TemplateStatement
+    cash_flow_statement: Optional[TemplateStatement] = None
 
 
 # ─── Finalize ─────────────────────────────────────────────────────────────────
