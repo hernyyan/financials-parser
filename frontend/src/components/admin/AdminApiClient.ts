@@ -155,6 +155,11 @@ export function adminExportReviewUrl(sessionId: string): string {
   return `${API_BASE}/admin/reviews/${sessionId}/export`
 }
 
+export async function adminDeleteReview(sessionId: string): Promise<{ success: boolean; deleted_session_id: string }> {
+  const res = await fetch(`${API_BASE}/admin/reviews/${sessionId}`, { method: 'DELETE' })
+  return handleResponse(res)
+}
+
 // ── General Fixes ──────────────────────────────────────────────────────────
 
 export async function adminGetGeneralFixes(params?: { company?: string; limit?: number }): Promise<{ total_entries: number; entries: Record<string, string>[] }> {

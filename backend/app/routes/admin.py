@@ -767,7 +767,28 @@ def admin_create_company(
     return {"id": new_id, "name": name, "markdown_filename": md_filename}
 
 
-# ── Endpoint 14: DELETE /admin/companies/{company_id} ─────────────────────────
+# ── Endpoint 14: DELETE /admin/reviews/{session_id} ──────────────────────────
+
+@router.delete("/reviews/{session_id}")
+def admin_delete_review(session_id: str, db: Session = Depends(get_db)):
+    """Delete a review by session_id."""
+    row = db.execute(
+        text("SELECT id FROM reviews WHERE session_id = :sid"),
+        {"sid": session_id},
+    ).fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="Review not found.")
+
+    db.execute(
+        text("DELETE FROM reviews WHERE session_id = :sid"),
+        {"sid": session_id},
+    )
+    db.commit()
+
+    return {"success": True, "deleted_session_id": session_id}
+
+
+# ── Endpoint 15: DELETE /admin/companies/{company_id} ─────────────────────────
 
 @router.delete("/companies/{company_id}")
 def admin_delete_company(company_id: int, db: Session = Depends(get_db)):

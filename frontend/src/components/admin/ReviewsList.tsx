@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
-import { Loader2, Download, ChevronUp, ChevronDown } from 'lucide-react'
-import { adminGetReviews, adminExportReviewUrl, AdminReview } from './AdminApiClient'
+import { Loader2, Download, Trash2 } from 'lucide-react'
+import { adminGetReviews, adminExportReviewUrl, adminDeleteReview, AdminReview } from './AdminApiClient'
 
 const STATUS_OPTIONS = ['', 'finalized', 'step2_complete', 'step1_complete', 'new']
 type SortField = 'company_name' | 'reporting_period' | 'status' | 'corrections_count' | 'created_at'
@@ -31,6 +31,8 @@ export default function ReviewsList() {
   const [correctionsFilter, setCorrectionsFilter] = useState<CorrectionsFilter>('all')
   const [sortField, setSortField] = useState<SortField>('created_at')
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc')
+  const [confirmDelete, setConfirmDelete] = useState<string | null>(null)
+  const [deleting, setDeleting] = useState<string | null>(null)
 
   useEffect(() => {
     setLoading(true)
@@ -43,6 +45,24 @@ export default function ReviewsList() {
       setTotal(data.total)
     }).catch(console.error).finally(() => setLoading(false))
   }, [statusFilter, companyFilter])
+
+  async function handleDelete(sessionId: string) {
+    if (confirmDelete !== sessionId) {
+      setConfirmDelete(sessionId)
+      return
+    }
+    setDeleting(sessionId)
+    try {
+      await adminDeleteReview(sessionId)
+      setReviews((prev) => prev.filter((r) => r.session_id !== sessionId))
+      setTotal((prev) => prev - 1)
+    } catch (err) {
+      console.error(err)
+    } finally {
+      setDeleting(null)
+      setConfirmDelete(null)
+    }
+  }
 
   function handleSort(field: SortField) {
     if (sortField === field) {
@@ -148,6 +168,7 @@ export default function ReviewsList() {
                 </th>
                 <th className="text-right px-3 py-2 text-muted-foreground whitespace-nowrap" style={{ fontWeight: 500 }}>Finalized</th>
                 <th className="px-3 py-2" />
+                <th className="px-3 py-2" />
               </tr>
             </thead>
             <tbody>
@@ -183,11 +204,33 @@ export default function ReviewsList() {
                       </a>
                     )}
                   </td>
+                  <td className="px-3 py-1.5 text-right">
+                    {deleting === r.session_id ? (
+                      <Loader2 className="w-3 h-3 animate-spin text-muted-foreground inline" />
+                    ) : confirmDelete === r.session_id ? (
+                      <button
+                        onClick={() => handleDelete(r.session_id)}
+                        onBlur={() => setConfirmDelete(null)}
+                        className="text-[11px] text-red-600 hover:text-red-700"
+                        style={{ fontWeight: 500 }}
+                        autoFocus
+                      >
+                        Confirm?
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => handleDelete(r.session_id)}
+                        className="text-muted-foreground hover:text-red-600 transition-colors"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                  </td>
                 </tr>
               ))}
               {displayed.length === 0 && (
                 <tr>
-                  <td colSpan={8} className="px-3 py-8 text-center text-muted-foreground">No reviews found.</td>
+                  <td colSpan={9} className="px-3 py-8 text-center text-muted-foreground">No reviews found.</td>
                 </tr>
               )}
             </tbody>
