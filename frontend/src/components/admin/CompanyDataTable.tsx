@@ -18,12 +18,20 @@ function parseReportingPeriod(period: string): { year: number; month: number; ke
   const months: Record<string, number> = {
     january: 1, february: 2, march: 3, april: 4, may: 5, june: 6,
     july: 7, august: 8, september: 9, october: 10, november: 11, december: 12,
+    jan: 1, feb: 2, mar: 3, apr: 4, jun: 6, jul: 7, aug: 8,
+    sep: 9, oct: 10, nov: 11, dec: 12,
   }
-  const parts = period.trim().split(/\s+/)
-  if (parts.length !== 2) return null
-  const month = months[parts[0].toLowerCase()]
-  const year = parseInt(parts[1])
-  if (!month || isNaN(year)) return null
+  const parts = period.trim().split(/[\s\-_]+/)
+  if (parts.length < 2) return null
+  let month: number | undefined
+  let year: number | undefined
+  for (const part of parts) {
+    const asNum = parseInt(part)
+    if (!isNaN(asNum) && asNum > 1900) { year = asNum; continue }
+    const m = months[part.toLowerCase()]
+    if (m) { month = m; continue }
+  }
+  if (!month || !year) return null
   return { year, month, key: `${year}-${String(month).padStart(2, '0')}` }
 }
 
@@ -76,7 +84,10 @@ export default function CompanyDataTable({ periods }: Props) {
 
   for (const p of periods) {
     const parsed = parseReportingPeriod(p.reporting_period)
-    if (!parsed) continue
+    if (!parsed) {
+      console.warn('CompanyDataTable: failed to parse period:', p.reporting_period)
+      continue
+    }
     periodByKey.set(parsed.key, p)
     if (!minParsed || parsed.key < `${minParsed.year}-${String(minParsed.month).padStart(2, '0')}`) minParsed = parsed
     if (!maxParsed || parsed.key > `${maxParsed.year}-${String(maxParsed.month).padStart(2, '0')}`) maxParsed = parsed
@@ -101,13 +112,15 @@ export default function CompanyDataTable({ periods }: Props) {
     }
   } else {
     // L1: collect all unique lineItem keys across all periods
+    // layer1_data is keyed by tab name: { tabName: { lineItems: {...}, ... }, ... }
     const allKeys = new Set<string>()
     for (const p of periods) {
       const data = p.layer1_data
       if (!data) continue
-      const lineItems = (data as Record<string, unknown>).lineItems
-      if (lineItems && typeof lineItems === 'object') {
-        Object.keys(lineItems as object).forEach((k) => allKeys.add(k))
+      for (const tabKey of Object.keys(data as object)) {
+        const tab = (data as Record<string, unknown>)[tabKey] as Record<string, unknown> | undefined
+        const lineItems = tab?.lineItems as Record<string, unknown> | undefined
+        if (lineItems) Object.keys(lineItems).forEach((k) => allKeys.add(k))
       }
     }
     labels = Array.from(allKeys)
@@ -119,8 +132,14 @@ export default function CompanyDataTable({ periods }: Props) {
     const data = view === 'l1' ? p.layer1_data : p.layer2_data
     if (!data) return null
     if (view === 'l1') {
-      const lineItems = (data as Record<string, unknown>).lineItems as Record<string, unknown> | undefined
-      return lineItems?.[label] ?? null
+      // layer1_data is stored as { tabName: { lineItems: {...}, ... }, ... }
+      const d = data as Record<string, unknown>
+      for (const tabKey of Object.keys(d)) {
+        const tab = d[tabKey] as Record<string, unknown> | undefined
+        const lineItems = tab?.lineItems as Record<string, unknown> | undefined
+        if (lineItems && label in lineItems) return lineItems[label]
+      }
+      return null
     }
     const is = (data as Record<string, unknown>).income_statement as Record<string, unknown> | undefined
     const bs = (data as Record<string, unknown>).balance_sheet as Record<string, unknown> | undefined
