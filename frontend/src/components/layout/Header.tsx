@@ -39,7 +39,7 @@ export default function Header() {
               key={step}
               className={`flex items-center gap-2 px-4 py-2 border-b-2 transition-colors ${
                 isComplete
-                  ? 'border-[#065f46] text-[#065f46]'
+                  ? 'border-[#e2e8f0] text-[#94a3b8]'
                   : isActive
                   ? 'border-[#1a1f35] text-[#1a1f35]'
                   : 'border-transparent text-[#94a3b8]'
@@ -48,7 +48,7 @@ export default function Header() {
               <div
                 className={`w-5 h-5 rounded-full flex items-center justify-center text-[11px] shrink-0 ${
                   isComplete
-                    ? 'bg-[#065f46] text-white'
+                    ? 'bg-[#f1f5f9] text-[#64748b]'
                     : isActive
                     ? 'bg-[#1a1f35] text-white'
                     : 'bg-[#f1f5f9] text-[#94a3b8]'

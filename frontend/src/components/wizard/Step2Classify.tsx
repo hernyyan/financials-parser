@@ -539,9 +539,9 @@ export default function Step2Classify() {
           <h2 className="text-[16px] mb-1" style={{ fontWeight: 600 }}>Classifying Financial Data</h2>
           <p className="text-[13px] text-muted-foreground mb-6">{elapsedSeconds}s elapsed</p>
           <div className="w-[300px] space-y-3">
-            <div className="flex items-center gap-3 p-3 rounded-lg bg-gray-50 border border-border">
+            <div className="flex items-center gap-3 p-3 border border-[#e2e8f0]" style={{ backgroundColor: '#f8fafc', borderRadius: '4px' }}>
               {isStatus === 'done' ? (
-                <CheckCircle2 className="w-5 h-5 text-emerald-500 shrink-0" />
+                <CheckCircle2 className="w-5 h-5 shrink-0" style={{ color: '#065f46' }} />
               ) : (
                 <Loader2 className="w-5 h-5 text-primary animate-spin shrink-0" />
               )}
@@ -552,9 +552,9 @@ export default function Step2Classify() {
                 </p>
               </div>
             </div>
-            <div className="flex items-center gap-3 p-3 rounded-lg bg-gray-50 border border-border">
+            <div className="flex items-center gap-3 p-3 border border-[#e2e8f0]" style={{ backgroundColor: '#f8fafc', borderRadius: '4px' }}>
               {bsStatus === 'done' ? (
-                <CheckCircle2 className="w-5 h-5 text-emerald-500 shrink-0" />
+                <CheckCircle2 className="w-5 h-5 shrink-0" style={{ color: '#065f46' }} />
               ) : (
                 <Loader2 className="w-5 h-5 text-primary animate-spin shrink-0" />
               )}
@@ -566,9 +566,9 @@ export default function Step2Classify() {
               </div>
             </div>
             {layer1Results['cash_flow_statement'] && (
-              <div className="flex items-center gap-3 p-3 rounded-lg bg-gray-50 border border-border">
+              <div className="flex items-center gap-3 p-3 border border-[#e2e8f0]" style={{ backgroundColor: '#f8fafc', borderRadius: '4px' }}>
                 {cfsStatus === 'done' ? (
-                  <CheckCircle2 className="w-5 h-5 text-emerald-500 shrink-0" />
+                  <CheckCircle2 className="w-5 h-5 shrink-0" style={{ color: '#065f46' }} />
                 ) : (
                   <Loader2 className="w-5 h-5 text-primary animate-spin shrink-0" />
                 )}
@@ -621,28 +621,28 @@ export default function Step2Classify() {
         <div className="flex-1" />
 
         {hasAnyResults && !isClassifying && !showBackConfirm && (
-          <div className="flex items-center gap-3 text-[12px]">
+          <div className="flex items-center gap-3 text-[11px]">
             {passCount > 0 && (
-              <span className="flex items-center gap-1 text-emerald-600">
-                <CheckCircle2 className="w-3.5 h-3.5" />
+              <span className="flex items-center gap-1 px-2 py-0.5 rounded-[3px] bg-[#d1fae5]" style={{ color: '#065f46', fontWeight: 600 }}>
+                <CheckCircle2 className="w-3 h-3" />
                 {passCount} passed
               </span>
             )}
             {failCount > 0 && (
-              <span className="flex items-center gap-1 text-red-500">
-                <XCircle className="w-3.5 h-3.5" />
+              <span className="flex items-center gap-1 px-2 py-0.5 rounded-[3px] bg-[#fee2e2]" style={{ color: '#991b1b', fontWeight: 600 }}>
+                <XCircle className="w-3 h-3" />
                 {failCount} failed
               </span>
             )}
             {flaggedCount > 0 && (
-              <span className="flex items-center gap-1 text-amber-500">
-                <Flag className="w-3.5 h-3.5" />
+              <span className="flex items-center gap-1 px-2 py-0.5 rounded-[3px] bg-[#fef3c7]" style={{ color: '#92400e', fontWeight: 600 }}>
+                <Flag className="w-3 h-3" />
                 {flaggedCount} flagged
               </span>
             )}
             {corrections.length > 0 && (
-              <span className="flex items-center gap-1 text-purple-600">
-                <Edit3 className="w-3.5 h-3.5" />
+              <span className="flex items-center gap-1 px-2 py-0.5 rounded-[3px] bg-[#ede9fe]" style={{ color: '#5b21b6', fontWeight: 600 }}>
+                <Edit3 className="w-3 h-3" />
                 {corrections.length} correction{corrections.length !== 1 ? 's' : ''}
               </span>
             )}
@@ -652,7 +652,8 @@ export default function Step2Classify() {
         {hasAnyError && (
           <button
             onClick={handleRetry}
-            className="text-[13px] border border-blue-400 text-blue-600 hover:bg-blue-50 px-3 py-1.5 rounded-lg transition-colors"
+            className="text-[12px] border border-[#e2e8f0] px-3 py-1.5 transition-colors hover:bg-[#f8fafc]"
+            style={{ color: '#1a1f35', borderRadius: '4px', fontWeight: 500 }}
           >
             Retry
           </button>
@@ -660,8 +661,8 @@ export default function Step2Classify() {
         <button
           onClick={handleApproveStep2}
           disabled={isClassifying || !hasAnyResults || approvingStep2}
-          className="flex items-center gap-2 bg-emerald-600 text-white px-4 py-1.5 rounded-lg text-[13px] hover:bg-emerald-700 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-          style={{ fontWeight: 500 }}
+          className="flex items-center gap-2 px-4 py-1.5 text-[12px] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+          style={{ fontWeight: 600, backgroundColor: '#1a1f35', color: '#ffffff', borderRadius: '4px' }}
         >
           {approvingStep2 ? (
             <Loader2 className="w-3.5 h-3.5 animate-spin" />
@@ -730,7 +731,8 @@ export default function Step2Classify() {
                 {cfsError && <p className="text-[12px] text-red-500">Cash Flow Statement: {cfsError}</p>}
                 <button
                   onClick={handleRetry}
-                  className="mt-2 text-[13px] bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700"
+                  className="mt-2 text-[12px] border border-[#e2e8f0] px-4 py-2 hover:bg-[#f8fafc] transition-colors"
+                  style={{ color: '#1a1f35', borderRadius: '4px', fontWeight: 500 }}
                 >
                   Retry Classification
                 </button>
