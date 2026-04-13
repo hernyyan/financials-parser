@@ -24,6 +24,8 @@ interface DataTableProps {
   noScroll?: boolean
   /** 'blue' = SM tech tag bg (classified template), 'gray' = canvas bg (source data) */
   stmtHeaderStyle?: 'blue' | 'gray'
+  /** Source rows to highlight with soft purple (mapped from selected template field) */
+  highlightedLabels?: Set<string>
 }
 
 export default function DataTable({
@@ -34,6 +36,7 @@ export default function DataTable({
   scrollRef,
   noScroll = false,
   stmtHeaderStyle = 'blue',
+  highlightedLabels,
 }: DataTableProps) {
   return (
     <div ref={scrollRef} className={noScroll ? className : `overflow-auto flex-1 ${className}`}>
@@ -41,20 +44,7 @@ export default function DataTable({
         <tbody>
           {rows.map((row, idx) => {
             if (row.isStatementHeader) {
-              if (stmtHeaderStyle === 'gray') {
-                return (
-                  <tr key={idx} className="border-b border-[#e2e8f0]" style={{ backgroundColor: '#f8fafc' }}>
-                    <td
-                      colSpan={2}
-                      className="px-4 py-2 text-[#64748b] text-[10px] uppercase"
-                      style={{ fontWeight: 600, letterSpacing: '1.5px' }}
-                    >
-                      ◆ {row.label}
-                    </td>
-                  </tr>
-                )
-              }
-              // 'blue' style — SM tech tag: #dbeafe bg, #1e40af text
+              // Both source and template statement headers use SM tech blue
               return (
                 <tr key={idx} className="border-b border-[#e2e8f0]" style={{ backgroundColor: '#dbeafe' }}>
                   <td
@@ -83,21 +73,27 @@ export default function DataTable({
             }
 
             const isSelected = selectedCell === row.label
+            const isHighlighted = !isSelected && highlightedLabels?.has(row.label)
 
             // SM tag palette mapping:
-            // selected  → tech   (#dbeafe / #1e40af)
-            // pending   → talent (#fef3c7 / #92400e)
-            // flagged   → talent (#fef3c7 / #92400e)
-            // fail      → finance (#fee2e2 / #991b1b)
-            // edited    → ai     (#ede9fe / #5b21b6)
+            // selected    → ai-purple   (#ede9fe / #5b21b6)  — active edit target
+            // highlighted → soft purple (#f5f3ff / #c4b5fd)  — mapped source rows
+            // pending     → talent      (#fef3c7 / #92400e)  — live edit in progress
+            // flagged     → talent      (#fef3c7 / #92400e)
+            // fail        → finance     (#fee2e2 / #991b1b)
+            // edited      → ai-purple   (#ede9fe / #5b21b6)
             let rowBg = ''
             let borderLeft = 'border-l-2 border-l-transparent'
             let hoverBg = 'hover:bg-[#f8fafc]'
 
             if (isSelected) {
-              rowBg = 'bg-[#dbeafe]'
-              borderLeft = 'border-l-2 border-l-[#1e40af]'
+              rowBg = 'bg-[#ede9fe]'
+              borderLeft = 'border-l-2 border-l-[#5b21b6]'
               hoverBg = ''
+            } else if (isHighlighted) {
+              rowBg = 'bg-[#f5f3ff]'
+              borderLeft = 'border-l-2 border-l-[#c4b5fd]'
+              hoverBg = 'hover:bg-[#ede9fe]/50'
             } else if (row.isPending) {
               rowBg = 'bg-[#fef3c7]/60'
               borderLeft = 'border-l-2 border-l-[#92400e]'

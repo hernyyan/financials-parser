@@ -39,21 +39,25 @@ export default function Header() {
               key={step}
               className={`flex items-center gap-2 px-4 py-2 border-b-2 transition-colors ${
                 isComplete
-                  ? 'border-[#e2e8f0] text-[#94a3b8]'
+                  ? 'border-[#065f46]'
                   : isActive
                   ? 'border-[#1a1f35] text-[#1a1f35]'
                   : 'border-transparent text-[#94a3b8]'
               }`}
+              style={isComplete ? { color: '#065f46' } : {}}
             >
               <div
                 className={`w-5 h-5 rounded-full flex items-center justify-center text-[11px] shrink-0 ${
-                  isComplete
-                    ? 'bg-[#f1f5f9] text-[#64748b]'
-                    : isActive
+                  isActive
                     ? 'bg-[#1a1f35] text-white'
-                    : 'bg-[#f1f5f9] text-[#94a3b8]'
+                    : !isComplete
+                    ? 'bg-[#f1f5f9] text-[#94a3b8]'
+                    : ''
                 }`}
-                style={{ fontWeight: 600 }}
+                style={{
+                  fontWeight: 600,
+                  ...(isComplete ? { backgroundColor: '#d1fae5', color: '#065f46' } : {}),
+                }}
               >
                 {isComplete ? <Check className="w-3 h-3" /> : stepNum}
               </div>

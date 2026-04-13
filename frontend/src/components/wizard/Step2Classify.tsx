@@ -352,6 +352,34 @@ export default function Step2Classify() {
     ? corrections.find((c) => c.fieldName === selectedCell)
     : undefined
 
+  // Compute which source line item labels map to the selected template field
+  const relevantSourceLabels: Set<string> = (() => {
+    if (!selectedCell || !activeLayer2 || !selectedCellType) return new Set()
+    const sourceData = layer1Results[selectedCellType]
+    if (!sourceData) return new Set()
+    const labels = new Set<string>()
+    const meta = activeLayer2.calculationMeta?.[selectedCell]
+    if (meta?.inputs && Object.keys(meta.inputs).length > 0) {
+      // Calculated field: match each input field's aiMatchedValue to source rows
+      for (const inputField of Object.keys(meta.inputs)) {
+        const aiVal = activeLayer2.aiMatchedValues?.[inputField]
+        if (aiVal === null || aiVal === undefined) continue
+        for (const [label, value] of Object.entries(sourceData.lineItems)) {
+          if (Math.abs(value - aiVal) < 0.5) labels.add(label)
+        }
+      }
+    } else {
+      // Matched field: find source row whose value equals aiMatchedValues[field]
+      const aiVal = activeLayer2.aiMatchedValues?.[selectedCell]
+      if (aiVal !== null && aiVal !== undefined) {
+        for (const [label, value] of Object.entries(sourceData.lineItems)) {
+          if (Math.abs(value - aiVal) < 0.5) labels.add(label)
+        }
+      }
+    }
+    return labels
+  })()
+
   const allValidation = { ...(isLayer2?.validation ?? {}), ...(bsLayer2?.validation ?? {}) }
   const passCount = Object.values(allValidation).filter((v) => v.status === 'PASS').length
   const failCount = Object.values(allValidation).filter((v) => v.status === 'FAIL').length
@@ -662,7 +690,7 @@ export default function Step2Classify() {
           onClick={handleApproveStep2}
           disabled={isClassifying || !hasAnyResults || approvingStep2}
           className="flex items-center gap-2 px-4 py-1.5 text-[12px] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-          style={{ fontWeight: 600, backgroundColor: '#1a1f35', color: '#ffffff', borderRadius: '4px' }}
+          style={{ fontWeight: 600, backgroundColor: '#065f46', color: '#ffffff', borderRadius: '4px' }}
         >
           {approvingStep2 ? (
             <Loader2 className="w-3.5 h-3.5 animate-spin" />
@@ -699,9 +727,12 @@ export default function Step2Classify() {
               </div>
             ) : (
               <>
-                <DataTable rows={sourceIsRows} noScroll stmtHeaderStyle="gray" />
-                <DataTable rows={sourceBsRows} noScroll stmtHeaderStyle="gray" />
-                <DataTable rows={sourceCfsRows} noScroll stmtHeaderStyle="gray" />
+                <DataTable rows={sourceIsRows} noScroll stmtHeaderStyle="gray"
+                  highlightedLabels={selectedCellType === 'income_statement' ? relevantSourceLabels : undefined} />
+                <DataTable rows={sourceBsRows} noScroll stmtHeaderStyle="gray"
+                  highlightedLabels={selectedCellType === 'balance_sheet' ? relevantSourceLabels : undefined} />
+                <DataTable rows={sourceCfsRows} noScroll stmtHeaderStyle="gray"
+                  highlightedLabels={selectedCellType === 'cash_flow_statement' ? relevantSourceLabels : undefined} />
               </>
             )}
           </div>
