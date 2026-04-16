@@ -72,6 +72,18 @@ CREATE TABLE IF NOT EXISTS is_tab_configs (
 );
 """
 
+_SQLITE_CREATE_STATEMENT_TAB_CONFIGS = """
+CREATE TABLE IF NOT EXISTS statement_tab_configs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    company_id INTEGER NOT NULL,
+    statement_type TEXT NOT NULL,
+    config JSON NOT NULL,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (company_id) REFERENCES companies(id),
+    UNIQUE(company_id, statement_type)
+);
+"""
+
 # ── PostgreSQL CREATE TABLE statements ────────────────────────────────────────
 
 _PG_CREATE_REVIEWS = """
@@ -128,6 +140,18 @@ CREATE TABLE IF NOT EXISTS is_tab_configs (
 );
 """
 
+_PG_CREATE_STATEMENT_TAB_CONFIGS = """
+CREATE TABLE IF NOT EXISTS statement_tab_configs (
+    id SERIAL PRIMARY KEY,
+    company_id INTEGER NOT NULL,
+    statement_type TEXT NOT NULL,
+    config JSONB NOT NULL,
+    updated_at TIMESTAMP DEFAULT NOW(),
+    FOREIGN KEY (company_id) REFERENCES companies(id),
+    UNIQUE(company_id, statement_type)
+);
+"""
+
 # ── Idempotent migrations for pre-existing databases ─────────────────────────
 
 _MIGRATIONS = [
@@ -144,17 +168,20 @@ def init_db() -> None:
         create_companies = _SQLITE_CREATE_COMPANIES
         create_corrections = _SQLITE_CREATE_CORRECTIONS
         create_is_tab_configs = _SQLITE_CREATE_IS_TAB_CONFIGS
+        create_statement_tab_configs = _SQLITE_CREATE_STATEMENT_TAB_CONFIGS
     else:
         create_reviews = _PG_CREATE_REVIEWS
         create_companies = _PG_CREATE_COMPANIES
         create_corrections = _PG_CREATE_CORRECTIONS
         create_is_tab_configs = _PG_CREATE_IS_TAB_CONFIGS
+        create_statement_tab_configs = _PG_CREATE_STATEMENT_TAB_CONFIGS
 
     with engine.connect() as conn:
         conn.execute(text(create_reviews))
         conn.execute(text(create_companies))
         conn.execute(text(create_corrections))
         conn.execute(text(create_is_tab_configs))
+        conn.execute(text(create_statement_tab_configs))
         for migration in _MIGRATIONS:
             try:
                 conn.execute(text(migration))

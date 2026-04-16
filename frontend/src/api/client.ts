@@ -14,7 +14,6 @@ import type {
   CorrectionProcessRequest,
   CorrectionProcessResponse,
   CompanyContextStatus,
-  ISTabConfig,
 } from '../types'
 
 export const API_BASE = import.meta.env.VITE_API_URL || '/api'
@@ -250,15 +249,24 @@ export async function recalculate(
   return handleResponse(res)
 }
 
-// GET /companies/{id}/is-tab-config
-export async function getISTabConfig(companyId: number): Promise<ISTabConfig> {
-  const res = await fetch(`${API_BASE}/companies/${companyId}/is-tab-config`)
+export interface StatementTabConfig {
+  tabs: string[]
+  fieldAssignments: Record<string, string>
+}
+
+// GET /companies/{id}/statement-tab-configs
+export async function getStatementTabConfigs(companyId: number): Promise<Record<string, StatementTabConfig>> {
+  const res = await fetch(`${API_BASE}/companies/${companyId}/statement-tab-configs`)
   return handleResponse(res)
 }
 
-// POST /companies/{id}/is-tab-config
-export async function saveISTabConfig(companyId: number, config: ISTabConfig): Promise<void> {
-  const res = await fetch(`${API_BASE}/companies/${companyId}/is-tab-config`, {
+// POST /companies/{id}/statement-tab-configs/{statement_type}
+export async function saveStatementTabConfig(
+  companyId: number,
+  statementType: string,
+  config: StatementTabConfig,
+): Promise<void> {
+  const res = await fetch(`${API_BASE}/companies/${companyId}/statement-tab-configs/${statementType}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(config),

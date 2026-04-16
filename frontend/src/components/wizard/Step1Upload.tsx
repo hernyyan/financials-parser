@@ -13,11 +13,13 @@ import {
   getCompanyContextStatus,
   checkExistingReview,
   continuePreviousReview,
-  getISTabConfig,
-  saveISTabConfig,
+  getStatementTabConfigs,
+  saveStatementTabConfig,
 } from '../../api/client'
+import type { StatementTabConfig } from '../../api/client'
 import { API_BASE } from '../../api/client'
-import type { Company, CompanyContextStatus, Layer1Result, Layer2Result, Correction, ISTabConfig } from '../../types'
+import type { Company, CompanyContextStatus, Layer1Result, Layer2Result, Correction } from '../../types'
+import { applyStatementTabConfig } from '../../utils/fuzzyMatch'
 import {
   Upload,
   Search,
@@ -247,7 +249,6 @@ export default function Step1Upload() {
     setPdfPageCount,
     setPdfUrl,
     setPdfPageAssignments,
-    setIsTabConfig,
     setFieldTabAssignments,
     approveStep1,
   } = useWizardState()
@@ -314,21 +315,24 @@ export default function Step1Upload() {
       .finally(() => setCompaniesLoading(false))
   }, [])
 
-  // Load IS tab config when company is selected
+  async function loadSavedTabConfigs(cid: number, availableTabs: string[]) {
+    if (!cid || availableTabs.length === 0) return
+    try {
+      const configs = await getStatementTabConfigs(cid)
+      for (const [stmtType, saved] of Object.entries(configs)) {
+        if (saved.tabs.length < 2) continue
+        const result = applyStatementTabConfig(saved, availableTabs)
+        if (!result) continue
+        setAssignments((prev) => ({ ...prev, [stmtType]: result.tabs }))
+        setFieldAssignments((prev) => ({ ...prev, [stmtType]: result.fieldAssignments }))
+      }
+    } catch {}
+  }
+
+  // Load saved tab configs when company is selected (sheetNames may be empty at this point)
   useEffect(() => {
     if (!companyId) return
-    getISTabConfig(companyId)
-      .then((cfg) => {
-        setIsTabConfig(cfg)
-        if (cfg.multiTab && cfg.tabs.length > 0) {
-          setAssignments((prev) => ({ ...prev, income_statement: cfg.tabs }))
-          setFieldAssignments((prev) => ({
-            ...prev,
-            income_statement: cfg.fieldAssignments,
-          }))
-        }
-      })
-      .catch(() => {})
+    loadSavedTabConfigs(companyId, sheetNames)
   }, [companyId])
 
   // Close dropdown on outside click
@@ -526,11 +530,12 @@ export default function Step1Upload() {
         setPdfPageCount(0)
         setPdfUrl(null)
         setPdfPageAssignments({})
-        // Reset assignment state for new file
+        // Reset assignment state for new file, then auto-load saved configs
         setAssignments({ income_statement: [], balance_sheet: [], cash_flow_statement: [] })
         setFieldAssignments({})
         setExtractionStatus('idle')
         setExtractionError(null)
+        if (companyId) loadSavedTabConfigs(companyId, response.sheetNames)
       }
 
       setStatus({
@@ -747,15 +752,18 @@ export default function Step1Upload() {
       await Promise.allSettled(tasks)
       setExtractionStatus('done')
       setFieldTabAssignments(fieldAssignments)
-      // Save IS tab config if multi-tab IS was used
-      if (companyId && assignments.income_statement.length >= 2) {
-        const config: ISTabConfig = {
-          multiTab: true,
-          tabs: assignments.income_statement,
-          fieldAssignments: fieldAssignments['income_statement'] ?? {},
+      // Save tab configs for all statement types that used multi-tab
+      if (companyId) {
+        for (const stmtType of ['income_statement', 'balance_sheet', 'cash_flow_statement']) {
+          const tabs = assignments[stmtType as keyof typeof assignments] ?? []
+          if (tabs.length >= 2) {
+            const config: StatementTabConfig = {
+              tabs,
+              fieldAssignments: fieldAssignments[stmtType] ?? {},
+            }
+            saveStatementTabConfig(companyId, stmtType, config).catch(() => {})
+          }
         }
-        saveISTabConfig(companyId, config).catch(() => {})
-        setIsTabConfig(config)
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Extraction failed.'

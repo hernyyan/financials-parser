@@ -20,7 +20,7 @@ from app.routes.layer1_pdf import router as layer1_pdf_router
 from app.routes.datasets import router as datasets_router
 from app.routes.reviews import router as reviews_router
 from app.routes.recalculate import router as recalculate_router
-from app.routes.is_tab_config import router as is_tab_config_router
+from app.routes.statement_tab_config import router as statement_tab_config_router
 from app.services.claude_service import load_prompts
 from app.services.template_service import get_template_service
 
@@ -60,7 +60,7 @@ app.include_router(layer1_pdf_router)
 app.include_router(datasets_router)
 app.include_router(reviews_router)
 app.include_router(recalculate_router)
-app.include_router(is_tab_config_router)
+app.include_router(statement_tab_config_router)
 
 # StaticFiles mount registered last so router routes take precedence
 app.mount("/files", StaticFiles(directory=str(PROCESSED_DIR)), name="files")

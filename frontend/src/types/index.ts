@@ -27,7 +27,6 @@ export interface WizardState {
   layer2Results: Record<string, Layer2Result>
   corrections: Correction[]
   step2Approved: boolean
-  isTabConfig: ISTabConfig | null
   fieldTabAssignments: Record<string, Record<string, string>>
 
   // Current state
@@ -178,12 +177,6 @@ export interface TemplateResponse {
   income_statement: TemplateStatement
   balance_sheet: TemplateStatement
   cash_flow_statement: TemplateStatement
-}
-
-export interface ISTabConfig {
-  multiTab: boolean
-  tabs: string[]
-  fieldAssignments: Record<string, string>
 }
 
 // Company types
