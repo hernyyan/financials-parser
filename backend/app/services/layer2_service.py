@@ -104,7 +104,7 @@ class Layer2Service:
             if _field in reasoning:
                 _rt = str(reasoning[_field])
                 if 'source_reported_value' in _rt:
-                    _m = _re.search(r"source_reported_value[\"'\\s:]+([+-]?[\\d,]+(?:\\.\\d+)?)", _rt, _re.IGNORECASE)
+                    _m = _re.search(r"""source_reported_value[\"']?\s*:\s*([+-]?[\d,]+(?:\.[\d]+)?)""", _rt, _re.IGNORECASE)
                     if _m:
                         try:
                             split['values'][_field + '_source_reported'] = float(_m.group(1).replace(',', ''))
