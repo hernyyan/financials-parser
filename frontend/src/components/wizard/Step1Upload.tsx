@@ -417,6 +417,14 @@ export default function Step1Upload() {
     }
   }
 
+  const showL1Results =
+    extractionStatus === 'done' &&
+    (
+      layer1Results['income_statement'] ||
+      layer1Results['balance_sheet'] ||
+      layer1Results['cash_flow_statement']
+    )
+
   // canApprove: any statement has a completed layer1 result and no extraction is running
   const canApprove = !!(
     (
@@ -469,6 +477,7 @@ export default function Step1Upload() {
         return { ...prev, [stmtType]: stmtFa }
       })
     }
+    setExtractionStatus('idle')
   }
 
   function setFieldTabAssignment(stmtType: string, field: string, tab: string) {
@@ -476,6 +485,7 @@ export default function Step1Upload() {
       ...prev,
       [stmtType]: { ...(prev[stmtType] ?? {}), [field]: tab },
     }))
+    setExtractionStatus('idle')
   }
 
   // ── Resizable divider ───────────────────────────────────────────────────
@@ -1100,16 +1110,30 @@ export default function Step1Upload() {
             />
           ) : (
             <>
-              <TabSelector
-                tabs={displayTabs}
-                activeTab={displayActiveTab}
-                onChange={handleTabChange}
-                extractedTabs={extractedSheetNames}
-              />
+              {!showL1Results && (
+                <TabSelector
+                  tabs={displayTabs}
+                  activeTab={displayActiveTab}
+                  onChange={handleTabChange}
+                  extractedTabs={extractedSheetNames}
+                />
+              )}
               {!hasUpload ? (
                 <div className="flex flex-col items-center justify-center flex-1 text-muted-foreground pt-20">
                   <FileSpreadsheet className="w-12 h-12 mb-3 opacity-30" />
                   <p className="text-[13px]">Upload a file to preview</p>
+                </div>
+              ) : showL1Results ? (
+                <div className="flex-1 overflow-auto p-4 space-y-6">
+                  {layer1Results['income_statement'] && (
+                    <Layer1ResultsTable result={layer1Results['income_statement']} label="Income Statement" />
+                  )}
+                  {layer1Results['balance_sheet'] && (
+                    <Layer1ResultsTable result={layer1Results['balance_sheet']} label="Balance Sheet" />
+                  )}
+                  {layer1Results['cash_flow_statement'] && (
+                    <Layer1ResultsTable result={layer1Results['cash_flow_statement']} label="Cash Flow Statement" />
+                  )}
                 </div>
               ) : (
                 <ExcelViewer workbookUrl={workbookUrl} activeSheet={activeTab} />
