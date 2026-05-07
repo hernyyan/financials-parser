@@ -88,7 +88,7 @@ def run_layer1(
 
     # Check template if company_id available
     template_check = None
-    company_id = getattr(request, "companyId", None)
+    company_id = request.companyId
     if company_id:
         try:
             structured_rows = result.get("structured", {}).get("rows", [])

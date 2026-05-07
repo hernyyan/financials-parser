@@ -599,7 +599,21 @@ export default function Step1Upload() {
       })
 
     try {
-      await Promise.allSettled(tasks)
+      const settled = await Promise.allSettled(tasks)
+      const failed = settled.filter(s => s.status === 'rejected')
+      if (failed.length > 0 && settled.every(s => s.status === 'rejected')) {
+        // All tasks failed
+        const msg = (failed[0] as PromiseRejectedResult).reason?.message ?? 'Extraction failed.'
+        setExtractionStatus('error')
+        setExtractionError(msg)
+        setStatus({ type: 'error', message: msg })
+        return
+      }
+      if (failed.length > 0) {
+        // Some failed — warn but continue with partial results
+        const msg = (failed[0] as PromiseRejectedResult).reason?.message ?? 'One or more extractions failed.'
+        setStatus({ type: 'error', message: msg })
+      }
       setExtractionStatus('done')
 
       // Handle template review for IS (if companyId is set)

@@ -11,7 +11,7 @@
  *   statementType
  *   onChange(rows, waterfall) — called whenever the user edits anything
  */
-import { useState } from 'react'
+import { useState, type ReactNode } from 'react'
 import type { Layer1TemplateRow, WaterfallStep } from '../../types'
 import { ChevronUp, ChevronDown, X, Plus } from 'lucide-react'
 
@@ -247,7 +247,7 @@ export default function TemplateTreeEditor({ rows, waterfall, statementType, onC
 
   // ── Row renderer ────────────────────────────────────────────────────────
 
-  function renderRows(rs: Layer1TemplateRow[], depth = 0): React.ReactNode {
+  function renderRows(rs: Layer1TemplateRow[], depth = 0): ReactNode {
     return rs.map(row => {
       const isInPromoteMode = !!promoteMode && promoteMode.parentId !== row.id
       const isPromoteParent = promoteMode?.parentId === row.id

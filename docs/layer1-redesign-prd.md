@@ -264,11 +264,16 @@ CREATE TABLE IF NOT EXISTS layer1_templates (
 
 ---
 
-### 🔲 Layer 2 redesign spec
-**Blocked by:** Layer 1 stable + tested
-- Write separate spec doc once Layer 1 is producing consistent outputs
-- Layer 2 will receive full structured JSON instead of flat lineItems
-- Layer 1 waterfall provides context for reconciling company IS logic vs firm standard template
+### ✅ Layer 2 redesign spec
+- Written at `docs/layer2-redesign-spec.md`
+- Layer 2 receives structured JSON + flat lineItems (backward compat)
+- IS waterfall injected so Claude understands company-specific P&L logic
+
+---
+
+### 🔲 Layer 2: inject structured JSON into prompts
+**Blocked by:** Layer 1 stable + tested in production (real-world validation first)
+See `docs/layer2-redesign-spec.md` for full task breakdown.
 
 ---
 

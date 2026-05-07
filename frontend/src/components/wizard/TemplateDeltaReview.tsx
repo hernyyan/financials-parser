@@ -5,7 +5,7 @@
  * unmatched line items were found. User maps new items to existing rows
  * or adds them as new rows, then saves.
  */
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import type { Layer1Template, Layer1TemplateRow, WaterfallStep } from '../../types'
 import { getLayer1Template, saveLayer1Template } from '../../api/client'
 import TemplateTreeEditor from './TemplateTreeEditor'
@@ -35,7 +35,7 @@ export default function TemplateDeltaReview({ unmatchedItems, statementType, com
   const [actions, setActions] = useState<Record<number, NewItemAction>>({})
   const [selectingTargetFor, setSelectingTargetFor] = useState<number | null>(null)
 
-  useState(() => {
+  useEffect(() => {
     getLayer1Template(companyId, statementType)
       .then(tmpl => {
         if (tmpl) {
@@ -49,7 +49,7 @@ export default function TemplateDeltaReview({ unmatchedItems, statementType, com
         setError(err instanceof Error ? err.message : 'Failed to load template.')
         setLoading(false)
       })
-  })
+  }, [companyId, statementType])
 
   function nextId(): number {
     const allIds: number[] = []
