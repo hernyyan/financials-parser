@@ -89,6 +89,18 @@ CREATE TABLE IF NOT EXISTS layer1_templates (
 - [x] Run migration script — 64 companies migrated to DB
 - [x] Add `company_context/` + `company_datasets/` to `.gitignore`
 - [x] Create this PRD as master tracking doc
+- [x] DB: Add `layer1_templates` table (SQLite + Postgres DDL + init_db)
+- [x] Python extractor: `layer1_extractor.py` (header rows, rows+metadata, CSV serialiser)
+- [x] AI prompts: `layer1_column_identifier.md` + `layer1_structured_extractor.md`
+- [x] Frontend types: `Layer1TemplateRow`, `WaterfallStep`, `Layer1Template`, `TemplateCheckResult`
+- [x] Layer 1 service: 4-step pipeline + `check_template` + `save_template`
+- [x] Layer 1 route: wire filepath, return `structured` + `templateCheck`
+- [x] Layer 1 template API routes: GET + POST `/companies/{id}/layer1-templates/{type}`
+- [x] `TemplateTreeEditor` component (shared tree + waterfall editor)
+- [x] `TemplateReview` component (first-upload IS review)
+- [x] `TemplateDeltaReview` component (unmatched items on existing template)
+- [x] `Step1Upload`: pass `companyId` to extraction, handle template review flow
+- [x] Admin portal: `Layer1TemplatesTab` + "L1 Templates" tab on CompanyDetail
 
 ---
 

@@ -5,13 +5,14 @@ import CompanyContextEditor from './CompanyContextEditor'
 import TemplateFieldList from './TemplateFieldList'
 import RuleWriter from './RuleWriter'
 import CompanyDataTable from './CompanyDataTable'
+import Layer1TemplatesTab from './Layer1TemplatesTab'
 
 interface Props {
   companyId: number
   onBack: () => void
 }
 
-type Tab = 'data' | 'corrections' | 'datasets'
+type Tab = 'data' | 'corrections' | 'datasets' | 'l1_templates'
 
 function formatVal(v: unknown): string {
   if (v === null || v === undefined) return '—'
@@ -90,6 +91,7 @@ export default function CompanyDetail({ companyId, onBack }: Props) {
     { key: 'data', label: 'L1 / L2 Data' },
     { key: 'corrections', label: `Corrections (${corrections.length})` },
     { key: 'datasets', label: 'Datasets' },
+    { key: 'l1_templates', label: 'L1 Templates' },
   ]
 
   return (
@@ -262,6 +264,10 @@ export default function CompanyDetail({ companyId, onBack }: Props) {
                 </div>
               )}
             </div>
+          )}
+
+          {activeTab === 'l1_templates' && (
+            <Layer1TemplatesTab companyId={companyId} />
           )}
         </div>
       </div>
