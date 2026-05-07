@@ -16,6 +16,7 @@ import type {
   CompanyContextStatus,
   ExistingReviewCheck,
   ContinuedReview,
+  Layer1Template,
 } from '../types'
 
 export const API_BASE = import.meta.env.VITE_API_URL || '/api'
@@ -67,6 +68,7 @@ export async function runLayer1(
   sheetType: string,
   reportingPeriod: string,
   fieldsFilter?: string[],
+  companyId?: number | null,
 ): Promise<Layer1Response> {
   const res = await fetch(`${API_BASE}/layer1/run`, {
     method: 'POST',
@@ -76,6 +78,7 @@ export async function runLayer1(
       sheetName,
       sheetType,
       reportingPeriod,
+      ...(companyId != null ? { companyId } : {}),
       ...(fieldsFilter && fieldsFilter.length > 0 ? { fieldsFilter } : {}),
     }),
   })
@@ -249,5 +252,29 @@ export async function recalculate(
     body: JSON.stringify({ statement_type: statementType, values, overrides }),
   })
   return handleResponse(res)
+}
+
+// GET /companies/{id}/layer1-templates/{statement_type}
+export async function getLayer1Template(
+  companyId: number,
+  statementType: string,
+): Promise<Layer1Template | null> {
+  const res = await fetch(`${API_BASE}/companies/${companyId}/layer1-templates/${statementType}`)
+  if (res.status === 404) return null
+  return handleResponse<{ template: Layer1Template }>(res).then(r => r.template)
+}
+
+// POST /companies/{id}/layer1-templates/{statement_type}
+export async function saveLayer1Template(
+  companyId: number,
+  statementType: string,
+  template: Layer1Template,
+): Promise<void> {
+  const res = await fetch(`${API_BASE}/companies/${companyId}/layer1-templates/${statementType}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(template),
+  })
+  await handleResponse<{ success: boolean }>(res)
 }
 

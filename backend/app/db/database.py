@@ -62,6 +62,19 @@ CREATE TABLE IF NOT EXISTS company_specific_corrections (
 );
 """
 
+_SQLITE_CREATE_LAYER1_TEMPLATES = """
+CREATE TABLE IF NOT EXISTS layer1_templates (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    company_id INTEGER NOT NULL,
+    statement_type TEXT NOT NULL,
+    template JSON NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (company_id) REFERENCES companies(id),
+    UNIQUE(company_id, statement_type)
+);
+"""
+
 
 # ── PostgreSQL CREATE TABLE statements ────────────────────────────────────────
 
@@ -109,6 +122,19 @@ CREATE TABLE IF NOT EXISTS company_specific_corrections (
 );
 """
 
+_PG_CREATE_LAYER1_TEMPLATES = """
+CREATE TABLE IF NOT EXISTS layer1_templates (
+    id SERIAL PRIMARY KEY,
+    company_id INTEGER NOT NULL,
+    statement_type TEXT NOT NULL,
+    template JSONB NOT NULL,
+    created_at TIMESTAMP DEFAULT NOW(),
+    updated_at TIMESTAMP DEFAULT NOW(),
+    FOREIGN KEY (company_id) REFERENCES companies(id),
+    UNIQUE(company_id, statement_type)
+);
+"""
+
 
 # ── Idempotent migrations for pre-existing databases ─────────────────────────
 
@@ -126,15 +152,18 @@ def init_db() -> None:
         create_reviews = _SQLITE_CREATE_REVIEWS
         create_companies = _SQLITE_CREATE_COMPANIES
         create_corrections = _SQLITE_CREATE_CORRECTIONS
+        create_layer1_templates = _SQLITE_CREATE_LAYER1_TEMPLATES
     else:
         create_reviews = _PG_CREATE_REVIEWS
         create_companies = _PG_CREATE_COMPANIES
         create_corrections = _PG_CREATE_CORRECTIONS
+        create_layer1_templates = _PG_CREATE_LAYER1_TEMPLATES
 
     with engine.connect() as conn:
         conn.execute(text(create_reviews))
         conn.execute(text(create_companies))
         conn.execute(text(create_corrections))
+        conn.execute(text(create_layer1_templates))
         for migration in _MIGRATIONS:
             try:
                 conn.execute(text(migration))

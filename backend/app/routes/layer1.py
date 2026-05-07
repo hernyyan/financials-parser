@@ -1,9 +1,15 @@
 """
-POST /layer1/run — Full implementation.
-Loads CSV from disk, calls the Layer 1 service, updates DB, returns extracted line items.
+POST /layer1/run — 4-step Layer 1 extraction pipeline.
+
+1. Locate the uploaded .xlsx in the session's uploads dir (Step A source).
+2. Run the 4-step extraction: header → AI column ID → full rows → AI hierarchy.
+3. Run check_template() if company_id is provided.
+4. Persist result to DB.
+5. Return lineItems + structured + templateCheck.
 """
 import json
 import logging
+from pathlib import Path
 
 import anthropic
 from fastapi import APIRouter, Depends, HTTPException
@@ -12,13 +18,23 @@ from sqlalchemy import text
 
 logger = logging.getLogger(__name__)
 
-from app.config import PROCESSED_DIR
+from app.config import UPLOADS_DIR
 from app.db.database import get_db
 from app.models.schemas import Layer1Request, Layer1Response
-from app.services.excel_processor import _safe_filename
 from app.services.layer1_service import get_layer1_service
 
 router = APIRouter()
+
+
+def _find_xlsx(session_dir: Path) -> Path:
+    """Return path to the uploaded Excel file in the session directory."""
+    for ext in ("original.xlsx", "original.xls"):
+        p = session_dir / ext
+        if p.exists():
+            return p
+    raise FileNotFoundError(
+        f"No Excel file found in uploads session directory: {session_dir}"
+    )
 
 
 @router.post("/layer1/run", response_model=Layer1Response)
@@ -27,13 +43,7 @@ def run_layer1(
     db: Session = Depends(get_db),
 ):
     """
-    Run Layer 1 AI extraction for a single sheet.
-
-    Steps:
-    1. Load the CSV from processed/{sessionId}/{safe_sheet_name}.csv
-    2. Call the Layer 1 service (Claude API with the appropriate prompt).
-    3. Persist the result to the review's layer1_data in the database.
-    4. Return the structured line items.
+    Run Layer 1 AI extraction for a single sheet using the 4-step pipeline.
     """
     if not request.sessionId or not request.sheetName or not request.sheetType:
         raise HTTPException(
@@ -41,29 +51,21 @@ def run_layer1(
             detail="sessionId, sheetName, and sheetType are required.",
         )
 
-    # Load CSV from disk
-    safe_name = _safe_filename(request.sheetName)
-    csv_path = PROCESSED_DIR / request.sessionId / f"{safe_name}.csv"
+    # Locate uploaded file
+    session_dir = UPLOADS_DIR / request.sessionId
+    try:
+        filepath = str(_find_xlsx(session_dir))
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e))
 
-    if not csv_path.exists():
-        raise HTTPException(
-            status_code=404,
-            detail=(
-                f"CSV for sheet '{request.sheetName}' not found. "
-                "Ensure the file was uploaded successfully first."
-            ),
-        )
-
-    csv_content = csv_path.read_text(encoding="utf-8")
-
-    # Run extraction via Claude
+    # Run 4-step extraction
     service = get_layer1_service()
     try:
         result = service.run_extraction(
             sheet_type=request.sheetType,
-            csv_content=csv_content,
+            filepath=filepath,
+            sheet_name=request.sheetName,
             reporting_period=request.reportingPeriod,
-            fields_filter=request.fieldsFilter,
         )
     except FileNotFoundError as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -78,19 +80,28 @@ def run_layer1(
             detail="Rate limit exceeded. Please wait a moment and try again.",
         )
     except anthropic.APIError as e:
-        raise HTTPException(
-            status_code=502,
-            detail=f"Claude API error: {e}",
-        )
+        raise HTTPException(status_code=502, detail=f"Claude API error: {e}")
     except ValueError as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Failed to parse Claude response: {e}",
-        )
+        raise HTTPException(status_code=500, detail=f"Failed to parse Claude response: {e}")
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-    # Update DB layer1_data (non-fatal — extraction result is still returned on failure)
+    # Check template if company_id available
+    template_check = None
+    company_id = getattr(request, "companyId", None)
+    if company_id:
+        try:
+            structured_rows = result.get("structured", {}).get("rows", [])
+            template_check = service.check_template(
+                company_id=company_id,
+                statement_type=request.sheetType.lower().replace(" ", "_"),
+                structured_rows=structured_rows,
+                db=db,
+            )
+        except Exception as exc:
+            logger.warning("check_template failed for company %s: %s", company_id, exc)
+
+    # Persist result to DB
     try:
         row = db.execute(
             text("SELECT layer1_data FROM reviews WHERE session_id = :sid"),
@@ -104,7 +115,13 @@ def run_layer1(
             existing = raw
         else:
             existing = json.loads(raw)
-        existing[request.sheetName] = result
+
+        existing[request.sheetName] = {
+            "lineItems": result["lineItems"],
+            "sourceScaling": result["sourceScaling"],
+            "columnIdentified": result["columnIdentified"],
+            "structured": result.get("structured"),
+        }
         db.execute(
             text("UPDATE reviews SET layer1_data = :data WHERE session_id = :sid"),
             {"data": json.dumps(existing), "sid": request.sessionId},
@@ -119,4 +136,6 @@ def run_layer1(
         lineItems=result["lineItems"],
         sourceScaling=result["sourceScaling"],
         columnIdentified=result["columnIdentified"],
+        structured=result.get("structured"),
+        templateCheck=template_check,
     )

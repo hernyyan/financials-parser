@@ -644,7 +644,14 @@ export default function Step1Upload() {
       }
       if (data.corrections && Array.isArray(data.corrections)) {
         for (const c of data.corrections) {
-          addCorrection(c)
+          addCorrection({
+            fieldName: c.field_name,
+            originalValue: c.layer2_value ?? 0,
+            correctedValue: c.corrected_value,
+            reasoning: c.analyst_reasoning ?? undefined,
+            tag: c.tag,
+            timestamp: new Date().toISOString(),
+          })
         }
       }
       approveStep1()

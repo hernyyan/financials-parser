@@ -35,11 +35,45 @@ export interface WizardState {
   sidePanelOpen: boolean
 }
 
+export interface Layer1TemplateRow {
+  id: number
+  type: 'individual' | 'sum' | 'margin'
+  label: string
+  value?: number | null
+  bold?: boolean
+  italic?: boolean
+  indent?: number
+  children: Layer1TemplateRow[]
+  computed_as?: string
+  derived_from?: number[]
+  validated?: boolean
+  validation_note?: string
+}
+
+export interface WaterfallStep {
+  row_id: number
+  label: string
+  operator: null | '+' | '-' | '='
+}
+
+export interface Layer1Template {
+  meta: { statement_type: string; created_at: string }
+  rows: Layer1TemplateRow[]
+  waterfall?: WaterfallStep[]
+}
+
+export interface TemplateCheckResult {
+  has_template: boolean
+  unmatched_items: Layer1TemplateRow[]
+}
+
 export interface Layer1Result {
   lineItems: Record<string, number>
   sourceScaling: string
   columnIdentified: string
   sourceSheet: string
+  structured?: Layer1Template
+  templateCheck?: TemplateCheckResult
 }
 
 export interface CalculationMeta {
@@ -98,6 +132,7 @@ export interface Layer1Request {
   sheetName: string
   sheetType: string
   reportingPeriod: string
+  companyId?: number | null
 }
 
 export interface Layer1Response {
@@ -105,6 +140,8 @@ export interface Layer1Response {
   sourceScaling: string
   columnIdentified: string
   sheetName: string
+  structured?: Layer1Template
+  templateCheck?: TemplateCheckResult
 }
 
 export interface Layer2Request {

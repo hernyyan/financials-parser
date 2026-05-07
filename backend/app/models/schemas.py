@@ -35,6 +35,7 @@ class Layer1Request(BaseModel):
     sheetName: str
     sheetType: str        # 'income_statement' | 'balance_sheet' | 'cash_flow_statement'
     reportingPeriod: str
+    companyId: Optional[int] = None
     fieldsFilter: Optional[List[str]] = None  # if set, only extract these fields
 
 
@@ -49,6 +50,8 @@ class Layer1Response(BaseModel):
     lineItems: Dict[str, float]
     sourceScaling: str
     columnIdentified: str
+    structured: Optional[Dict] = None
+    templateCheck: Optional[Dict] = None
 
 
 # ─── Layer 2 ──────────────────────────────────────────────────────────────────
@@ -224,6 +227,17 @@ class ReprocessResponse(BaseModel):
     company_name: str
     corrections_reprocessed: int
     results: List[ReprocessCorrectionResult]
+
+
+# ─── Layer 1 Templates ───────────────────────────────────────────────────────
+
+class Layer1TemplateResponse(BaseModel):
+    id: int
+    company_id: int
+    statement_type: str
+    template: Dict
+    created_at: Optional[str] = None
+    updated_at: Optional[str] = None
 
 
 # ─── Admin ────────────────────────────────────────────────────────────────────
