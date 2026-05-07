@@ -119,27 +119,34 @@ def extract_rows_with_metadata(
         raw_val = _cell_value(value_cell)
         raw_str = str(raw_val).strip() if raw_val is not None else ""
 
+        font = _effective_font(label_cell)
+        is_bold = bool(font.bold)
+        indent = _indent_level(label_cell)
+
         if raw_val is None or raw_str == "":
-            # Genuinely empty cell — this is a title/header row, skip it
+            # Genuinely empty cell — title/header row, skip it
             continue
         elif raw_str in ("-", "—", "–"):
-            # Explicit zero indicator
+            # Dash placeholder — could be a genuine zero OR a section header.
+            # Skip non-bold, low-indent rows with a dash value: these are almost
+            # always section headers that happen to have a dash in the value column.
+            if not is_bold and indent <= 1:
+                continue
             value: float = 0.0
         else:
             try:
                 value = float(raw_str.replace(",", "").replace("(", "-").replace(")", "")) * scale
             except (ValueError, TypeError):
-                # Non-numeric (e.g. "N/A", text) — treat as title row and skip
+                # Non-numeric (e.g. "N/A", text) — skip
                 continue
 
-        font = _effective_font(label_cell)
         rows.append({
             "label": label,
             "label_col": label_col,
             "value": value,
-            "bold": bool(font.bold),
+            "bold": is_bold,
             "italic": bool(font.italic),
-            "indent": _indent_level(label_cell),
+            "indent": indent,
             "row_index": row_num,
         })
 
