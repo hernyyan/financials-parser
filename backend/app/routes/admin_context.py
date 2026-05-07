@@ -1,8 +1,8 @@
 """
 Admin endpoints for company context management.
 
-GET  /admin/company-context/{company_id} — Full markdown context file contents
-PUT  /admin/company-context/{company_id} — Overwrite the markdown context file
+GET  /admin/company-context/{company_id} — Full context contents from DB
+PUT  /admin/company-context/{company_id} — Overwrite the context in DB
 POST /admin/write-rule                   — Submit a rule through Layer A → Layer B pipeline
 """
 import json
@@ -12,7 +12,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 
-from app.config import COMPANY_CONTEXT_DIR, DATA_DIR, LAYER_A_MODEL, LAYER_B_MODEL
+from app.config import DATA_DIR, LAYER_A_MODEL, LAYER_B_MODEL
 from app.db.database import get_db
 from app.models.schemas import AdminContextUpdateRequest, AdminWriteRuleRequest
 from app.services.claude_service import get_claude_service
@@ -23,29 +23,21 @@ router = APIRouter(prefix="/admin")
 
 @router.get("/company-context/{company_id}")
 def admin_company_context(company_id: int, db: Session = Depends(get_db)):
-    """Return the full contents of a company's markdown context file."""
+    """Return the full contents of a company's context from DB."""
     row = db.execute(
-        text("SELECT id, name, markdown_filename FROM companies WHERE id = :id"),
+        text("SELECT id, name, context FROM companies WHERE id = :id"),
         {"id": company_id},
     ).fetchone()
     if not row:
         raise HTTPException(status_code=404, detail=f"Company {company_id} not found.")
 
     name = row[1]
-    markdown_filename = row[2]
-
-    content = None
-    word_count = 0
-    if markdown_filename:
-        path = COMPANY_CONTEXT_DIR / markdown_filename
-        if path.exists():
-            content = path.read_text(encoding="utf-8")
-            word_count = markdown_body_word_count(content)
+    content = row[2] or ""
+    word_count = markdown_body_word_count(content) if content.strip() else 0
 
     return {
         "id": company_id,
         "name": name,
-        "markdown_filename": markdown_filename,
         "word_count": word_count,
         "content": content,
     }
@@ -57,16 +49,19 @@ def admin_update_company_context(
     request: AdminContextUpdateRequest,
     db: Session = Depends(get_db),
 ):
-    """Directly overwrite the company's markdown context file."""
+    """Directly overwrite the company's context in DB."""
     row = db.execute(
-        text("SELECT markdown_filename FROM companies WHERE id = :id"),
+        text("SELECT id FROM companies WHERE id = :id"),
         {"id": company_id},
     ).fetchone()
     if not row:
         raise HTTPException(status_code=404, detail="Company not found.")
 
-    md_path = COMPANY_CONTEXT_DIR / row[0]
-    md_path.write_text(request.content, encoding="utf-8")
+    db.execute(
+        text("UPDATE companies SET context = :ctx WHERE id = :id"),
+        {"ctx": request.content, "id": company_id},
+    )
+    db.commit()
 
     return {"success": True, "word_count": markdown_body_word_count(request.content)}
 
@@ -78,13 +73,14 @@ def admin_write_rule(
 ):
     """Submit a rule through Layer A → Layer B pipeline."""
     row = db.execute(
-        text("SELECT id, name, markdown_filename FROM companies WHERE id = :company_id"),
+        text("SELECT id, name, context FROM companies WHERE id = :company_id"),
         {"company_id": request.company_id},
     ).fetchone()
     if not row:
         raise HTTPException(status_code=404, detail="Company not found.")
 
-    company_id, company_name, markdown_filename = row
+    company_id, company_name, current_context = row
+    current_markdown = current_context or f"# {company_name} — Classification Context\n\n"
 
     claude = get_claude_service()
     timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S")
@@ -106,9 +102,6 @@ def admin_write_rule(
     instruction = layer_a_parsed.get("instruction", "")
     referenced_fields = layer_a_parsed.get("referenced_fields", [request.field_name])
 
-    md_path = COMPANY_CONTEXT_DIR / markdown_filename
-    current_markdown = md_path.read_text(encoding="utf-8") if md_path.exists() else f"# {company_name} — Classification Context\n\n"
-
     layer_b_raw = claude.call_claude(
         prompt_key="layer_b_markdown_integrator",
         variables={
@@ -125,7 +118,11 @@ def admin_write_rule(
     updated_markdown = layer_b_parsed.get("updated_markdown")
 
     if updated_markdown and action != "DISCARD":
-        md_path.write_text(updated_markdown, encoding="utf-8")
+        db.execute(
+            text("UPDATE companies SET context = :ctx WHERE id = :id"),
+            {"ctx": updated_markdown, "id": company_id},
+        )
+        db.commit()
 
     changelog_entry = {
         "timestamp": timestamp,

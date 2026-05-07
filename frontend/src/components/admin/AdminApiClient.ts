@@ -15,13 +15,10 @@ async function handleResponse<T>(res: Response): Promise<T> {
 export interface AdminCompany {
   id: number
   name: string
-  markdown_filename: string
-  markdown_word_count: number
-  markdown_file_size_bytes: number
+  context_word_count: number
   total_corrections: number
   processed_corrections: number
   pending_corrections: number
-  last_modified: string | null
 }
 
 export async function adminGetCompanies(): Promise<AdminCompany[]> {
@@ -32,7 +29,6 @@ export async function adminGetCompanies(): Promise<AdminCompany[]> {
 export interface AdminCompanyContext {
   id: number
   name: string
-  markdown_filename: string
   word_count: number
   content: string | null
 }
@@ -115,7 +111,7 @@ export async function adminRenameCompany(id: number, name: string): Promise<{ su
   return handleResponse(res)
 }
 
-export async function adminCreateCompany(name: string): Promise<{ id: number; name: string; markdown_filename: string }> {
+export async function adminCreateCompany(name: string): Promise<{ id: number; name: string }> {
   const res = await fetch(`${API_BASE}/admin/companies`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

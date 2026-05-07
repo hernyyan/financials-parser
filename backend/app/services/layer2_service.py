@@ -17,7 +17,6 @@ from typing import Any, Dict, List, Optional
 
 from sqlalchemy.orm import Session
 from sqlalchemy import text as sa_text
-from app.config import COMPANY_CONTEXT_DIR
 from app.services.claude_service import ClaudeService, get_claude_service
 from app.services.layer2_response_parser import parse_layer2_response
 from app.services.recalculate_service import (
@@ -152,33 +151,26 @@ class Layer2Service:
 
     def _load_company_context(self, company_id: int, db: Any) -> str:
         """
-        Load the company's markdown context file and return its content,
+        Load the company's context from DB and return its content,
         but only if it contains actual rules (bullet points).
         Returns empty string if no rules exist.
         """
         try:
             row = db.execute(
-                sa_text("SELECT markdown_filename FROM companies WHERE id = :id"),
+                sa_text("SELECT context FROM companies WHERE id = :id"),
                 {"id": company_id},
             ).fetchone()
 
             if not row or not row[0]:
                 return ""
 
-            md_path = COMPANY_CONTEXT_DIR / row[0]
-            if not md_path.exists():
-                return ""
+            content = row[0]
 
-            content = md_path.read_text(encoding="utf-8")
-
-            # Check if file has actual rules (bullet points), not just the header
+            # Only return if file has actual rules (bullet points), not just the header
             lines = content.split("\n")
             has_rules = any(l.strip().startswith("- ") for l in lines)
 
-            if not has_rules:
-                return ""
-
-            return content
+            return content if has_rules else ""
         except Exception:
             return ""
 

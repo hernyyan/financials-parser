@@ -9,7 +9,6 @@ POST   /admin/companies                       — Create a new company
 DELETE /admin/companies/{company_id}          — Delete a company and all its data
 """
 import json
-import os
 import shutil
 from datetime import datetime, timezone
 
@@ -17,10 +16,10 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 
-from app.config import COMPANY_CONTEXT_DIR, COMPANY_DATASETS_DIR
+from app.config import COMPANY_DATASETS_DIR
 from app.db.database import get_db
 from app.models.schemas import AdminRenameCompanyRequest
-from app.routes.companies import _normalize_company_name, _derive_markdown_filename, _create_markdown_file
+from app.routes.companies import _normalize_company_name
 from app.utils.text_utils import markdown_body_word_count
 
 router = APIRouter(prefix="/admin")
@@ -28,26 +27,15 @@ router = APIRouter(prefix="/admin")
 
 @router.get("/companies")
 def admin_list_companies(db: Session = Depends(get_db)):
-    """List all companies with markdown file metadata and correction counts."""
+    """List all companies with context metadata and correction counts."""
     rows = db.execute(
-        text("SELECT id, name, markdown_filename FROM companies ORDER BY name ASC")
+        text("SELECT id, name, context FROM companies ORDER BY name ASC")
     ).fetchall()
 
     results = []
     for row in rows:
-        company_id, name, markdown_filename = row[0], row[1], row[2]
-
-        word_count = 0
-        file_size_bytes = 0
-        last_modified = None
-        if markdown_filename:
-            path = COMPANY_CONTEXT_DIR / markdown_filename
-            if path.exists():
-                content = path.read_text(encoding="utf-8")
-                word_count = markdown_body_word_count(content)
-                file_size_bytes = path.stat().st_size
-                mtime = os.path.getmtime(path)
-                last_modified = datetime.fromtimestamp(mtime, tz=timezone.utc).isoformat()
+        company_id, name, context = row[0], row[1], row[2] or ""
+        word_count = markdown_body_word_count(context) if context.strip() else 0
 
         counts = db.execute(
             text("""
@@ -64,13 +52,10 @@ def admin_list_companies(db: Session = Depends(get_db)):
         results.append({
             "id": company_id,
             "name": name,
-            "markdown_filename": markdown_filename,
-            "markdown_word_count": word_count,
-            "markdown_file_size_bytes": file_size_bytes,
+            "context_word_count": word_count,
             "total_corrections": total,
             "processed_corrections": processed,
             "pending_corrections": total - processed,
-            "last_modified": last_modified,
         })
 
     return results
@@ -89,7 +74,7 @@ def admin_company_data(company_id: int, db: Session = Depends(get_db)):
     rows = db.execute(
         text("""
             SELECT r.session_id, r.reporting_period, r.layer1_data, r.layer2_data,
-                   r.finalized_at
+                   r.finalized_at, r.status, r.created_at
             FROM reviews r
             INNER JOIN (
                 SELECT reporting_period, MAX(finalized_at) as max_finalized
@@ -112,6 +97,8 @@ def admin_company_data(company_id: int, db: Session = Depends(get_db)):
             "layer1_data": json.loads(row[2]) if isinstance(row[2], str) else row[2],
             "layer2_data": json.loads(row[3]) if isinstance(row[3], str) else row[3],
             "finalized_at": str(row[4]) if row[4] else None,
+            "status": row[5],
+            "created_at": str(row[6]) if row[6] else None,
         })
 
     return {"company_id": company_id, "company_name": company[0], "periods": periods}
@@ -157,19 +144,19 @@ def admin_rename_company(
     request: AdminRenameCompanyRequest,
     db: Session = Depends(get_db),
 ):
-    """Rename a company everywhere: DB, markdown file, datasets directory."""
+    """Rename a company everywhere: DB records, datasets directory."""
     new_name = request.name.strip()
     if not new_name:
         raise HTTPException(status_code=422, detail="Name cannot be empty.")
 
     row = db.execute(
-        text("SELECT name, markdown_filename FROM companies WHERE id = :id"),
+        text("SELECT name, context FROM companies WHERE id = :id"),
         {"id": company_id},
     ).fetchone()
     if not row:
         raise HTTPException(status_code=404, detail="Company not found.")
 
-    old_name, old_md_filename = row[0], row[1]
+    old_name, old_context = row[0], row[1] or ""
 
     existing = db.execute(
         text("SELECT id FROM companies WHERE LOWER(name) = LOWER(:name) AND id != :id"),
@@ -178,27 +165,22 @@ def admin_rename_company(
     if existing:
         raise HTTPException(status_code=409, detail=f"A company named '{new_name}' already exists.")
 
-    new_md_filename = _derive_markdown_filename(new_name)
+    # Update context header if present
+    new_context = old_context.replace(
+        f"# {old_name} — Classification Context",
+        f"# {new_name} — Classification Context",
+        1,
+    )
 
-    old_md_path = COMPANY_CONTEXT_DIR / old_md_filename
-    new_md_path = COMPANY_CONTEXT_DIR / new_md_filename
-    if old_md_path.exists():
-        content = old_md_path.read_text(encoding="utf-8")
-        old_header = f"# {old_name} — Classification Context"
-        new_header = f"# {new_name} — Classification Context"
-        content = content.replace(old_header, new_header, 1)
-        new_md_path.write_text(content, encoding="utf-8")
-        if old_md_path != new_md_path:
-            old_md_path.unlink()
-
+    # Rename datasets directory if it exists
     old_datasets_dir = COMPANY_DATASETS_DIR / old_name
     new_datasets_dir = COMPANY_DATASETS_DIR / new_name
     if old_datasets_dir.exists() and old_datasets_dir != new_datasets_dir:
         old_datasets_dir.rename(new_datasets_dir)
 
     db.execute(
-        text("UPDATE companies SET name = :name, markdown_filename = :md WHERE id = :id"),
-        {"name": new_name, "md": new_md_filename, "id": company_id},
+        text("UPDATE companies SET name = :name, context = :ctx WHERE id = :id"),
+        {"name": new_name, "ctx": new_context, "id": company_id},
     )
     db.execute(
         text("UPDATE reviews SET company_name = :new WHERE company_name = :old"),
@@ -218,7 +200,7 @@ def admin_create_company(
     request: AdminRenameCompanyRequest,
     db: Session = Depends(get_db),
 ):
-    """Create a new company with a blank markdown context file."""
+    """Create a new company."""
     name = request.name.strip()
     if not name:
         raise HTTPException(status_code=422, detail="Name cannot be empty.")
@@ -239,33 +221,27 @@ def admin_create_company(
                 detail=f"A similar company already exists: '{existing_name}'.",
             )
 
-    md_filename = _derive_markdown_filename(name)
-
     result = db.execute(
-        text(
-            "INSERT INTO companies (name, markdown_filename) VALUES (:name, :md) RETURNING id"
-        ),
-        {"name": name, "md": md_filename},
+        text("INSERT INTO companies (name, context) VALUES (:name, :ctx) RETURNING id"),
+        {"name": name, "ctx": f"# {name} — Classification Context\n\n"},
     )
     new_id = result.fetchone()[0]
     db.commit()
 
-    _create_markdown_file(name, md_filename)
-
-    return {"id": new_id, "name": name, "markdown_filename": md_filename}
+    return {"id": new_id, "name": name}
 
 
 @router.delete("/companies/{company_id}")
 def admin_delete_company(company_id: int, db: Session = Depends(get_db)):
-    """Delete a company and all its associated data (corrections, context file, datasets)."""
+    """Delete a company and all its associated data (corrections, datasets)."""
     row = db.execute(
-        text("SELECT name, markdown_filename FROM companies WHERE id = :id"),
+        text("SELECT name FROM companies WHERE id = :id"),
         {"id": company_id},
     ).fetchone()
     if not row:
         raise HTTPException(status_code=404, detail="Company not found.")
 
-    company_name, md_filename = row[0], row[1]
+    company_name = row[0]
 
     db.execute(
         text("DELETE FROM company_specific_corrections WHERE company_id = :id"),
@@ -276,11 +252,6 @@ def admin_delete_company(company_id: int, db: Session = Depends(get_db)):
         {"id": company_id},
     )
     db.commit()
-
-    if md_filename:
-        md_path = COMPANY_CONTEXT_DIR / md_filename
-        if md_path.exists():
-            md_path.unlink()
 
     datasets_dir = COMPANY_DATASETS_DIR / company_name
     if datasets_dir.exists():

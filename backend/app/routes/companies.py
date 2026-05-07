@@ -1,6 +1,6 @@
 """
 GET /companies               — List all companies ordered alphabetically.
-POST /companies              — Create a new company and its blank markdown context file.
+POST /companies              — Create a new company.
 POST /companies/{id}/reprocess-corrections
                              — Developer tool: resets and reruns the AI pipeline for a company.
 """
@@ -10,7 +10,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 
-from app.config import COMPANY_CONTEXT_DIR, DATA_DIR
+from app.config import DATA_DIR
 from app.db.database import get_db
 from app.models.schemas import CompanyCreate, CompanyResponse, ReprocessResponse, ReprocessCorrectionResult
 from app.utils.text_utils import markdown_body_word_count
@@ -20,52 +20,26 @@ router = APIRouter()
 CHANGELOG_PATH = DATA_DIR / "company_context_changelog.jsonl"
 
 
-
 def _normalize_company_name(name: str) -> str:
     """Strip to lowercase alphanumeric for fuzzy duplicate detection."""
     return re.sub(r'[^a-z0-9]', '', name.lower())
-
-
-def _derive_markdown_filename(company_name: str) -> str:
-    """Convert company name to a safe markdown filename.
-    e.g. 'Acme Corp & Sons' → 'acme_corp__sons.md'
-    """
-    lower = company_name.lower()
-    underscored = lower.replace(" ", "_")
-    cleaned = re.sub(r"[^a-z0-9_]", "", underscored)
-    return f"{cleaned}.md"
-
-
-def _create_markdown_file(company_name: str, filename: str) -> None:
-    """Create a blank markdown context file for the company."""
-    path = COMPANY_CONTEXT_DIR / filename
-    if not path.exists():
-        path.write_text(
-            f"# {company_name} — Classification Context\n\n",
-            encoding="utf-8",
-        )
 
 
 @router.get("/companies", response_model=list[CompanyResponse])
 def list_companies(db: Session = Depends(get_db)):
     """Return all companies ordered alphabetically by name."""
     rows = db.execute(
-        text("SELECT id, name, markdown_filename FROM companies ORDER BY name ASC")
+        text("SELECT id, name FROM companies ORDER BY name ASC")
     ).fetchall()
-    return [
-        CompanyResponse(id=row[0], name=row[1], markdown_filename=row[2])
-        for row in rows
-    ]
+    return [CompanyResponse(id=row[0], name=row[1]) for row in rows]
 
 
 @router.post("/companies", response_model=CompanyResponse, status_code=201)
 def create_company(request: CompanyCreate, db: Session = Depends(get_db)):
-    """Create a new company record and its blank markdown context file."""
+    """Create a new company record."""
     name = request.name.strip()
     if not name:
         raise HTTPException(status_code=400, detail="Company name cannot be empty.")
-
-    markdown_filename = _derive_markdown_filename(name)
 
     # Check for exact duplicate
     existing = db.execute(
@@ -77,9 +51,7 @@ def create_company(request: CompanyCreate, db: Session = Depends(get_db)):
 
     # Check for normalized (fuzzy) duplicate
     normalized_new = _normalize_company_name(name)
-    all_rows = db.execute(
-        text("SELECT id, name FROM companies")
-    ).fetchall()
+    all_rows = db.execute(text("SELECT id, name FROM companies")).fetchall()
     for row in all_rows:
         if _normalize_company_name(row[1]) == normalized_new:
             raise HTTPException(
@@ -89,97 +61,64 @@ def create_company(request: CompanyCreate, db: Session = Depends(get_db)):
             )
 
     result = db.execute(
-        text(
-            "INSERT INTO companies (name, markdown_filename) "
-            "VALUES (:name, :filename) RETURNING id"
-        ),
-        {"name": name, "filename": markdown_filename},
+        text("INSERT INTO companies (name, context) VALUES (:name, :ctx) RETURNING id"),
+        {"name": name, "ctx": f"# {name} — Classification Context\n\n"},
     )
     new_id = result.fetchone()[0]
     db.commit()
 
-    _create_markdown_file(name, markdown_filename)
-
-    return CompanyResponse(id=new_id, name=name, markdown_filename=markdown_filename)
+    return CompanyResponse(id=new_id, name=name)
 
 
 @router.get("/companies/{company_id}/context-status")
 def get_context_status(company_id: int, db: Session = Depends(get_db)):
-    """Check if a company has a context file with actual rules."""
+    """Check if a company has a context with actual rules."""
     row = db.execute(
-        text("SELECT name, markdown_filename FROM companies WHERE id = :id"),
+        text("SELECT name, context FROM companies WHERE id = :id"),
         {"id": company_id},
     ).fetchone()
 
     if not row:
         raise HTTPException(status_code=404, detail="Company not found")
 
-    company_name, markdown_filename = row[0], row[1]
-    result = {
-        "company_id": company_id,
-        "company_name": company_name,
-        "has_rules": False,
-        "rule_count": 0,
-        "word_count": 0,
-    }
-
-    if not markdown_filename:
-        return result
-
-    md_path = COMPANY_CONTEXT_DIR / markdown_filename
-    if not md_path.exists():
-        return result
-
-    content = md_path.read_text(encoding="utf-8")
-
-    # Count bullet-point rules (lines starting with "- ")
-    lines = content.split("\n")
+    company_name, context = row[0], row[1] or ""
+    lines = context.split("\n")
     rule_lines = [l for l in lines if l.strip().startswith("- ")]
     rule_count = len(rule_lines)
-
-    # A file "has rules" only if it contains actual bullet-point rules
-    # The auto-created template just has the header, no rules
     has_rules = rule_count > 0
-
-    # Word count of the substantive content (excluding the title line)
-    word_count = markdown_body_word_count(content) if has_rules else 0
+    wc = markdown_body_word_count(context) if has_rules else 0
 
     return {
         "company_id": company_id,
         "company_name": company_name,
         "has_rules": has_rules,
         "rule_count": rule_count,
-        "word_count": word_count,
+        "word_count": wc,
     }
 
 
 @router.post("/companies/{company_id}/reprocess-corrections", response_model=ReprocessResponse)
 def reprocess_corrections(company_id: int, db: Session = Depends(get_db)):
     """
-    Developer endpoint: resets the company's markdown context file and changelog entries,
+    Developer endpoint: resets the company's context and changelog entries,
     then reruns the Layer A → Layer B pipeline for all company_specific corrections.
-
-    Useful when prompts have been updated and you want to regenerate the context file.
     """
-    # 1. Look up company
     row = db.execute(
-        text("SELECT id, name, markdown_filename FROM companies WHERE id = :id"),
+        text("SELECT id, name FROM companies WHERE id = :id"),
         {"id": company_id},
     ).fetchone()
     if not row:
         raise HTTPException(status_code=404, detail=f"Company {company_id} not found.")
 
     company_name: str = row[1]
-    markdown_filename: str = row[2]
 
-    # 2. Reset the markdown file to blank header
-    markdown_path = COMPANY_CONTEXT_DIR / markdown_filename
-    markdown_path.write_text(
-        f"# {company_name} — Classification Context\n\n",
-        encoding="utf-8",
+    # Reset context to blank header
+    db.execute(
+        text("UPDATE companies SET context = :ctx WHERE id = :id"),
+        {"ctx": f"# {company_name} — Classification Context\n\n", "id": company_id},
     )
 
-    # 3. Filter this company's entries out of the changelog
+    # Filter this company's entries out of the changelog
     if CHANGELOG_PATH.exists():
         remaining_lines = []
         with CHANGELOG_PATH.open("r", encoding="utf-8") as f:
@@ -192,12 +131,12 @@ def reprocess_corrections(company_id: int, db: Session = Depends(get_db)):
                     if entry.get("company_id") != company_id:
                         remaining_lines.append(line)
                 except json.JSONDecodeError:
-                    remaining_lines.append(line)  # Preserve malformed lines as-is
+                    remaining_lines.append(line)
         with CHANGELOG_PATH.open("w", encoding="utf-8") as f:
             for line in remaining_lines:
                 f.write(line + "\n")
 
-    # 4. Reset all corrections for this company to unprocessed
+    # Reset all corrections for this company to unprocessed
     db.execute(
         text(
             "UPDATE company_specific_corrections SET processed = FALSE "
@@ -207,11 +146,10 @@ def reprocess_corrections(company_id: int, db: Session = Depends(get_db)):
     )
     db.commit()
 
-    # 5. Re-run the pipeline for all pending corrections
+    # Re-run the pipeline for all pending corrections
     from app.services.company_context_service import process_pending_corrections
     raw_results = process_pending_corrections(company_id, db)
 
-    # 6. Build the response
     results = [
         ReprocessCorrectionResult(
             correction_id=r.get("correction_id", 0),

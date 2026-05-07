@@ -13,13 +13,9 @@ import {
   getCompanyContextStatus,
   checkExistingReview,
   continuePreviousReview,
-  getStatementTabConfigs,
-  saveStatementTabConfig,
 } from '../../api/client'
-import type { StatementTabConfig } from '../../api/client'
 import { API_BASE } from '../../api/client'
-import type { Company, CompanyContextStatus, Layer1Result, Layer2Result, Correction } from '../../types'
-import { applyStatementTabConfig } from '../../utils/fuzzyMatch'
+import type { Company, CompanyContextStatus, Layer1Result } from '../../types'
 import {
   Upload,
   Search,
@@ -40,47 +36,6 @@ approveAudio.load()
 
 type StatusMessage = { type: 'success' | 'error' | 'info'; message: string } | null
 type ExtractionStatus = 'idle' | 'running' | 'done' | 'error'
-
-// ── Field definitions for the assignment panel ────────────────────────────
-
-const IS_FIELDS = [
-  'Total Revenue', 'COGS', 'Gross Profit', 'Total Operating Expenses',
-  'EBITDA - Standard', 'EBITDA Adjustments', 'Adjusted EBITDA - Standard',
-  'Depreciation & Amortization', 'Interest Expense/(Income)',
-  'Other Expense / (Income)', 'Taxes', 'Net Income (Loss)',
-  'LTM - Adj EBITDA items', 'Equity Cure', 'Adjusted EBITDA - Including Cures',
-  'Covenant EBITDA',
-]
-const IS_BOLD = new Set([
-  'Gross Profit', 'Total Operating Expenses', 'EBITDA - Standard',
-  'Adjusted EBITDA - Standard', 'Net Income (Loss)', 'Adjusted EBITDA - Including Cures',
-])
-
-const BS_FIELDS = [
-  'Cash & Cash Equivalents', 'Accounts Receivable', 'Inventory',
-  'Prepaid Expenses', 'Other Current Assets', 'Total Current Assets',
-  'Property, Plant & Equipment', 'Accumulated Depreciation',
-  'Goodwill & Intangibles', 'Other non-current assets', 'Total Non-Current Assets',
-  'Total Assets', 'Accounts Payable', 'Accrued Liabilities', 'Deferred Revenue',
-  'Revolver - Balance Sheet', 'Current Maturities', 'Other Current Liabilities',
-  'Total Current Liabilities', 'Long Term Loans', 'Long Term Leases',
-  'Other Non-Current Liabilities', 'Total Non-Current Liabilities', 'Total Liabilities',
-  'Paid in Capital', 'Retained Earnings', 'Other Equity', 'Total Equity',
-  'Total Liabilities and Equity', 'Check',
-]
-const BS_BOLD = new Set([
-  'Total Current Assets', 'Total Non-Current Assets', 'Total Assets',
-  'Total Current Liabilities', 'Total Non-Current Liabilities',
-  'Total Liabilities', 'Total Equity', 'Total Liabilities and Equity',
-])
-
-const CFS_FIELDS = [
-  'Operating Cash Flow (Working Capital)', 'Operating Cash Flow (Non-Working Capital)',
-  'Operating Cash Flow', 'Investing Cash Flow', 'Financing Cash Flow', 'CAPEX',
-]
-const CFS_BOLD = new Set(['Operating Cash Flow', 'Investing Cash Flow', 'Financing Cash Flow'])
-
-const FIELDS = { income_statement: IS_FIELDS, balance_sheet: BS_FIELDS, cash_flow_statement: CFS_FIELDS }
 
 // ── Helpers ───────────────────────────────────────────────────────────────
 
@@ -159,61 +114,6 @@ function Layer1ResultsTable({ result, label }: { result: Layer1Result; label?: s
   )
 }
 
-// ── FieldAssignmentTable ──────────────────────────────────────────────────
-
-interface FieldAssignmentTableProps {
-  fields: string[]
-  boldSet: Set<string>
-  checkedTabs: string[]
-  assignments: Record<string, string>
-  onChange: (field: string, tab: string) => void
-}
-
-function FieldAssignmentTable({
-  fields, boldSet, checkedTabs, assignments, onChange,
-}: FieldAssignmentTableProps) {
-  return (
-    <div className="mx-[14px] mb-2 border border-gray-200 rounded-lg overflow-hidden text-[11px]">
-      <div className="flex justify-between items-center px-2 py-1 bg-gray-100 border-b border-gray-200">
-        <span className="text-muted-foreground" style={{ fontWeight: 600 }}>Field</span>
-        <span className="text-muted-foreground" style={{ fontWeight: 600 }}>Tab</span>
-      </div>
-      <div style={{ maxHeight: 180, overflowY: 'auto' }}>
-        {fields.map((field) => {
-          const isBold = boldSet.has(field)
-          return (
-            <div
-              key={field}
-              className="flex justify-between items-center px-2 py-1 border-b border-gray-100 last:border-b-0"
-              style={{ background: isBold ? '#f9fafb' : undefined }}
-            >
-              <span
-                className={isBold ? '' : 'text-muted-foreground'}
-                style={{
-                  fontWeight: isBold ? 500 : 400,
-                  paddingLeft: isBold ? 0 : 8,
-                }}
-              >
-                {field}
-              </span>
-              <select
-                value={assignments[field] ?? checkedTabs[0] ?? ''}
-                onChange={(e) => onChange(field, e.target.value)}
-                className="text-[11px] border border-gray-200 rounded px-1 py-0.5 bg-white focus:outline-none"
-                style={{ minWidth: 120 }}
-              >
-                {checkedTabs.map((tab) => (
-                  <option key={tab} value={tab}>{tab}</option>
-                ))}
-              </select>
-            </div>
-          )
-        })}
-      </div>
-    </div>
-  )
-}
-
 // ── Main component ────────────────────────────────────────────────────────
 
 export default function Step1Upload() {
@@ -249,7 +149,6 @@ export default function Step1Upload() {
     setPdfPageCount,
     setPdfUrl,
     setPdfPageAssignments,
-    setFieldTabAssignments,
     approveStep1,
   } = useWizardState()
 
@@ -263,13 +162,13 @@ export default function Step1Upload() {
   const [contextStatus, setContextStatus] = useState<CompanyContextStatus | null>(null)
   const [contextLoading, setContextLoading] = useState(false)
 
-  // Assignment panel state
+  // Single-tab assignment: one sheet per statement type
   const [assignments, setAssignments] = useState<{
-    income_statement: string[]
-    balance_sheet: string[]
-    cash_flow_statement: string[]
-  }>({ income_statement: [], balance_sheet: [], cash_flow_statement: [] })
-  const [fieldAssignments, setFieldAssignments] = useState<Record<string, Record<string, string>>>({})
+    income_statement: string
+    balance_sheet: string
+    cash_flow_statement: string
+  }>({ income_statement: '', balance_sheet: '', cash_flow_statement: '' })
+
   const [extractionStatus, setExtractionStatus] = useState<ExtractionStatus>('idle')
   const [extractionError, setExtractionError] = useState<string | null>(null)
 
@@ -315,26 +214,6 @@ export default function Step1Upload() {
       .catch(() => {})
       .finally(() => setCompaniesLoading(false))
   }, [])
-
-  async function loadSavedTabConfigs(cid: number, availableTabs: string[]) {
-    if (!cid || availableTabs.length === 0) return
-    try {
-      const configs = await getStatementTabConfigs(cid)
-      for (const [stmtType, saved] of Object.entries(configs)) {
-        if (saved.tabs.length < 2) continue
-        const result = applyStatementTabConfig(saved, availableTabs)
-        if (!result) continue
-        setAssignments((prev) => ({ ...prev, [stmtType]: result.tabs }))
-        setFieldAssignments((prev) => ({ ...prev, [stmtType]: result.fieldAssignments }))
-      }
-    } catch {}
-  }
-
-  // Load saved tab configs when company is selected (sheetNames may be empty at this point)
-  useEffect(() => {
-    if (!companyId) return
-    loadSavedTabConfigs(companyId, sheetNames)
-  }, [companyId])
 
   // Close dropdown on outside click
   useEffect(() => {
@@ -425,7 +304,6 @@ export default function Step1Upload() {
       layer1Results['cash_flow_statement']
     )
 
-  // canApprove: any statement has a completed layer1 result and no extraction is running
   const canApprove = !!(
     (
       layer1Results['income_statement'] ||
@@ -436,19 +314,17 @@ export default function Step1Upload() {
     !Object.values(pdfExtracting).some(Boolean)
   )
 
-  // extractedSheetNames: tabs whose statement type has a completed layer1Result
   const extractedSheetNames = sheetNames.filter((s) => {
-    for (const [stmtType, tabs] of Object.entries(assignments)) {
-      if (tabs.includes(s) && layer1Results[stmtType]) return true
+    for (const [stmtType, tab] of Object.entries(assignments)) {
+      if (tab === s && layer1Results[stmtType]) return true
     }
     return false
   })
 
-  // Any tabs assigned at all
   const anyAssigned =
-    assignments.income_statement.length > 0 ||
-    assignments.balance_sheet.length > 0 ||
-    assignments.cash_flow_statement.length > 0
+    assignments.income_statement !== '' ||
+    assignments.balance_sheet !== '' ||
+    assignments.cash_flow_statement !== ''
 
   const canRunExtraction =
     hasUpload &&
@@ -457,36 +333,6 @@ export default function Step1Upload() {
     reportingPeriod.trim() !== '' &&
     companyName.trim() !== '' &&
     extractionStatus !== 'running'
-
-  // ── Tab assignment toggle ───────────────────────────────────────────────
-
-  function toggleTabAssignment(
-    stmtType: 'income_statement' | 'balance_sheet' | 'cash_flow_statement',
-    tab: string,
-  ) {
-    const current = assignments[stmtType]
-    const isRemoving = current.includes(tab)
-    const updated = isRemoving ? current.filter((t) => t !== tab) : [...current, tab]
-    setAssignments((prev) => ({ ...prev, [stmtType]: updated }))
-    if (isRemoving) {
-      setFieldAssignments((prev) => {
-        const stmtFa = { ...(prev[stmtType] ?? {}) }
-        for (const [field, assignedTab] of Object.entries(stmtFa)) {
-          if (assignedTab === tab) delete stmtFa[field]
-        }
-        return { ...prev, [stmtType]: stmtFa }
-      })
-    }
-    setExtractionStatus('idle')
-  }
-
-  function setFieldTabAssignment(stmtType: string, field: string, tab: string) {
-    setFieldAssignments((prev) => ({
-      ...prev,
-      [stmtType]: { ...(prev[stmtType] ?? {}), [field]: tab },
-    }))
-    setExtractionStatus('idle')
-  }
 
   // ── Resizable divider ───────────────────────────────────────────────────
 
@@ -538,12 +384,9 @@ export default function Step1Upload() {
         setPdfPageCount(0)
         setPdfUrl(null)
         setPdfPageAssignments({})
-        // Reset assignment state for new file, then auto-load saved configs
-        setAssignments({ income_statement: [], balance_sheet: [], cash_flow_statement: [] })
-        setFieldAssignments({})
+        setAssignments({ income_statement: '', balance_sheet: '', cash_flow_statement: '' })
         setExtractionStatus('idle')
         setExtractionError(null)
-        if (companyId) loadSavedTabConfigs(companyId, response.sheetNames)
       }
 
       setStatus({
@@ -612,8 +455,7 @@ export default function Step1Upload() {
     setSheetNames([])
     setWorkbookUrl(null)
     setLayer1Results({})
-    setAssignments({ income_statement: [], balance_sheet: [], cash_flow_statement: [] })
-    setFieldAssignments({})
+    setAssignments({ income_statement: '', balance_sheet: '', cash_flow_statement: '' })
     setExtractionStatus('idle')
     setExtractionError(null)
     setStatus(null)
@@ -631,8 +473,7 @@ export default function Step1Upload() {
     setSheetNames([])
     setWorkbookUrl(null)
     setLayer1Results({})
-    setAssignments({ income_statement: [], balance_sheet: [], cash_flow_statement: [] })
-    setFieldAssignments({})
+    setAssignments({ income_statement: '', balance_sheet: '', cash_flow_statement: '' })
     setExtractionStatus('idle')
     setExtractionError(null)
     setStatus(null)
@@ -734,79 +575,24 @@ export default function Step1Upload() {
       'balance_sheet',
       'cash_flow_statement',
     ] as const) {
-      const tabs = assignments[stmtType]
-      if (tabs.length === 0) continue
+      const tab = assignments[stmtType]
+      if (!tab) continue
 
-      if (tabs.length === 1) {
-        tasks.push(
-          runLayer1(sessionId!, tabs[0], stmtType, reportingPeriod).then((result) =>
-            mergeLayer1Result(stmtType, {
-              lineItems: result.lineItems,
-              sourceScaling: result.sourceScaling,
-              columnIdentified: result.columnIdentified,
-              sourceSheet: tabs[0],
-            }),
-          ),
-        )
-      } else {
-        // Multi-tab: run once per unique tab with fields_filter for that tab
-        const tabFieldMap: Record<string, string[]> = {}
-        const perFieldAssignments = fieldAssignments[stmtType] ?? {}
-        const defaultTab = tabs[0]
-        const allFields = FIELDS[stmtType as keyof typeof FIELDS] ?? []
-        for (const field of allFields) {
-          const tab = perFieldAssignments[field] ?? defaultTab
-          if (!tabFieldMap[tab]) tabFieldMap[tab] = []
-          tabFieldMap[tab].push(field)
-        }
-
-        const perTabResults: Record<string, Record<string, number>> = {}
-        const tabPromises = Object.entries(tabFieldMap).map(([tab, fields]) =>
-          runLayer1(
-            sessionId!,
-            tab,
-            stmtType,
-            reportingPeriod,
-            fields.length > 0 ? fields : undefined,
-          ).then((result) => {
-            perTabResults[tab] = result.lineItems
+      tasks.push(
+        runLayer1(sessionId!, tab, stmtType, reportingPeriod).then((result) =>
+          mergeLayer1Result(stmtType, {
+            lineItems: result.lineItems,
+            sourceScaling: result.sourceScaling,
+            columnIdentified: result.columnIdentified,
+            sourceSheet: tab,
           }),
-        )
-
-        tasks.push(
-          Promise.all(tabPromises).then(() => {
-            const merged: Record<string, number> = {}
-            for (const items of Object.values(perTabResults)) {
-              Object.assign(merged, items)
-            }
-            mergeLayer1Result(stmtType, {
-              lineItems: merged,
-              sourceScaling: 'multi-tab',
-              columnIdentified: tabs.join(', '),
-              sourceSheet: tabs.join(', '),
-            })
-          }),
-        )
-      }
+        ),
+      )
     }
 
     try {
       await Promise.allSettled(tasks)
       setExtractionStatus('done')
-      setFieldTabAssignments(fieldAssignments)
-      // Save tab configs for all statement types that used multi-tab
-      if (companyId) {
-        for (const stmtType of ['income_statement', 'balance_sheet', 'cash_flow_statement']) {
-          const tabs = assignments[stmtType as keyof typeof assignments] ?? []
-          if (tabs.length >= 2) {
-            const config: StatementTabConfig = {
-              tabs,
-              fieldAssignments: fieldAssignments[stmtType] ?? {},
-            }
-            saveStatementTabConfig(companyId, stmtType, config).catch(() => {})
-          }
-        }
-      }
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Extraction failed.'
       setExtractionStatus('error')
@@ -844,7 +630,6 @@ export default function Step1Upload() {
     try {
       const data = await continuePreviousReview(companyId, reportingPeriod)
 
-      // Runtime guard: warn if resumed data is missing expected shape
       if (!data.layer1_data || typeof data.layer1_data !== 'object') {
         console.warn('[handleContinuePrevious] layer1_data missing or malformed', data.layer1_data)
       }
@@ -1162,9 +947,8 @@ export default function Step1Upload() {
 
         {/* Right panel */}
         {uploadFileType === 'pdf' ? (
-          /* PDF extraction panel — unchanged */
+          /* PDF extraction panel */
           <div className="flex-1 flex flex-col min-w-[320px]">
-            {/* Global Run Extraction button — always visible at top */}
             <div className="px-4 py-2.5 border-b border-border shrink-0">
               <button
                 onClick={handlePdfRunAll}
@@ -1183,7 +967,6 @@ export default function Step1Upload() {
               </button>
             </div>
 
-            {/* Tab selector */}
             <TabSelector
               tabs={['Income Statement', 'Balance Sheet', 'Cash Flow Statement']}
               activeTab={
@@ -1206,7 +989,6 @@ export default function Step1Upload() {
               smallText
             />
 
-            {/* Tab content — results or instructions */}
             {layer1Results[pdfActiveTab] ? (
               <div className="flex-1 overflow-auto p-4">
                 <Layer1ResultsTable result={layer1Results[pdfActiveTab]} />
@@ -1253,19 +1035,17 @@ export default function Step1Upload() {
             )}
           </div>
         ) : (
-          /* Excel assignment panel */
+          /* Excel assignment panel — single tab per statement */
           <div className="flex-1 flex flex-col overflow-hidden min-w-[320px] bg-white">
-            {/* Panel header */}
             <div
               className="shrink-0 px-[14px] py-2.5 border-b border-gray-200 bg-white"
               style={{ position: 'sticky', top: 0, zIndex: 10 }}
             >
               <p className="text-[11px] text-muted-foreground">
-                Assign tabs to statements, then run extraction
+                Assign one sheet per statement, then run extraction
               </p>
             </div>
 
-            {/* Run Extraction button — always visible, not scrolled away */}
             <div className="shrink-0 px-[14px] py-2.5 border-b border-border">
               <button
                 onClick={handleRunExtraction}
@@ -1282,54 +1062,64 @@ export default function Step1Upload() {
                   'Run Extraction'
                 )}
               </button>
+              {extractionError && (
+                <p className="text-[11px] text-red-600 mt-1.5">{extractionError}</p>
+              )}
             </div>
 
-            {/* Scrollable content */}
             <div className="flex-1 overflow-y-auto">
-              {/* Income Statement block */}
-              <AssignmentBlock
-                label="Income Statement"
-                stmtType="income_statement"
-                checkedTabs={assignments.income_statement}
-                sheetNames={sheetNames}
-                fields={IS_FIELDS}
-                boldSet={IS_BOLD}
-                fieldAssignments={fieldAssignments['income_statement'] ?? {}}
-                onToggleTab={(tab) => toggleTabAssignment('income_statement', tab)}
-                onFieldAssign={(field, tab) =>
-                  setFieldTabAssignment('income_statement', field, tab)
-                }
-              />
-
-              {/* Balance Sheet block */}
-              <AssignmentBlock
-                label="Balance Sheet"
-                stmtType="balance_sheet"
-                checkedTabs={assignments.balance_sheet}
-                sheetNames={sheetNames}
-                fields={BS_FIELDS}
-                boldSet={BS_BOLD}
-                fieldAssignments={fieldAssignments['balance_sheet'] ?? {}}
-                onToggleTab={(tab) => toggleTabAssignment('balance_sheet', tab)}
-                onFieldAssign={(field, tab) =>
-                  setFieldTabAssignment('balance_sheet', field, tab)
-                }
-              />
-
-              {/* Cash Flow Statement block */}
-              <AssignmentBlock
-                label="Cash Flow Statement"
-                stmtType="cash_flow_statement"
-                checkedTabs={assignments.cash_flow_statement}
-                sheetNames={sheetNames}
-                fields={CFS_FIELDS}
-                boldSet={CFS_BOLD}
-                fieldAssignments={fieldAssignments['cash_flow_statement'] ?? {}}
-                onToggleTab={(tab) => toggleTabAssignment('cash_flow_statement', tab)}
-                onFieldAssign={(field, tab) =>
-                  setFieldTabAssignment('cash_flow_statement', field, tab)
-                }
-              />
+              {(
+                [
+                  { key: 'income_statement', label: 'Income Statement' },
+                  { key: 'balance_sheet', label: 'Balance Sheet' },
+                  { key: 'cash_flow_statement', label: 'Cash Flow Statement' },
+                ] as const
+              ).map(({ key, label }) => (
+                <div key={key} className="border-b border-gray-200 px-[14px] py-3">
+                  <p
+                    className="text-muted-foreground uppercase mb-2"
+                    style={{ fontSize: 10, fontWeight: 500, letterSpacing: '0.05em' }}
+                  >
+                    {label}
+                  </p>
+                  {sheetNames.length === 0 ? (
+                    <p className="text-[11px] text-muted-foreground italic">
+                      Upload a file to assign a sheet
+                    </p>
+                  ) : (
+                    <div
+                      className="border border-gray-200 rounded-lg overflow-y-auto"
+                      style={{ maxHeight: 130 }}
+                    >
+                      {sheetNames.map((tab) => {
+                        const selected = assignments[key] === tab
+                        return (
+                          <label
+                            key={tab}
+                            className="flex items-center gap-2 cursor-pointer border-b border-gray-100 last:border-b-0"
+                            style={{
+                              padding: '5px 9px',
+                              background: selected ? '#eff6ff' : undefined,
+                              color: selected ? '#1d4ed8' : undefined,
+                            }}
+                          >
+                            <input
+                              type="radio"
+                              name={key}
+                              checked={selected}
+                              onChange={() =>
+                                setAssignments((prev) => ({ ...prev, [key]: tab }))
+                              }
+                              style={{ accentColor: '#185FA5', width: 13, height: 13, flexShrink: 0 }}
+                            />
+                            <span className="truncate text-[12px]">{tab}</span>
+                          </label>
+                        )
+                      })}
+                    </div>
+                  )}
+                </div>
+              ))}
             </div>
           </div>
         )}
@@ -1378,101 +1168,6 @@ export default function Step1Upload() {
             </div>
           </div>
         </div>
-      )}
-    </div>
-  )
-}
-
-// ── AssignmentBlock ───────────────────────────────────────────────────────
-
-interface AssignmentBlockProps {
-  label: string
-  stmtType: string
-  checkedTabs: string[]
-  sheetNames: string[]
-  fields: string[]
-  boldSet: Set<string>
-  fieldAssignments: Record<string, string>
-  onToggleTab: (tab: string) => void
-  onFieldAssign: (field: string, tab: string) => void
-}
-
-function AssignmentBlock({
-  label,
-  checkedTabs,
-  sheetNames,
-  fields,
-  boldSet,
-  fieldAssignments,
-  onToggleTab,
-  onFieldAssign,
-}: AssignmentBlockProps) {
-  const showFieldTable = checkedTabs.length >= 2
-
-  return (
-    <div className="border-b border-gray-200">
-      {/* Section label */}
-      <div className="flex items-center gap-2 px-[14px] pt-3 pb-1.5">
-        <span
-          className="text-muted-foreground uppercase"
-          style={{ fontSize: 10, fontWeight: 500, letterSpacing: '0.05em' }}
-        >
-          {label}
-        </span>
-        {checkedTabs.length >= 2 && (
-          <span
-            className="bg-blue-50 text-blue-700 rounded px-1 py-0.5"
-            style={{ fontSize: 10, fontWeight: 500 }}
-          >
-            {checkedTabs.length} tabs
-          </span>
-        )}
-      </div>
-
-      {/* Listbox */}
-      {sheetNames.length === 0 ? (
-        <p className="px-[14px] pb-2 text-[11px] text-muted-foreground italic">
-          Upload a file to assign tabs
-        </p>
-      ) : (
-        <div
-          className="mx-[14px] mb-2 border border-gray-200 rounded-lg overflow-y-auto"
-          style={{ maxHeight: 130 }}
-        >
-          {sheetNames.map((tab) => {
-            const checked = checkedTabs.includes(tab)
-            return (
-              <label
-                key={tab}
-                className="flex items-center gap-2 cursor-pointer border-b border-gray-100 last:border-b-0"
-                style={{
-                  padding: '5px 9px',
-                  background: checked ? '#eff6ff' : undefined,
-                  color: checked ? '#1d4ed8' : undefined,
-                }}
-              >
-                <input
-                  type="checkbox"
-                  checked={checked}
-                  onChange={() => onToggleTab(tab)}
-                  style={{ accentColor: '#185FA5', width: 13, height: 13, flexShrink: 0 }}
-                />
-                <span className="truncate text-[12px]">{tab}</span>
-              </label>
-            )
-          })}
-        </div>
-      )}
-
-      {/* Field assignment table — only when 2+ tabs checked */}
-      {showFieldTable && (
-        <FieldAssignmentTable
-          fields={fields}
-          boldSet={boldSet}
-          checkedTabs={checkedTabs}
-          assignments={fieldAssignments}
-          onChange={onFieldAssign}
-        />
       )}
     </div>
   )

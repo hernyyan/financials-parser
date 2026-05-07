@@ -182,7 +182,6 @@ class CompanyCreate(BaseModel):
 class CompanyResponse(BaseModel):
     id: int
     name: str
-    markdown_filename: str
 
 
 # ─── Correction Processing ────────────────────────────────────────────────────

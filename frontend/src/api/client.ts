@@ -16,7 +16,6 @@ import type {
   CompanyContextStatus,
   ExistingReviewCheck,
   ContinuedReview,
-  StatementTabConfig,
 } from '../types'
 
 export const API_BASE = import.meta.env.VITE_API_URL || '/api'
@@ -252,25 +251,3 @@ export async function recalculate(
   return handleResponse(res)
 }
 
-// Re-export StatementTabConfig so imports from this module continue to work
-export type { StatementTabConfig }
-
-// GET /companies/{id}/statement-tab-configs
-export async function getStatementTabConfigs(companyId: number): Promise<Record<string, StatementTabConfig>> {
-  const res = await fetch(`${API_BASE}/companies/${companyId}/statement-tab-configs`)
-  return handleResponse(res)
-}
-
-// POST /companies/{id}/statement-tab-configs/{statement_type}
-export async function saveStatementTabConfig(
-  companyId: number,
-  statementType: string,
-  config: StatementTabConfig,
-): Promise<void> {
-  const res = await fetch(`${API_BASE}/companies/${companyId}/statement-tab-configs/${statementType}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(config),
-  })
-  await handleResponse<{ success: boolean }>(res)
-}

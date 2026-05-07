@@ -1,8 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { ChevronLeft, Check, X, Edit3, Loader2 } from 'lucide-react'
 import { adminGetCompanyContext, adminGetCompanyData, adminGetCompanyCorrections, adminRenameCompany, AdminCompanyContext, CompanyPeriodData, AdminCorrection } from './AdminApiClient'
-import { getStatementTabConfigs } from '../../api/client'
-import type { StatementTabConfig } from '../../api/client'
 import CompanyContextEditor from './CompanyContextEditor'
 import TemplateFieldList from './TemplateFieldList'
 import RuleWriter from './RuleWriter'
@@ -13,7 +11,7 @@ interface Props {
   onBack: () => void
 }
 
-type Tab = 'data' | 'corrections' | 'datasets' | 'tab_config'
+type Tab = 'data' | 'corrections' | 'datasets'
 
 function formatVal(v: unknown): string {
   if (v === null || v === undefined) return '—'
@@ -31,7 +29,6 @@ export default function CompanyDetail({ companyId, onBack }: Props) {
   const [contextContent, setContextContent] = useState<string>('')
   const [periods, setPeriods] = useState<CompanyPeriodData[]>([])
   const [corrections, setCorrections] = useState<AdminCorrection[]>([])
-  const [tabConfigs, setTabConfigs] = useState<Record<string, StatementTabConfig>>({})
   const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState<Tab>('data')
   const [selectedField, setSelectedField] = useState<{ name: string; statementType: string } | null>(null)
@@ -48,13 +45,11 @@ export default function CompanyDetail({ companyId, onBack }: Props) {
       adminGetCompanyContext(companyId),
       adminGetCompanyData(companyId),
       adminGetCompanyCorrections(companyId),
-      getStatementTabConfigs(companyId).catch(() => ({})),
-    ]).then(([ctx, data, corr, cfgs]) => {
+    ]).then(([ctx, data, corr]) => {
       setContext(ctx)
       setContextContent(ctx.content ?? '')
       setPeriods(data.periods)
       setCorrections(corr.corrections)
-      setTabConfigs(cfgs as Record<string, StatementTabConfig>)
     }).catch(console.error).finally(() => setLoading(false))
   }, [companyId])
 
@@ -95,7 +90,6 @@ export default function CompanyDetail({ companyId, onBack }: Props) {
     { key: 'data', label: 'L1 / L2 Data' },
     { key: 'corrections', label: `Corrections (${corrections.length})` },
     { key: 'datasets', label: 'Datasets' },
-    { key: 'tab_config', label: 'Tab Config' },
   ]
 
   return (
@@ -265,61 +259,6 @@ export default function CompanyDetail({ companyId, onBack }: Props) {
                       <span className="text-muted-foreground ml-auto">{p.created_at ? new Date(p.created_at).toLocaleDateString() : '—'}</span>
                     </div>
                   ))}
-                </div>
-              )}
-            </div>
-          )}
-          {activeTab === 'tab_config' && (
-            <div className="h-full overflow-auto p-4">
-              {Object.keys(tabConfigs).length === 0 ? (
-                <p className="text-[12px] text-muted-foreground">No tab configs saved for this company.</p>
-              ) : (
-                <div className="space-y-6">
-                  {(
-                    [
-                      { key: 'income_statement', label: 'Income Statement' },
-                      { key: 'balance_sheet', label: 'Balance Sheet' },
-                      { key: 'cash_flow_statement', label: 'Cash Flow Statement' },
-                    ] as const
-                  ).map(({ key, label }) => {
-                    const cfg = tabConfigs[key]
-                    if (!cfg || cfg.tabs.length < 2) return null
-                    return (
-                      <div key={key} className="space-y-3">
-                        <p className="text-[11px] text-muted-foreground uppercase" style={{ fontWeight: 600, letterSpacing: '0.05em' }}>
-                          {label}
-                        </p>
-                        <div className="flex flex-wrap gap-1.5">
-                          {cfg.tabs.map((tab) => (
-                            <span
-                              key={tab}
-                              className="px-2 py-0.5 rounded border border-border text-[12px] bg-white"
-                            >
-                              {tab}
-                            </span>
-                          ))}
-                        </div>
-                        {Object.keys(cfg.fieldAssignments).length > 0 && (
-                          <table className="text-[12px] border-collapse w-full max-w-lg">
-                            <thead>
-                              <tr className="bg-gray-50 border-b border-border">
-                                <th className="text-left px-3 py-1.5 text-muted-foreground" style={{ fontWeight: 500 }}>Field</th>
-                                <th className="text-left px-3 py-1.5 text-muted-foreground" style={{ fontWeight: 500 }}>Tab</th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {Object.entries(cfg.fieldAssignments).map(([field, tab]) => (
-                                <tr key={field} className="border-b border-gray-100">
-                                  <td className="px-3 py-1.5">{field}</td>
-                                  <td className="px-3 py-1.5 text-muted-foreground">{tab}</td>
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
-                        )}
-                      </div>
-                    )
-                  })}
                 </div>
               )}
             </div>

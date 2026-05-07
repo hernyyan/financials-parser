@@ -48,6 +48,10 @@ backend/processed/*
 !backend/uploads/.gitkeep
 !backend/processed/.gitkeep
 
+# Company data (migrated to Postgres — don't commit to git)
+backend/company_context/
+backend/company_datasets/
+
 # IDE
 .vscode/
 .idea/

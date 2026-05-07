@@ -31,7 +31,6 @@ interface WizardContextType extends WizardState {
   setPdfPageCount: (count: number) => void
   setPdfUrl: (url: string | null) => void
   setPdfPageAssignments: (assignments: Record<number, 'income_statement' | 'balance_sheet' | 'cash_flow_statement'>) => void
-  setFieldTabAssignments: (assignments: Record<string, Record<string, string>>) => void
   resetWizard: () => void
   loadMockStep2: () => void
 }
@@ -54,7 +53,6 @@ const defaultState: WizardState = {
   layer2Results: {},
   corrections: [],
   step2Approved: false,
-  fieldTabAssignments: {},
   currentStep: 1,
   activeSheetTab: '',
   selectedCell: null,
@@ -230,10 +228,6 @@ export function WizardProvider({ children }: { children: ReactNode }) {
     setState((s) => ({ ...s, pdfPageAssignments: assignments }))
   }
 
-  function setFieldTabAssignments(assignments: Record<string, Record<string, string>>) {
-    setState((s) => ({ ...s, fieldTabAssignments: assignments }))
-  }
-
   function resetWizard() {
     setState(defaultState)
   }
@@ -261,7 +255,6 @@ export function WizardProvider({ children }: { children: ReactNode }) {
       },
       corrections: [],
       step2Approved: false,
-      fieldTabAssignments: {},
       currentStep: 2,
       activeSheetTab: 'Income Statement',
       selectedCell: null,
@@ -295,7 +288,6 @@ export function WizardProvider({ children }: { children: ReactNode }) {
     setPdfPageCount,
     setPdfUrl,
     setPdfPageAssignments,
-    setFieldTabAssignments,
     resetWizard,
     loadMockStep2,
   }

@@ -120,7 +120,6 @@ export default function Step2Classify() {
     selectedCell,
     sidePanelOpen,
     useCompanyContext,
-    fieldTabAssignments,
     setLayer2Results,
     addCorrection,
     removeCorrection,
@@ -663,12 +662,7 @@ export default function Step2Classify() {
           statementType={selectedCellType}
           layer2Result={activeLayer2}
           existingCorrection={existingCorrection}
-          sourceSheet={(() => {
-            if (!selectedCell || !selectedCellType) return null
-            const perField = fieldTabAssignments[selectedCellType]
-            if (perField && perField[selectedCell]) return perField[selectedCell]
-            return layer1Results[selectedCellType]?.sourceSheet ?? null
-          })()}
+          sourceSheet={selectedCellType ? (layer1Results[selectedCellType]?.sourceSheet ?? null) : null}
           onClose={() => { setSidePanelOpen(false); clearPending() }}
           onSaveCorrection={handleSaveCorrection}
           onRemoveCorrection={handleRemoveCorrection}

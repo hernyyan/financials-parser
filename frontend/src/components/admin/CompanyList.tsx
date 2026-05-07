@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Search, Building2, Loader2, Plus, Check, X, Trash2, ChevronUp, ChevronDown } from 'lucide-react'
 import { adminGetCompanies, adminCreateCompany, adminDeleteCompany, AdminCompany } from './AdminApiClient'
 
-type SortField = 'name' | 'markdown_word_count' | 'total_corrections' | 'last_modified'
+type SortField = 'name' | 'context_word_count' | 'total_corrections'
 
 interface Props {
   onSelect: (id: number) => void
@@ -45,13 +45,10 @@ export default function CompanyList({ onSelect }: Props) {
       setCompanies((prev) => [...prev, {
         id: created.id,
         name: created.name,
-        markdown_filename: created.markdown_filename,
-        markdown_word_count: 0,
-        markdown_file_size_bytes: 0,
+        context_word_count: 0,
         total_corrections: 0,
         processed_corrections: 0,
         pending_corrections: 0,
-        last_modified: null,
       }])
       setAdding(false)
       setAddText('')
@@ -96,9 +93,6 @@ export default function CompanyList({ onSelect }: Props) {
       if (sortField === 'name') {
         av = a.name.toLowerCase()
         bv = b.name.toLowerCase()
-      } else if (sortField === 'last_modified') {
-        av = a.last_modified ?? ''
-        bv = b.last_modified ?? ''
       } else {
         av = a[sortField]
         bv = b[sortField]
@@ -110,9 +104,8 @@ export default function CompanyList({ onSelect }: Props) {
 
   const SORT_OPTIONS: { field: SortField; label: string }[] = [
     { field: 'name', label: 'Name' },
-    { field: 'markdown_word_count', label: 'Words' },
+    { field: 'context_word_count', label: 'Words' },
     { field: 'total_corrections', label: 'Corrections' },
-    { field: 'last_modified', label: 'Last edited' },
   ]
 
   return (
@@ -197,16 +190,13 @@ export default function CompanyList({ onSelect }: Props) {
               className="flex items-center gap-4 px-4 py-3 bg-white border border-border rounded-lg hover:border-gray-300 hover:shadow-sm cursor-pointer transition-all"
             >
               <div className="flex items-center gap-2 flex-1 min-w-0">
-                <div className={`w-2 h-2 rounded-full shrink-0 ${c.markdown_word_count > 0 ? 'bg-emerald-500' : 'bg-gray-300'}`} />
+                <div className={`w-2 h-2 rounded-full shrink-0 ${c.context_word_count > 0 ? 'bg-emerald-500' : 'bg-gray-300'}`} />
                 <Building2 className="w-4 h-4 text-muted-foreground shrink-0" />
                 <span className="text-[13px] truncate" style={{ fontWeight: 500 }}>{c.name}</span>
               </div>
               <div className="flex items-center gap-4 text-[11px] text-muted-foreground shrink-0">
-                <span>{c.markdown_word_count} words</span>
+                <span>{c.context_word_count} words</span>
                 <span>{c.total_corrections} corrections</span>
-                {c.last_modified && (
-                  <span>{new Date(c.last_modified).toLocaleDateString()}</span>
-                )}
                 {c.pending_corrections > 0 && (
                   <span className="px-1.5 py-0.5 bg-amber-50 text-amber-700 rounded text-[10px]" style={{ fontWeight: 500 }}>
                     {c.pending_corrections} pending

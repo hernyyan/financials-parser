@@ -4,12 +4,12 @@ CorrectionPipeline — the Layer A → Layer B processing pipeline for company_s
 Single interface: CorrectionPipeline.process(correction_id, db) → PipelineResult
 
 Steps:
-1. Load correction from DB (join companies for markdown_filename)
+1. Load correction from DB (join companies for context)
 2. Run Layer A (Sonnet): convert raw correction → clean instruction
 3. Check UNCLEAR from Layer A
-4. Read current markdown file
-5. Run Layer B (Opus): integrate instruction into markdown
-6. Write updated markdown if action is AMEND or APPEND
+4. Read current context from DB
+5. Run Layer B (Opus): integrate instruction into context markdown
+6. Write updated context to DB if action is AMEND or APPEND
 7. Check word count, emit alert if over limit
 8. Log to changelog
 9. Mark correction as processed in DB
@@ -25,7 +25,7 @@ from typing import List, Optional
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 
-from app.config import COMPANY_CONTEXT_DIR, DATA_DIR, LAYER_A_MODEL, LAYER_B_MODEL
+from app.config import DATA_DIR, LAYER_A_MODEL, LAYER_B_MODEL
 from app.services.claude_service import get_claude_service
 from app.utils.text_utils import markdown_body_word_count, COMPANY_CONTEXT_WORD_LIMIT, COMPANY_CONTEXT_WORD_WARNING
 
@@ -60,10 +60,8 @@ class CorrectionPipeline:
                 SELECT csc.id, csc.company_id, csc.company_name, csc.period,
                        csc.statement_type, csc.field_name,
                        csc.layer2_value, csc.layer2_reasoning, csc.layer2_validation,
-                       csc.corrected_value, csc.analyst_reasoning, csc.processed,
-                       c.markdown_filename
+                       csc.corrected_value, csc.analyst_reasoning, csc.processed
                 FROM company_specific_corrections csc
-                LEFT JOIN companies c ON csc.company_id = c.id
                 WHERE csc.id = :id
             """),
             {"id": correction_id},
@@ -84,7 +82,7 @@ class CorrectionPipeline:
         (
             _cid, company_id, company_name, period, statement_type, field_name,
             layer2_value, layer2_reasoning, layer2_validation,
-            corrected_value, analyst_reasoning, processed, markdown_filename,
+            corrected_value, analyst_reasoning, processed,
         ) = row
 
         if processed:
@@ -155,18 +153,14 @@ class CorrectionPipeline:
                 alert_emitted=False, error=None,
             )
 
-        # Step 4 — Read current markdown
-        if markdown_filename:
-            markdown_path = COMPANY_CONTEXT_DIR / markdown_filename
-        else:
-            safe = re.sub(r"[^a-z0-9_]", "", company_name.lower().replace(" ", "_"))
-            markdown_path = COMPANY_CONTEXT_DIR / f"{safe}.md"
-
-        if markdown_path.exists():
-            current_markdown = markdown_path.read_text(encoding="utf-8")
-        else:
+        # Step 4 — Read current context from DB
+        ctx_row = db.execute(
+            text("SELECT context FROM companies WHERE id = :id"),
+            {"id": company_id},
+        ).fetchone()
+        current_markdown = (ctx_row[0] or "") if ctx_row else ""
+        if not current_markdown.strip():
             current_markdown = f"# {company_name} — Classification Context\n\n"
-            markdown_path.write_text(current_markdown, encoding="utf-8")
 
         # Step 5 — Layer B
         try:
@@ -201,17 +195,20 @@ class CorrectionPipeline:
                 word_count=0, alert_emitted=False, error=str(exc),
             )
 
-        # Step 6 — Write markdown
+        # Step 6 — Write context to DB
         word_count = 0
         if action in ("AMEND", "APPEND") and updated_markdown:
-            markdown_path.write_text(updated_markdown, encoding="utf-8")
+            db.execute(
+                text("UPDATE companies SET context = :ctx WHERE id = :id"),
+                {"ctx": updated_markdown, "id": company_id},
+            )
             word_count = markdown_body_word_count(updated_markdown)
 
         # Step 7 — Word count alert
         alert_emitted = False
         if word_count > 0:
             alert_emitted = self._check_word_count(
-                word_count, company_id, company_name, markdown_path.name, timestamp
+                word_count, company_id, company_name, timestamp
             )
 
         # Step 8 — Log changelog
@@ -264,8 +261,7 @@ class CorrectionPipeline:
             f.write(json.dumps(entry) + "\n")
 
     def _check_word_count(
-        self, wc: int, company_id: int, company_name: str,
-        markdown_filename: str, timestamp: str,
+        self, wc: int, company_id: int, company_name: str, timestamp: str,
     ) -> bool:
         """Emit an alert if over limit, log warning if approaching. Returns True if alert emitted."""
         if wc > COMPANY_CONTEXT_WORD_LIMIT:
@@ -274,10 +270,10 @@ class CorrectionPipeline:
                 company_name, COMPANY_CONTEXT_WORD_LIMIT, wc,
             )
             alert = {
-                "timestamp": timestamp, "type": "markdown_overlength",
+                "timestamp": timestamp, "type": "context_overlength",
                 "company_id": company_id, "company_name": company_name,
-                "markdown_filename": markdown_filename, "word_count": wc,
-                "message": f"Company context file exceeds {COMPANY_CONTEXT_WORD_LIMIT:,} word limit. Manual review and condensing recommended.",
+                "word_count": wc,
+                "message": f"Company context exceeds {COMPANY_CONTEXT_WORD_LIMIT:,} word limit. Manual review and condensing recommended.",
                 "status": "open",
             }
             with ALERTS_PATH.open("a", encoding="utf-8") as f:

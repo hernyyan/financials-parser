@@ -27,7 +27,6 @@ export interface WizardState {
   layer2Results: Record<string, Layer2Result>
   corrections: Correction[]
   step2Approved: boolean
-  fieldTabAssignments: Record<string, Record<string, string>>
 
   // Current state
   currentStep: 1 | 2 | 3
@@ -195,19 +194,11 @@ export interface ContinuedReview {
   corrections: CorrectionProcessItem[]
 }
 
-// Tab configuration
-
-export interface StatementTabConfig {
-  tabs: string[]
-  fieldAssignments: Record<string, string>
-}
-
 // Company types
 
 export interface Company {
   id: number
   name: string
-  markdown_filename: string
 }
 
 // Correction processing types
