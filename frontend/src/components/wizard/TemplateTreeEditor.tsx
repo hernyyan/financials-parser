@@ -232,9 +232,12 @@ export default function TemplateTreeEditor({ rows, waterfall, statementType, onC
 
   function cycleOperator(index: number) {
     if (!waterfall) return
-    const ops: WaterfallStep['operator'][] = [null, '+', '-', '=']
+    // First row stays null (base value) — only cycle operators on subsequent rows
+    if (index === 0) return
+    const ops: WaterfallStep['operator'][] = ['+', '-', '=']
     const cur = waterfall[index].operator
-    const next = ops[(ops.indexOf(cur) + 1) % ops.length]
+    const curIdx = ops.indexOf(cur as '+' | '-' | '=')
+    const next = ops[(curIdx + 1) % ops.length]
     const newWf = waterfall.map((w, i) => i === index ? { ...w, operator: next } : w)
     onChange(rows, newWf)
   }
@@ -246,72 +249,91 @@ export default function TemplateTreeEditor({ rows, waterfall, statementType, onC
   }
 
   // ── Row renderer ────────────────────────────────────────────────────────
+  // Sum rows are rendered AFTER their children (financial statement convention:
+  // individual line items first, then the total at the bottom of the group).
 
-  function renderRows(rs: Layer1TemplateRow[], depth = 0): ReactNode {
-    return rs.map(row => {
-      const isInPromoteMode = !!promoteMode && promoteMode.parentId !== row.id
-      const isPromoteParent = promoteMode?.parentId === row.id
-      const isSelected = promoteMode?.selected.has(row.id)
-      const isSelectable = promoteMode && !isPromoteParent && row.type === 'individual' && depth === 0
+  function renderRow(row: Layer1TemplateRow, depth: number): ReactNode {
+    const isInPromoteMode = !!promoteMode && promoteMode.parentId !== row.id
+    const isPromoteParent = promoteMode?.parentId === row.id
+    const isSelected = promoteMode?.selected.has(row.id)
+    const isSelectable = promoteMode && !isPromoteParent && row.type === 'individual' && depth === 0
 
-      const rowStyle = [
-        'flex items-center gap-2 px-2 py-1 border-b border-gray-100 text-[12px]',
-        isPromoteParent ? 'bg-blue-50 ring-1 ring-blue-200' : '',
-        isSelectable ? 'cursor-pointer hover:bg-blue-50' : '',
-        isSelected ? 'bg-blue-100' : '',
-        isInPromoteMode && !isSelectable ? 'opacity-40 pointer-events-none' : '',
-      ].join(' ')
+    const rowCls = [
+      'flex items-center gap-2 px-2 py-1 border-b border-gray-100 text-[12px]',
+      isPromoteParent ? 'bg-blue-50 ring-1 ring-blue-200' : '',
+      isSelectable ? 'cursor-pointer hover:bg-blue-50' : '',
+      isSelected ? 'bg-blue-100' : '',
+      isInPromoteMode && !isSelectable ? 'opacity-40 pointer-events-none' : '',
+    ].join(' ')
 
+    const rowEl = (
+      <div
+        className={rowCls}
+        style={{ paddingLeft: 8 + depth * 20 }}
+        onClick={isSelectable ? () => togglePromoteChild(row.id) : undefined}
+      >
+        {/* Type badge */}
+        <button
+          className={`shrink-0 px-1.5 py-0.5 rounded border text-[10px] font-mono transition-colors ${BADGE[row.type]} ${promoteMode ? 'pointer-events-none' : 'hover:opacity-70'}`}
+          style={{ fontWeight: 600 }}
+          onClick={(e) => { e.stopPropagation(); handleBadgeClick(row, depth) }}
+          title={`Click to change type (current: ${row.type})`}
+        >
+          {BADGE_LABEL[row.type]}
+        </button>
+
+        {/* Label */}
+        <span
+          className="flex-1 truncate"
+          style={{
+            fontWeight: row.type === 'sum' ? 600 : 400,
+            fontStyle: row.type === 'margin' ? 'italic' : 'normal',
+            color: row.type === 'margin' ? '#7c3aed' : undefined,
+          }}
+        >
+          {row.label}
+        </span>
+
+        {/* Value */}
+        <span className={`font-mono text-[11px] shrink-0 ${row.value && row.value < 0 ? 'text-red-500' : 'text-muted-foreground'}`}>
+          {formatVal(row.value)}
+        </span>
+
+        {/* Validation flag */}
+        {row.validated === false && (
+          <span className="shrink-0 px-1 py-0.5 rounded bg-amber-50 text-amber-600 text-[10px] border border-amber-200" title={row.validation_note}>!</span>
+        )}
+
+        {/* Select checkbox (promote mode) */}
+        {isSelectable && (
+          <span className={`shrink-0 w-4 h-4 rounded border flex items-center justify-center ${isSelected ? 'bg-blue-600 border-blue-600' : 'border-gray-300'}`}>
+            {isSelected && <svg viewBox="0 0 12 12" className="w-2.5 h-2.5 text-white fill-current"><path d="M2 6l3 3 5-5"/></svg>}
+          </span>
+        )}
+      </div>
+    )
+
+    // Sum with children: children first, then the sum row at the bottom
+    if (row.type === 'sum' && row.children.length > 0) {
       return (
         <div key={row.id}>
-          <div
-            className={rowStyle}
-            style={{ paddingLeft: 8 + depth * 20 }}
-            onClick={isSelectable ? () => togglePromoteChild(row.id) : undefined}
-          >
-            {/* Type badge */}
-            <button
-              className={`shrink-0 px-1.5 py-0.5 rounded border text-[10px] font-mono transition-colors ${BADGE[row.type]} ${promoteMode ? 'pointer-events-none' : 'hover:opacity-70'}`}
-              style={{ fontWeight: 600 }}
-              onClick={(e) => { e.stopPropagation(); handleBadgeClick(row, depth) }}
-              title={`Click to change type (current: ${row.type})`}
-            >
-              {BADGE_LABEL[row.type]}
-            </button>
-
-            {/* Label */}
-            <span
-              className="flex-1 truncate"
-              style={{
-                fontWeight: row.type === 'sum' ? 600 : 400,
-                fontStyle: row.type === 'margin' ? 'italic' : 'normal',
-                color: row.type === 'margin' ? '#7c3aed' : undefined,
-              }}
-            >
-              {row.label}
-            </span>
-
-            {/* Value */}
-            <span className={`font-mono text-[11px] shrink-0 ${row.value && row.value < 0 ? 'text-red-500' : 'text-muted-foreground'}`}>
-              {formatVal(row.value)}
-            </span>
-
-            {/* Validation flag */}
-            {row.validated === false && (
-              <span className="shrink-0 px-1 py-0.5 rounded bg-amber-50 text-amber-600 text-[10px] border border-amber-200" title={row.validation_note}>!</span>
-            )}
-
-            {/* Select checkbox (promote mode) */}
-            {isSelectable && (
-              <span className={`shrink-0 w-4 h-4 rounded border flex items-center justify-center ${isSelected ? 'bg-blue-600 border-blue-600' : 'border-gray-300'}`}>
-                {isSelected && <svg viewBox="0 0 12 12" className="w-2.5 h-2.5 text-white fill-current"><path d="M2 6l3 3 5-5"/></svg>}
-              </span>
-            )}
-          </div>
-          {row.children.length > 0 && renderRows(row.children, depth + 1)}
+          {renderRows(row.children, depth + 1)}
+          {rowEl}
         </div>
       )
-    })
+    }
+
+    // All other types: row first, then children (if any)
+    return (
+      <div key={row.id}>
+        {rowEl}
+        {row.children.length > 0 && renderRows(row.children, depth + 1)}
+      </div>
+    )
+  }
+
+  function renderRows(rs: Layer1TemplateRow[], depth = 0): ReactNode {
+    return rs.map(row => renderRow(row, depth))
   }
 
   // ── Sum rows not in waterfall (for "add to waterfall" UI) ───────────────
@@ -398,14 +420,23 @@ export default function TemplateTreeEditor({ rows, waterfall, statementType, onC
             )}
             {waterfall.map((step, i) => (
               <div key={step.row_id} className="flex items-center gap-2 text-[12px]">
-                {/* Operator */}
-                <button
-                  onClick={() => cycleOperator(i)}
-                  className="w-6 h-6 flex items-center justify-center rounded border border-border bg-white font-mono text-[13px] hover:bg-gray-100 shrink-0"
-                  title="Click to cycle operator"
-                >
-                  {step.operator ?? '—'}
-                </button>
+                {/* Operator — first item is the base (no operation), shown as a non-clickable indicator */}
+                {i === 0 ? (
+                  <span
+                    className="w-6 h-6 flex items-center justify-center rounded border border-dashed border-gray-300 bg-gray-50 text-[9px] text-muted-foreground shrink-0 select-none"
+                    title="Base value (start of waterfall)"
+                  >
+                    base
+                  </span>
+                ) : (
+                  <button
+                    onClick={() => cycleOperator(i)}
+                    className="w-6 h-6 flex items-center justify-center rounded border border-border bg-white font-mono text-[13px] font-bold hover:bg-gray-100 shrink-0"
+                    title="Click to cycle operator (+  −  =)"
+                  >
+                    {step.operator}
+                  </button>
+                )}
                 {/* Label */}
                 <span className="flex-1 truncate" style={{ fontWeight: step.operator === '=' ? 600 : 400 }}>
                   {step.label}

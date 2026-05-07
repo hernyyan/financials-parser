@@ -56,41 +56,44 @@ export default function TemplateReview({ structured, statementType, companyId, o
   }
 
   return (
-    <div className="flex flex-col h-full overflow-hidden">
-      {/* Header */}
-      <div className="shrink-0 px-4 py-3 border-b border-border bg-white flex items-start justify-between gap-4">
-        <div>
-          <p className="text-[13px]" style={{ fontWeight: 600 }}>
-            Review {stmtLabel[statementType] ?? statementType} Template
-          </p>
-          <p className="text-[11px] text-muted-foreground mt-0.5">
-            This is the first upload for this company. Review the row types and waterfall before saving.
-            Badges are clickable: <span className="font-mono">SUM → IND</span> demotes,&nbsp;
-            <span className="font-mono">IND → SUM</span> promotes with child selection.
-          </p>
+    <div className="flex flex-col h-full overflow-hidden bg-gray-50">
+      {/* Centered container */}
+      <div className="flex flex-col flex-1 overflow-hidden min-h-0 mx-auto w-full" style={{ maxWidth: 720 }}>
+        {/* Header */}
+        <div className="shrink-0 px-4 py-3 border-b border-border bg-white flex items-start justify-between gap-4">
+          <div>
+            <p className="text-[13px]" style={{ fontWeight: 600 }}>
+              Review {stmtLabel[statementType] ?? statementType} Template
+            </p>
+            <p className="text-[11px] text-muted-foreground mt-0.5">
+              First upload — review row types and waterfall before saving.
+              Badges are clickable: <span className="font-mono bg-gray-100 px-1 rounded">SUM</span> demotes to IND,&nbsp;
+              <span className="font-mono bg-gray-100 px-1 rounded">IND</span> promotes to SUM with child selection.
+            </p>
+          </div>
+          <div className="shrink-0 flex flex-col items-end gap-1.5">
+            <button
+              onClick={handleSave}
+              disabled={saving}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded text-[12px] text-white disabled:opacity-50"
+              style={{ backgroundColor: '#030213', fontWeight: 500 }}
+            >
+              {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle2 className="w-3.5 h-3.5" />}
+              Save Template
+            </button>
+            {error && <p className="text-[11px] text-red-600">{error}</p>}
+          </div>
         </div>
-        <div className="shrink-0 flex flex-col items-end gap-1.5">
-          <button
-            onClick={handleSave}
-            disabled={saving}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded text-[12px] text-white disabled:opacity-50"
-            style={{ backgroundColor: '#030213', fontWeight: 500 }}
-          >
-            {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle2 className="w-3.5 h-3.5" />}
-            Save Template
-          </button>
-          {error && <p className="text-[11px] text-red-600">{error}</p>}
-        </div>
-      </div>
 
-      {/* Tree editor */}
-      <div className="flex-1 overflow-hidden min-h-0">
-        <TemplateTreeEditor
-          rows={rows}
-          waterfall={waterfall}
-          statementType={statementType}
-          onChange={handleChange}
-        />
+        {/* Tree editor */}
+        <div className="flex-1 overflow-hidden min-h-0 bg-white border-x border-border">
+          <TemplateTreeEditor
+            rows={rows}
+            waterfall={waterfall}
+            statementType={statementType}
+            onChange={handleChange}
+          />
+        </div>
       </div>
     </div>
   )

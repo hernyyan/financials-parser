@@ -42,12 +42,18 @@ For every `sum` and `margin` node:
 
 ## Waterfall (Income Statement only)
 
-If `statement_type` is `income_statement`, produce a top-level `waterfall` array. This is an ordered list of **sum-level boxes** only — not individuals or margins. Each entry has:
+If `statement_type` is `income_statement`, produce a top-level `waterfall` array. This is an ordered list of **major P&L milestone sums only** — not individuals, margins, or sub-totals. Each entry has:
 - `row_id`: the id of the sum row
 - `label`: the label
 - `operator`: `null` (first row), `"+"`, `"-"`, or `"="`
 
-The waterfall represents the high-level P&L equation (Revenue − COGS = Gross Profit − OpEx = EBITDA, etc.). **Exclude LTM and TTM rows from the waterfall.**
+**Which sums belong in the waterfall:**
+- ONLY include sums that represent a major P&L milestone: top-line revenue, COGS/cost of sales, gross profit, operating expenses, EBITDA, net income, etc.
+- DO NOT include sub-totals within a section (e.g. "Total Gross Sales", "Total Product Revenue") — these are components *within* the revenue section, not milestones in the P&L chain.
+- A sum belongs in the waterfall only if it is a direct input or output of a cross-section equation (e.g. Gross Profit = Revenue − COGS). If a sum is purely a total of its own children and does not subtract from or add to any other waterfall item, leave it out.
+- **Exclude LTM and TTM rows from the waterfall.**
+
+The waterfall represents the shortest chain that explains the IS: e.g. Net Revenue − COGS = Gross Profit − SG&A − D&A = EBITDA − Interest = EBT − Taxes = Net Income.
 
 For non-IS statements, omit the `waterfall` key entirely.
 
