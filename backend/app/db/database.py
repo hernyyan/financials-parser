@@ -170,33 +170,53 @@ _MIGRATIONS = [
 ]
 
 
+def _exec_safe(ddl: str) -> None:
+    """
+    Execute a single DDL statement in its own transaction.
+
+    Each statement gets an isolated connection so that a failure (e.g. a
+    migration ALTER TABLE whose column already exists) cannot abort the
+    transaction that contains unrelated CREATE TABLE statements.
+    """
+    with engine.connect() as conn:
+        try:
+            conn.execute(text(ddl))
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+
+
 def init_db() -> None:
     """Create database tables if they do not exist. Also runs safe migrations."""
     if _IS_SQLITE:
-        create_reviews = _SQLITE_CREATE_REVIEWS
-        create_companies = _SQLITE_CREATE_COMPANIES
-        create_corrections = _SQLITE_CREATE_CORRECTIONS
-        create_layer1_templates = _SQLITE_CREATE_LAYER1_TEMPLATES
-        create_statement_tab_configs = _SQLITE_CREATE_STATEMENT_TAB_CONFIGS
+        ddl_statements = [
+            _SQLITE_CREATE_REVIEWS,
+            _SQLITE_CREATE_COMPANIES,
+            _SQLITE_CREATE_CORRECTIONS,
+            _SQLITE_CREATE_LAYER1_TEMPLATES,
+            _SQLITE_CREATE_STATEMENT_TAB_CONFIGS,
+        ]
     else:
-        create_reviews = _PG_CREATE_REVIEWS
-        create_companies = _PG_CREATE_COMPANIES
-        create_corrections = _PG_CREATE_CORRECTIONS
-        create_layer1_templates = _PG_CREATE_LAYER1_TEMPLATES
-        create_statement_tab_configs = _PG_CREATE_STATEMENT_TAB_CONFIGS
+        ddl_statements = [
+            _PG_CREATE_REVIEWS,
+            _PG_CREATE_COMPANIES,
+            _PG_CREATE_CORRECTIONS,
+            _PG_CREATE_LAYER1_TEMPLATES,
+            _PG_CREATE_STATEMENT_TAB_CONFIGS,
+        ]
 
-    with engine.connect() as conn:
-        conn.execute(text(create_reviews))
-        conn.execute(text(create_companies))
-        conn.execute(text(create_corrections))
-        conn.execute(text(create_layer1_templates))
-        conn.execute(text(create_statement_tab_configs))
-        for migration in _MIGRATIONS:
-            try:
-                conn.execute(text(migration))
-            except Exception:
-                pass  # Column already exists
-        conn.commit()
+    # Each CREATE TABLE runs in its own transaction so a failed migration
+    # on the same connection cannot roll it back.
+    for ddl in ddl_statements:
+        _exec_safe(ddl)
+
+    # Migrations are best-effort: failure means the column already exists.
+    for migration in _MIGRATIONS:
+        try:
+            _exec_safe(migration)
+        except Exception:
+            pass  # Column already exists — safe to ignore
 
 
 def get_db():
