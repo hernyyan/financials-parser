@@ -29,6 +29,13 @@ TEMPLATES_DIR: Path = BASE_DIR / os.getenv("TEMPLATES_DIR", "templates")
 # Database
 DATABASE_URL: str = os.getenv("DATABASE_URL", "postgresql://henry:henry@localhost:5432/henry_db")
 
+# Auth mode for Postgres connections.
+#   "password" (default) — use credentials embedded in DATABASE_URL
+#   "entra"              — fetch a fresh Microsoft Entra access token per connection
+#                          via DefaultAzureCredential. The username must already be
+#                          present in DATABASE_URL; any password component is ignored.
+DB_AUTH_MODE: str = os.getenv("DB_AUTH_MODE", "password").lower()
+
 # CORS origins
 CORS_ORIGINS: list[str] = os.getenv("CORS_ORIGINS", "http://localhost:5173").split(",")
 

@@ -1,18 +1,48 @@
 """
 Database connection and setup using SQLAlchemy.
 Supports PostgreSQL (primary) and SQLite (fallback for local testing).
+
+Postgres auth modes (controlled by DB_AUTH_MODE):
+  - "password": credentials baked into DATABASE_URL (default; used locally)
+  - "entra":    fresh Microsoft Entra access token injected per new connection
+                using DefaultAzureCredential. Pool is tuned to recycle
+                connections before the 1-hour token TTL expires.
 """
-from sqlalchemy import create_engine, text
+from sqlalchemy import create_engine, event, text
+from sqlalchemy.engine.url import make_url
 from sqlalchemy.orm import sessionmaker, Session
-from app.config import DATABASE_URL
+from app.config import DATABASE_URL, DB_AUTH_MODE
 
 _IS_SQLITE = DATABASE_URL.startswith("sqlite")
+_USE_ENTRA = (not _IS_SQLITE) and DB_AUTH_MODE == "entra"
+
+# Azure Database for PostgreSQL Entra token audience.
+_ENTRA_SCOPE = "https://ossrdbms-aad.database.windows.net/.default"
 
 connect_args = {}
 if _IS_SQLITE:
     connect_args["check_same_thread"] = False
 
-engine = create_engine(DATABASE_URL, connect_args=connect_args)
+if _USE_ENTRA:
+    # Strip any embedded password from the URL — the token listener supplies it.
+    _url = make_url(DATABASE_URL).set(password=None)
+    engine = create_engine(
+        _url,
+        connect_args=connect_args,
+        pool_pre_ping=True,
+        pool_recycle=1800,  # rotate connections well before the ~1h token TTL
+    )
+
+    # Lazy import so non-Azure environments don't need azure-identity installed.
+    from azure.identity import DefaultAzureCredential
+
+    _credential = DefaultAzureCredential()
+
+    @event.listens_for(engine, "do_connect")
+    def _inject_entra_token(dialect, conn_rec, cargs, cparams):
+        cparams["password"] = _credential.get_token(_ENTRA_SCOPE).token
+else:
+    engine = create_engine(DATABASE_URL, connect_args=connect_args)
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
