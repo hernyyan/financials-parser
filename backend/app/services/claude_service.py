@@ -109,6 +109,9 @@ class ClaudeService:
         3. Extract from ``` ... ``` code block
         4. Find the largest { ... } block in the text
 
+        Strategies 2–4 are fallbacks; each logs a warning so format drift is
+        visible in production logs rather than silently degrading.
+
         Args:
             response_text: Raw response string from Claude.
 
@@ -116,11 +119,11 @@ class ClaudeService:
             Parsed Python object (dict or list).
 
         Raises:
-            ValueError: If no valid JSON could be extracted.
+            ValueError: If no valid JSON could be extracted by any strategy.
         """
         text = response_text.strip()
 
-        # 1. Direct parse
+        # 1. Direct parse — expected happy path
         try:
             return json.loads(text)
         except json.JSONDecodeError:
@@ -130,7 +133,10 @@ class ClaudeService:
         match = re.search(r"```json\s*([\s\S]*?)```", text, re.IGNORECASE)
         if match:
             try:
-                return json.loads(match.group(1).strip())
+                result = json.loads(match.group(1).strip())
+                print("WARNING: parse_json_response used fallback strategy 2 (```json block). "
+                      "Claude response was not bare JSON — check prompt format.")
+                return result
             except json.JSONDecodeError:
                 pass
 
@@ -138,15 +144,21 @@ class ClaudeService:
         match = re.search(r"```\w*\s*([\s\S]*?)```", text, re.IGNORECASE)
         if match:
             try:
-                return json.loads(match.group(1).strip())
+                result = json.loads(match.group(1).strip())
+                print("WARNING: parse_json_response used fallback strategy 3 (generic code block). "
+                      "Claude response was not bare JSON — check prompt format.")
+                return result
             except json.JSONDecodeError:
                 pass
 
-        # 4. Largest { ... } block
+        # 4. Largest { ... } block — last resort, may return partial objects
         match = re.search(r"\{[\s\S]+\}", text)
         if match:
             try:
-                return json.loads(match.group(0))
+                result = json.loads(match.group(0))
+                print("WARNING: parse_json_response used fallback strategy 4 (largest brace block). "
+                      "Response may be truncated or malformed — verify output quality.")
+                return result
             except json.JSONDecodeError:
                 pass
 
