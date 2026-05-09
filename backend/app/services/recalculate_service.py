@@ -9,9 +9,29 @@ Output: same dict with all calculated fields overwritten by formula results,
 All arithmetic uses Python floats. Rounding tolerance for flag checks: $1.00.
 """
 
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Set
 
 TOLERANCE = 1.0  # dollars
+
+# Single source of truth for fields that recalculate_* will overwrite.
+# Layer2Service imports this to know which AI-matched values to preserve
+# separately before recalculation runs.
+CALCULATED_FIELDS: Set[str] = {
+    'Gross Profit',
+    'EBITDA - Standard',
+    'Adjusted EBITDA - Standard',
+    'Net Income (Loss)',
+    'Adjusted EBITDA - Including Cures',
+    'Total Current Assets',
+    'Total Non-Current Assets',
+    'Total Assets',
+    'Total Current Liabilities',
+    'Total Non-Current Liabilities',
+    'Total Liabilities',
+    'Total Equity',
+    'Total Liabilities and Equity',
+    'Operating Cash Flow',
+}
 
 
 def recalculate_income_statement(
