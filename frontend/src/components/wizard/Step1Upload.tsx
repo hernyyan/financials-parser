@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useWizardState } from '../../hooks/useWizardState'
 import { useExcelExtraction } from '../../hooks/useExcelExtraction'
 import { usePdfExtraction } from '../../hooks/usePdfExtraction'
+import { useCompanySelector } from '../../hooks/useCompanySelector'
 import TabSelector from '../shared/TabSelector'
 import ExcelViewer from '../shared/ExcelViewer'
 import PdfPageViewer from '../shared/PdfPageViewer'
@@ -10,8 +11,6 @@ import TemplateReview from './TemplateReview'
 import TemplateDeltaReview from './TemplateDeltaReview'
 import {
   uploadFile,
-  getCompanies,
-  createCompany,
   getCompanyContextStatus,
   continuePreviousReview,
   appendToCompanyDataset,
@@ -154,7 +153,6 @@ export default function Step1Upload() {
   } = useWizardState()
 
   const fileInputRef = useRef<HTMLInputElement>(null)
-  const comboRef = useRef<HTMLDivElement>(null)
   const splitContainerRef = useRef<HTMLDivElement>(null)
 
   const [uploading, setUploading] = useState(false)
@@ -220,112 +218,51 @@ export default function Step1Upload() {
     setPendingExtraction,
   })
 
-  // Company combobox state
-  const [companies, setCompanies] = useState<Company[]>([])
-  const [companiesLoading, setCompaniesLoading] = useState(false)
-  const [comboOpen, setComboOpen] = useState(false)
-  const [comboSearch, setComboSearch] = useState(companyName)
-  const [creatingCompany, setCreatingCompany] = useState(false)
   const hasUpload = uploadFileType === 'excel'
     ? sheetNames.length > 0
     : uploadFileType === 'pdf'
       ? pdfPageCount > 0
       : false
 
+  // Company combobox — state and logic owned by hook
+  const {
+    comboRef,
+    companies,
+    companiesLoading,
+    comboOpen,
+    setComboOpen,
+    comboSearch,
+    handleSearchChange,
+    filteredCompanies,
+    fuzzyMatches,
+    hasExactMatch,
+    creatingCompany,
+    handleSelectCompany,
+    handleCreateCompany,
+  } = useCompanySelector({
+    initialName: companyName,
+    onSelect: (company: Company) => {
+      setCompanyName(company.name)
+      setCompanyId(company.id)
+      if (hasUpload) {
+        setContextLoading(true)
+        getCompanyContextStatus(company.id)
+          .then(setContextStatus)
+          .catch(() => setContextStatus(null))
+          .finally(() => setContextLoading(false))
+      }
+    },
+    onClear: () => {
+      setCompanyName('')
+      setCompanyId(null)
+    },
+    onError: (msg: string) => setStatus({ type: 'error', message: msg }),
+  })
+
   const activeTab = activeSheetTab || sheetNames[0] || ''
 
   function handleTabChange(tab: string) {
     setActiveSheetTab(tab)
-  }
-
-  // Load companies on mount
-  useEffect(() => {
-    setCompaniesLoading(true)
-    getCompanies()
-      .then(setCompanies)
-      .catch(() => {})
-      .finally(() => setCompaniesLoading(false))
-  }, [])
-
-  // Close dropdown on outside click
-  useEffect(() => {
-    function handleClickOutside(e: MouseEvent) {
-      if (comboRef.current && !comboRef.current.contains(e.target as Node)) {
-        setComboOpen(false)
-      }
-    }
-    document.addEventListener('mousedown', handleClickOutside)
-    return () => document.removeEventListener('mousedown', handleClickOutside)
-  }, [])
-
-  const filteredCompanies = companies.filter((c) =>
-    c.name.toLowerCase().includes(comboSearch.toLowerCase()),
-  )
-
-  function normalizeCompanyName(name: string): string {
-    return name.toLowerCase().replace(/[^a-z0-9]/g, '')
-  }
-
-  function findFuzzyMatches(input: string, allCompanies: Company[]): Company[] {
-    const normalizedInput = normalizeCompanyName(input)
-    if (normalizedInput.length < 2) return []
-    return allCompanies.filter((c) => {
-      const normalizedName = normalizeCompanyName(c.name)
-      return normalizedName.includes(normalizedInput) || normalizedInput.includes(normalizedName)
-    })
-  }
-
-  const hasExactMatch = companies.some(
-    (c) => c.name.toLowerCase() === comboSearch.trim().toLowerCase(),
-  )
-  const filteredIds = new Set(filteredCompanies.map((c) => c.id))
-  const fuzzyMatches =
-    comboSearch.trim() && !hasExactMatch
-      ? findFuzzyMatches(comboSearch.trim(), companies).filter((c) => !filteredIds.has(c.id))
-      : []
-
-  function handleSelectCompany(company: Company) {
-    setCompanyName(company.name)
-    setCompanyId(company.id)
-    setComboSearch(company.name)
-    setComboOpen(false)
-    if (hasUpload) {
-      setContextLoading(true)
-      getCompanyContextStatus(company.id)
-        .then(setContextStatus)
-        .catch(() => setContextStatus(null))
-        .finally(() => setContextLoading(false))
-    }
-  }
-
-  async function handleCreateCompany() {
-    const name = comboSearch.trim()
-    if (!name) return
-    setCreatingCompany(true)
-    try {
-      const newCompany = await createCompany(name)
-      setCompanies((prev) =>
-        [...prev, newCompany].sort((a, b) => a.name.localeCompare(b.name)),
-      )
-      setCompanyName(newCompany.name)
-      setCompanyId(newCompany.id)
-      setComboSearch(newCompany.name)
-      setComboOpen(false)
-      setContextStatus({
-        company_id: newCompany.id,
-        company_name: newCompany.name,
-        has_rules: false,
-        rule_count: 0,
-        word_count: 0,
-      })
-    } catch (err) {
-      setStatus({
-        type: 'error',
-        message: err instanceof Error ? err.message : 'Failed to create company.',
-      })
-    } finally {
-      setCreatingCompany(false)
-    }
   }
 
   const showL1Results =
@@ -628,14 +565,7 @@ export default function Step1Upload() {
               placeholder={companiesLoading ? 'Loading...' : 'Select company...'}
               value={comboSearch}
               disabled={creatingCompany}
-              onChange={(e) => {
-                setComboSearch(e.target.value)
-                setComboOpen(true)
-                if (!e.target.value) {
-                  setCompanyName('')
-                  setCompanyId(null)
-                }
-              }}
+              onChange={(e) => handleSearchChange(e.target.value)}
               onFocus={() => setComboOpen(true)}
             />
             <ChevronDown className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
