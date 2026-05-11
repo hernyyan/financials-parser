@@ -15,6 +15,7 @@ import { useEffect, useState } from 'react'
 import { adminGetReviews, adminDeleteReview, AdminReview } from '../api/client'
 import { useTableSort } from './useTableSort'
 import { periodToSortKey } from '../utils/periodUtils'
+import { compareValues } from '../utils/sortUtils'
 
 export type SortField = 'company_name' | 'reporting_period' | 'status' | 'corrections_count' | 'created_at'
 export type CorrectionsFilter = 'all' | 'has' | 'none'
@@ -81,9 +82,7 @@ export function useReviewsList() {
         av = (a[sortField] ?? '').toString().toLowerCase()
         bv = (b[sortField] ?? '').toString().toLowerCase()
       }
-      if (av < bv) return sortDir === 'asc' ? -1 : 1
-      if (av > bv) return sortDir === 'asc' ? 1 : -1
-      return 0
+      return compareValues(av, bv, sortDir)
     })
 
   return {
