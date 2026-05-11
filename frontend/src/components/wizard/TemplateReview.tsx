@@ -6,9 +6,8 @@
  * BS/CFS are saved silently (no review required).
  */
 import { useState } from 'react'
-import type { Layer1Template, Layer1TemplateRow, WaterfallStep, StatementType } from '../../types'
+import type { Layer1Template, Layer1TemplateRow, WaterfallStep } from '../../types'
 import { saveLayer1Template } from '../../api/client'
-import { STATEMENT_LABELS } from '../../utils/statementMeta'
 import TemplateTreeEditor from './TemplateTreeEditor'
 import { Loader2, CheckCircle2 } from 'lucide-react'
 
@@ -51,6 +50,12 @@ export default function TemplateReview({ structured, statementType, companyId, o
     }
   }
 
+  const stmtLabel: Record<string, string> = {
+    income_statement: 'Income Statement',
+    balance_sheet: 'Balance Sheet',
+    cash_flow_statement: 'Cash Flow Statement',
+  }
+
   return (
     <div className="flex flex-col h-full overflow-hidden bg-gray-50">
       {/* Centered container */}
@@ -59,7 +64,7 @@ export default function TemplateReview({ structured, statementType, companyId, o
         <div className="shrink-0 px-4 py-3 border-b border-border bg-white flex items-start justify-between gap-4">
           <div>
             <p className="text-[13px]" style={{ fontWeight: 600 }}>
-              Review {STATEMENT_LABELS[statementType as StatementType] ?? statementType} Template
+              Review {stmtLabel[statementType] ?? statementType} Template
             </p>
             <p className="text-[11px] text-muted-foreground mt-0.5">
               First upload — review row types and waterfall before saving.

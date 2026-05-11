@@ -8,7 +8,6 @@
 import { useState } from 'react'
 import { runLayer1, saveLayer1Template, checkExistingReview } from '../api/client'
 import type { Layer1Result, Layer1Template, Layer1TemplateRow, TemplateCheckResult, StatusMessage, DuplicateCheck, PendingExtraction } from '../types'
-import { ALL_STATEMENT_TYPES } from '../utils/statementMeta'
 
 export type ExtractionStatus = 'idle' | 'running' | 'done' | 'error'
 
@@ -61,7 +60,7 @@ export function useExcelExtraction({
     setExtractionStatus('running')
     setExtractionError(null)
 
-    const stmtTypes = ALL_STATEMENT_TYPES
+    const stmtTypes = ['income_statement', 'balance_sheet', 'cash_flow_statement'] as const
     const results: Partial<Record<string, Awaited<ReturnType<typeof runLayer1>>>> = {}
 
     // Detect shared tabs (same sheet assigned to multiple statement types)

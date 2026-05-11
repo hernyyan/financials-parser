@@ -2,10 +2,14 @@ import { Loader2 } from 'lucide-react'
 import TabSelector from '../shared/TabSelector'
 import Layer1ResultsTable from '../shared/Layer1ResultsTable'
 import type { Layer1Result, StatementType } from '../../types'
-import { STATEMENT_LABELS, ALL_STATEMENT_TYPES } from '../../utils/statementMeta'
 
-const LABEL_FOR = STATEMENT_LABELS
-const STMT_TAB_NAMES = ALL_STATEMENT_TYPES.map((t) => STATEMENT_LABELS[t])
+const LABEL_FOR: Record<StatementType, string> = {
+  income_statement: 'Income Statement',
+  balance_sheet: 'Balance Sheet',
+  cash_flow_statement: 'Cash Flow Statement',
+}
+
+const STMT_TAB_NAMES = ['Income Statement', 'Balance Sheet', 'Cash Flow Statement'] as const
 
 const TAB_COLORS: Record<StatementType, string> = {
   income_statement: 'bg-blue-50 text-blue-700 border border-blue-200',
@@ -39,7 +43,7 @@ export default function PdfExtractionPanel({
   const isRunning = Object.values(pdfExtracting).some(Boolean)
   const hasPages = Object.keys(pdfPageAssignments).length > 0
 
-  const extractedTabs = ALL_STATEMENT_TYPES
+  const extractedTabs = (Object.keys(LABEL_FOR) as StatementType[])
     .filter((t) => layer1Results[t])
     .map((t) => LABEL_FOR[t])
 
