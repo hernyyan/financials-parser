@@ -113,14 +113,11 @@ export default function Step2Classify() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  const isPending = selectedCellType === 'income_statement' ? pendingValues : null
-  const bsPending = selectedCellType === 'balance_sheet' ? pendingValues : null
-  const cfsPending = selectedCellType === 'cash_flow_statement' ? pendingValues : null
-  const isTemplateRows = buildTemplateRows(isSections, STATEMENT_LABELS.income_statement, isLayer2 ?? undefined, corrections, selectedCell, isPending)
-  const bsTemplateRows = buildTemplateRows(bsSections, STATEMENT_LABELS.balance_sheet, bsLayer2 ?? undefined, corrections, selectedCell, bsPending)
-  const cfsTemplateRows = cfsSections.length > 0
-    ? buildTemplateRows(cfsSections, STATEMENT_LABELS.cash_flow_statement, cfsLayer2 ?? undefined, corrections, selectedCell, cfsPending)
-    : []
+  const stmtConfigs = [
+    { key: 'income_statement'   as const, sections: isSections,   layer2: isLayer2,   sourceRows: sourceIsRows  },
+    { key: 'balance_sheet'      as const, sections: bsSections,   layer2: bsLayer2,   sourceRows: sourceBsRows  },
+    { key: 'cash_flow_statement' as const, sections: cfsSections, layer2: cfsLayer2,  sourceRows: sourceCfsRows },
+  ]
 
   async function handleApproveStep2() {
     approveStep2()
@@ -182,12 +179,10 @@ export default function Step2Classify() {
               </div>
             ) : (
               <>
-                <DataTable rows={sourceIsRows} noScroll stmtHeaderStyle="gray"
-                  highlightedLabels={selectedCellType === 'income_statement' ? relevantSourceLabels : undefined} />
-                <DataTable rows={sourceBsRows} noScroll stmtHeaderStyle="gray"
-                  highlightedLabels={selectedCellType === 'balance_sheet' ? relevantSourceLabels : undefined} />
-                <DataTable rows={sourceCfsRows} noScroll stmtHeaderStyle="gray"
-                  highlightedLabels={selectedCellType === 'cash_flow_statement' ? relevantSourceLabels : undefined} />
+                {stmtConfigs.map(({ key, sourceRows }) => (
+                  <DataTable key={key} rows={sourceRows} noScroll stmtHeaderStyle="gray"
+                    highlightedLabels={selectedCellType === key ? relevantSourceLabels : undefined} />
+                ))}
               </>
             )}
           </div>
@@ -225,38 +220,19 @@ export default function Step2Classify() {
               </div>
             ) : (
               <>
-                {stmtStatus['income_statement'] === 'loading' ? (
-                  <div className="flex items-center justify-center py-8">
-                    <LoadingSpinner size="sm" message="Classifying Income Statement..." />
-                  </div>
-                ) : (
-                  <DataTable
-                    rows={isTemplateRows}
-                    noScroll
-                    onCellClick={setSelectedCell}
-                    selectedCell={selectedCell}
-                  />
-                )}
-                {stmtStatus['balance_sheet'] === 'loading' ? (
-                  <div className="flex items-center justify-center py-8">
-                    <LoadingSpinner size="sm" message="Classifying Balance Sheet..." />
-                  </div>
-                ) : (
-                  <DataTable
-                    rows={bsTemplateRows}
-                    noScroll
-                    onCellClick={setSelectedCell}
-                    selectedCell={selectedCell}
-                  />
-                )}
-                {cfsTemplateRows.length > 0 && (
-                  <DataTable
-                    rows={cfsTemplateRows}
-                    noScroll
-                    onCellClick={setSelectedCell}
-                    selectedCell={selectedCell}
-                  />
-                )}
+                {stmtConfigs.map(({ key, sections, layer2 }) => {
+                  if (sections.length === 0) return null
+                  const pending = selectedCellType === key ? pendingValues : null
+                  const rows = buildTemplateRows(sections, STATEMENT_LABELS[key], layer2 ?? undefined, corrections, selectedCell, pending)
+                  if (stmtStatus[key] === 'loading') return (
+                    <div key={key} className="flex items-center justify-center py-8">
+                      <LoadingSpinner size="sm" message={`Classifying ${STATEMENT_LABELS[key]}...`} />
+                    </div>
+                  )
+                  return (
+                    <DataTable key={key} rows={rows} noScroll onCellClick={setSelectedCell} selectedCell={selectedCell} />
+                  )
+                })}
               </>
             )}
           </div>
