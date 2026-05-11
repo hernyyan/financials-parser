@@ -91,27 +91,16 @@ export function useStep2Classify({
     ? (layer2Results[selectedCellType] ?? null)
     : null
 
-  const existingCorrection = useMemo(
-    () => (selectedCell ? corrections.find((c) => c.fieldName === selectedCell) : undefined),
-    [selectedCell, corrections],
-  )
+  const existingCorrection = selectedCell
+    ? corrections.find((c) => c.fieldName === selectedCell)
+    : undefined
 
   const isData = layer1Results['income_statement']
   const bsData = layer1Results['balance_sheet']
   const cfsData = layer1Results['cash_flow_statement']
-
-  const sourceIsRows = useMemo(
-    () => (isData ? buildSourceRows({ [isData.sourceSheet]: isData }) : []),
-    [isData],
-  )
-  const sourceBsRows = useMemo(
-    () => (bsData ? buildSourceRows({ [bsData.sourceSheet]: bsData }) : []),
-    [bsData],
-  )
-  const sourceCfsRows = useMemo(
-    () => (cfsData ? buildSourceRows({ [cfsData.sourceSheet]: cfsData }) : []),
-    [cfsData],
-  )
+  const sourceIsRows = isData ? buildSourceRows({ [isData.sourceSheet]: isData }) : []
+  const sourceBsRows = bsData ? buildSourceRows({ [bsData.sourceSheet]: bsData }) : []
+  const sourceCfsRows = cfsData ? buildSourceRows({ [cfsData.sourceSheet]: cfsData }) : []
 
   const relevantSourceLabels: Set<string> = useMemo(() => {
     if (!selectedCell || !activeLayer2) return new Set()
@@ -119,19 +108,14 @@ export function useStep2Classify({
     return labels && labels.length > 0 ? new Set(labels) : new Set()
   }, [selectedCell, activeLayer2])
 
-  const { passCount, failCount, flaggedCount } = useMemo(() => {
-    const allValidation = { ...(isLayer2?.validation ?? {}), ...(bsLayer2?.validation ?? {}) }
-    const vals = Object.values(allValidation)
-    return {
-      passCount: vals.filter((v) => v.status === 'PASS').length,
-      failCount: vals.filter((v) => v.status === 'FAIL').length,
-      flaggedCount: [
-        ...(isLayer2?.flaggedFields ?? []),
-        ...(bsLayer2?.flaggedFields ?? []),
-        ...(cfsLayer2?.flaggedFields ?? []),
-      ].length,
-    }
-  }, [isLayer2, bsLayer2, cfsLayer2])
+  const allValidation = { ...(isLayer2?.validation ?? {}), ...(bsLayer2?.validation ?? {}) }
+  const passCount = Object.values(allValidation).filter((v) => v.status === 'PASS').length
+  const failCount = Object.values(allValidation).filter((v) => v.status === 'FAIL').length
+  const flaggedCount = [
+    ...(isLayer2?.flaggedFields ?? []),
+    ...(bsLayer2?.flaggedFields ?? []),
+    ...(cfsLayer2?.flaggedFields ?? []),
+  ].length
 
   return {
     template,
