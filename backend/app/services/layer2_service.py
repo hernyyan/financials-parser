@@ -22,7 +22,6 @@ from app.services.claude_service import ClaudeService, get_claude_service
 from app.services.layer2_response_parser import parse_layer2_response
 from app.services.recalculate_service import RECALC_FN, CALCULATED_FIELDS
 from app.utils.text_utils import count_context_rules
-from app.utils.statement_meta import normalize_statement_type
 
 # Built from RECALC_FN so adding a new statement type requires one edit only.
 # prompt_key follows the convention "layer2_{stmt_key}".
@@ -63,7 +62,7 @@ class Layer2Service:
         """
         model = os.getenv("LAYER2_MODEL", "claude-opus-4-6")
 
-        normalized = normalize_statement_type(statement_type)
+        normalized = statement_type.lower().replace(" ", "_")
         config = STATEMENT_CONFIG.get(normalized)
         if config is None:
             raise ValueError(
