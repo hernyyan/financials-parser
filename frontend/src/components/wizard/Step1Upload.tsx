@@ -3,6 +3,7 @@ import { useWizardState } from '../../hooks/useWizardState'
 import { useExcelExtraction } from '../../hooks/useExcelExtraction'
 import { usePdfExtraction } from '../../hooks/usePdfExtraction'
 import { useCompanySelector } from '../../hooks/useCompanySelector'
+import { useSplitPane } from '../../hooks/useSplitPane'
 import TabSelector from '../shared/TabSelector'
 import ExcelViewer from '../shared/ExcelViewer'
 import PdfPageViewer from '../shared/PdfPageViewer'
@@ -74,14 +75,11 @@ export default function Step1Upload() {
   } = useWizardState()
 
   const fileInputRef = useRef<HTMLInputElement>(null)
-  const splitContainerRef = useRef<HTMLDivElement>(null)
+  const { leftPct, containerRef: splitContainerRef, handleDividerMouseDown } = useSplitPane()
 
   const [status, setStatus] = useState<StatusMessage>(null)
   const [contextStatus, setContextStatus] = useState<CompanyContextStatus | null>(null)
   const [contextLoading, setContextLoading] = useState(false)
-
-  // Resizable divider — left panel width as percentage
-  const [leftPct, setLeftPct] = useState(65)
 
   // Duplicate-check modal state (shared between Excel and PDF paths)
   const [duplicateCheck, setDuplicateCheck] = useState<{
@@ -251,30 +249,6 @@ export default function Step1Upload() {
     reportingPeriod.trim() !== '' &&
     companyName.trim() !== '' &&
     extractionStatus !== 'running'
-
-  // ── Resizable divider ───────────────────────────────────────────────────
-
-  function handleDividerMouseDown(e: React.MouseEvent) {
-    e.preventDefault()
-    const container = splitContainerRef.current
-    if (!container) return
-    const containerRect = container.getBoundingClientRect()
-
-    function onMouseMove(ev: MouseEvent) {
-      const newPct = ((ev.clientX - containerRect.left) / containerRect.width) * 100
-      const minLeft = (300 / containerRect.width) * 100
-      const maxLeft = ((containerRect.width - 320) / containerRect.width) * 100
-      setLeftPct(Math.min(Math.max(newPct, minLeft), maxLeft))
-    }
-
-    function onMouseUp() {
-      window.removeEventListener('mousemove', onMouseMove)
-      window.removeEventListener('mouseup', onMouseUp)
-    }
-
-    window.addEventListener('mousemove', onMouseMove)
-    window.addEventListener('mouseup', onMouseUp)
-  }
 
   // ── PDF page assignment (stays in parent — writes wizard state) ─────────
 
