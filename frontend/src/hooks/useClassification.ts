@@ -2,7 +2,6 @@ import { useEffect, useRef, useState } from 'react'
 import { runLayer2 } from '../api/client'
 import type { Layer1Result, Layer2Result, StatementType } from '../types'
 import { ALL_STATEMENT_TYPES, STATEMENT_LABELS, createStmtRecord } from '../utils/statementMeta'
-import { getErrorMessage } from '../utils/errorUtils'
 
 type RunStatus = 'idle' | 'loading' | 'done' | 'error'
 
@@ -82,7 +81,7 @@ export function useClassification({
               _setRunStatus(key, 'error')
               _setRunError(
                 key,
-                getErrorMessage(err, `${STATEMENT_LABELS[key]} classification failed.`),
+                err instanceof Error ? err.message : `${STATEMENT_LABELS[key]} classification failed.`,
               )
             }),
         )

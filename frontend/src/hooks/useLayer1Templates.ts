@@ -13,7 +13,6 @@ import { useEffect, useState } from 'react'
 import { getLayer1Template, saveLayer1Template } from '../api/client'
 import type { Layer1Template, Layer1TemplateRow, WaterfallStep, StatementType } from '../types'
 import { ALL_STATEMENT_TYPES, createStmtRecord } from '../utils/statementMeta'
-import { getErrorMessage } from '../utils/errorUtils'
 
 export type StmtTab = StatementType
 
@@ -75,7 +74,7 @@ export function useLayer1Templates({ companyId }: UseLayer1TemplatesOptions) {
     } catch (err) {
       setErrors((prev) => ({
         ...prev,
-        [stmt]: getErrorMessage(err, 'Save failed.'),
+        [stmt]: err instanceof Error ? err.message : 'Save failed.',
       }))
     } finally {
       setSaving((prev) => ({ ...prev, [stmt]: false }))

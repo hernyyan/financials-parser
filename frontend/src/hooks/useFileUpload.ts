@@ -10,7 +10,6 @@
 import { useState } from 'react'
 import { uploadFile, getCompanyContextStatus } from '../api/client'
 import type { CompanyContextStatus, Layer1Result, StatusMessage, StatementType } from '../types'
-import { getErrorMessage } from '../utils/errorUtils'
 
 interface UseFileUploadDeps {
   companyName: string
@@ -102,7 +101,7 @@ export function useFileUpload({
     } catch (err) {
       setStatus({
         type: 'error',
-        message: getErrorMessage(err, 'Upload failed. Check that the backend is running.'),
+        message: err instanceof Error ? err.message : 'Upload failed. Check that the backend is running.',
       })
     } finally {
       setUploading(false)

@@ -16,7 +16,6 @@ import { useEffect, useRef, useState } from 'react'
 import { adminGetCompanies, adminCreateCompany, adminDeleteCompany, AdminCompany } from '../api/client'
 import { useTableSort } from './useTableSort'
 import { compareValues } from '../utils/sortUtils'
-import { getErrorMessage } from '../utils/errorUtils'
 
 export type CompanySortField = 'name' | 'context_word_count' | 'total_corrections'
 
@@ -66,7 +65,7 @@ export function useCompanyList() {
       setAdding(false)
       setAddText('')
     } catch (err) {
-      alert(getErrorMessage(err, 'Failed to create company'))
+      alert(err instanceof Error ? err.message : 'Failed to create company')
     } finally {
       setAddSaving(false)
     }
@@ -79,7 +78,7 @@ export function useCompanyList() {
       await adminDeleteCompany(company.id)
       setCompanies((prev) => prev.filter((c) => c.id !== company.id))
     } catch (err) {
-      alert(getErrorMessage(err, 'Failed to delete company'))
+      alert(err instanceof Error ? err.message : 'Failed to delete company')
     }
   }
 

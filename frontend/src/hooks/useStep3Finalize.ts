@@ -19,7 +19,6 @@ import { buildFinalizeRows } from '../utils/finalizeRows'
 import { useTemplate } from './useTemplate'
 import type { FinalizeRow } from '../utils/finalizeRows'
 import type { Correction, Layer2Result, StatusMessage } from '../types'
-import { getErrorMessage } from '../utils/errorUtils'
 
 interface UseStep3FinalizeOptions {
   sessionId: string | null
@@ -155,7 +154,7 @@ export function useStep3Finalize({
     } catch (err) {
       setStatus({
         type: 'error',
-        message: getErrorMessage(err, 'Failed to save. Please try again.'),
+        message: err instanceof Error ? err.message : 'Failed to save. Please try again.',
       })
     } finally {
       setSaving(false)
