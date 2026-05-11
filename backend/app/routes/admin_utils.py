@@ -5,6 +5,7 @@ import json
 from typing import List
 
 from app.config import DATA_DIR
+from app.services.company_service import normalize_company_name
 
 GENERAL_FIXES_PATH = DATA_DIR / "general_fixes.csv"
 
@@ -33,7 +34,6 @@ def scan_duplicate_companies(db) -> None:
     """Detect normalized name collisions among all companies. Insert new alerts into DB."""
     from datetime import datetime, timezone
     from sqlalchemy import text
-    from app.routes.companies import _normalize_company_name
 
     all_companies = db.execute(
         text("SELECT id, name FROM companies ORDER BY id ASC")
