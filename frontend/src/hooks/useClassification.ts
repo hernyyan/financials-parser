@@ -54,6 +54,7 @@ export function useClassification({
 
   async function run() {
     if (classifyingRef.current) {
+      console.warn('[useClassification] run: already running, skipping') // eslint-disable-line no-console
       return
     }
     classifyingRef.current = true
@@ -90,10 +91,14 @@ export function useClassification({
       }
     }
 
+    console.log('[useClassification] waiting for', tasks.length, 'task(s) to settle') // eslint-disable-line no-console
     await Promise.allSettled(tasks)
+    console.log('[useClassification] all tasks settled — newResults keys:', Object.keys(newResults)) // eslint-disable-line no-console
 
     if (Object.keys(newResults).length > 0) {
       setLayer2Results(newResults)
+    } else {
+      console.warn('[useClassification] no results to persist — all tasks failed or skipped') // eslint-disable-line no-console
     }
     classifyingRef.current = false
   }

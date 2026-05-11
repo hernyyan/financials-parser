@@ -29,7 +29,7 @@ def run_layer2(request: Layer2Request, db: Session = Depends(get_db)):
     Declared as a plain `def` so FastAPI runs it in its thread pool executor,
     allowing the synchronous Anthropic SDK call to block without affecting the event loop.
     """
-    logger.info("Layer 2 starting for %s", request.statement_type)
+    print(f"Layer 2 starting for {request.statement_type}")
     service = get_layer2_service()
     try:
         with claude_api_errors():
@@ -54,5 +54,5 @@ def run_layer2(request: Layer2Request, db: Session = Depends(get_db)):
             db.rollback()
             logger.warning("Layer 2 DB persistence failed for session %s: %s", request.session_id, exc)
 
-    logger.info("Layer 2 completed for %s", request.statement_type)
+    print(f"Layer 2 completed for {request.statement_type}")
     return result
