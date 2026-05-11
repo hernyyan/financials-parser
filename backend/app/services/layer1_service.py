@@ -377,22 +377,6 @@ def _levenshtein(a: str, b: str) -> int:
 
 # ── Global singleton ──────────────────────────────────────────────────────────
 
-def find_excel_file(session_dir: "Path") -> "Path":
-    """
-    Return path to the uploaded Excel file in a session directory.
-    Tries .xlsx first, then .xls. Raises FileNotFoundError if neither exists.
-    """
-    from pathlib import Path as _Path
-    d = _Path(session_dir)
-    for ext in ("original.xlsx", "original.xls"):
-        p = d / ext
-        if p.exists():
-            return p
-    raise FileNotFoundError(
-        f"No Excel file found in uploads session directory: {session_dir}"
-    )
-
-
 _service: Optional[Layer1Service] = None
 
 
