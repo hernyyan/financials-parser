@@ -18,7 +18,7 @@ from sqlalchemy import text
 from app.config import COMPANY_DATASETS_DIR
 from app.db.database import get_db
 from app.models.schemas import AdminRenameCompanyRequest
-from app.services.company_service import create_company as _create_company, get_company_or_404
+from app.services.company_service import create_company as _create_company, get_company_or_404, rename_company
 from app.utils.json_utils import deserialize_dict
 from app.utils.text_utils import markdown_body_word_count
 
@@ -145,41 +145,7 @@ def admin_rename_company(
         raise HTTPException(status_code=422, detail="Name cannot be empty.")
 
     _, old_name, old_context = get_company_or_404(company_id, db)
-
-    existing = db.execute(
-        text("SELECT id FROM companies WHERE LOWER(name) = LOWER(:name) AND id != :id"),
-        {"name": new_name, "id": company_id},
-    ).fetchone()
-    if existing:
-        raise HTTPException(status_code=409, detail=f"A company named '{new_name}' already exists.")
-
-    # Update context header if present
-    new_context = old_context.replace(
-        f"# {old_name} — Classification Context",
-        f"# {new_name} — Classification Context",
-        1,
-    )
-
-    # Rename datasets directory if it exists
-    old_datasets_dir = COMPANY_DATASETS_DIR / old_name
-    new_datasets_dir = COMPANY_DATASETS_DIR / new_name
-    if old_datasets_dir.exists() and old_datasets_dir != new_datasets_dir:
-        old_datasets_dir.rename(new_datasets_dir)
-
-    db.execute(
-        text("UPDATE companies SET name = :name, context = :ctx WHERE id = :id"),
-        {"name": new_name, "ctx": new_context, "id": company_id},
-    )
-    db.execute(
-        text("UPDATE reviews SET company_name = :new WHERE company_name = :old"),
-        {"new": new_name, "old": old_name},
-    )
-    db.execute(
-        text("UPDATE company_specific_corrections SET company_name = :new WHERE company_name = :old"),
-        {"new": new_name, "old": old_name},
-    )
-    db.commit()
-
+    rename_company(company_id, old_name, old_context, new_name, db)
     return {"success": True, "old_name": old_name, "new_name": new_name}
 
 

@@ -1,5 +1,5 @@
 """
-Shared company creation and name-normalization logic.
+Shared company lifecycle logic: creation, lookup, and rename.
 
 Both the wizard endpoint (POST /companies) and the admin endpoint
 (POST /admin/companies) create companies with identical validation rules.
@@ -10,9 +10,13 @@ exact-duplicate detection).
 from __future__ import annotations
 
 import re
+from pathlib import Path
+
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
 from sqlalchemy import text
+
+from app.config import COMPANY_DATASETS_DIR
 
 
 def get_company_or_404(company_id: int, db: Session) -> tuple[int, str, str]:
@@ -27,6 +31,51 @@ def get_company_or_404(company_id: int, db: Session) -> tuple[int, str, str]:
     if not row:
         raise HTTPException(status_code=404, detail=f"Company {company_id} not found.")
     return row[0], row[1], row[2] or ""
+
+
+def rename_company(
+    company_id: int,
+    old_name: str,
+    old_context: str,
+    new_name: str,
+    db: Session,
+) -> None:
+    """
+    Rename a company everywhere: companies table, reviews, corrections, and
+    the datasets directory on disk. Raises HTTPException 409 if new_name is
+    already taken by another company. Commits the DB transaction.
+    """
+    existing = db.execute(
+        text("SELECT id FROM companies WHERE LOWER(name) = LOWER(:name) AND id != :id"),
+        {"name": new_name, "id": company_id},
+    ).fetchone()
+    if existing:
+        raise HTTPException(status_code=409, detail=f"A company named '{new_name}' already exists.")
+
+    new_context = old_context.replace(
+        f"# {old_name} — Classification Context",
+        f"# {new_name} — Classification Context",
+        1,
+    )
+
+    old_dir: Path = COMPANY_DATASETS_DIR / old_name
+    new_dir: Path = COMPANY_DATASETS_DIR / new_name
+    if old_dir.exists() and old_dir != new_dir:
+        old_dir.rename(new_dir)
+
+    db.execute(
+        text("UPDATE companies SET name = :name, context = :ctx WHERE id = :id"),
+        {"name": new_name, "ctx": new_context, "id": company_id},
+    )
+    db.execute(
+        text("UPDATE reviews SET company_name = :new WHERE company_name = :old"),
+        {"new": new_name, "old": old_name},
+    )
+    db.execute(
+        text("UPDATE company_specific_corrections SET company_name = :new WHERE company_name = :old"),
+        {"new": new_name, "old": old_name},
+    )
+    db.commit()
 
 
 def normalize_company_name(name: str) -> str:
