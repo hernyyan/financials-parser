@@ -1,16 +1,18 @@
 /**
  * useExcelExtraction — encapsulates all Excel-specific extraction state and logic.
  *
- * Owns: assignments, extractionStatus, extractionError, templateReview
+ * Owns: assignments (with auto-restore from saved tab configs), extractionStatus,
+ *   extractionError, templateReview
  * Depends on (passed in): sessionId, reportingPeriod, companyId, companyName,
- *   mergeLayer1Result, setStatus, setDuplicateCheck, setPendingExtraction
+ *   sheetNames, mergeLayer1Result, setStatus, checkBeforeRun
  */
-import { useState } from 'react'
-import { runLayer1, saveLayer1Template, saveStatementTabConfig } from '../api/client'
+import { useEffect, useState } from 'react'
+import { runLayer1, saveLayer1Template, saveStatementTabConfig, getStatementTabConfigs } from '../api/client'
 import type { Layer1Result, Layer1Template, Layer1TemplateRow, TemplateCheckResult, StatusMessage, StatementType } from '../types'
 import { ALL_STATEMENT_TYPES, createStmtRecord } from '../utils/statementMeta'
 import { toLayer1Result } from '../utils/layer1Utils'
 import { getErrorMessage } from '../utils/errorUtils'
+import { fuzzyMatchTab } from '../utils/fuzzyMatch'
 
 export type ExtractionStatus = 'idle' | 'running' | 'done' | 'error'
 
@@ -28,6 +30,7 @@ export interface ExcelExtractionDeps {
   reportingPeriod: string
   companyName: string
   companyId: number | null
+  sheetNames: string[]
   mergeLayer1Result: (type: string, result: Layer1Result) => void
   setStatus: (s: StatusMessage) => void
   checkBeforeRun: (pendingType: 'pdf' | 'global') => Promise<boolean>
@@ -40,6 +43,7 @@ export function useExcelExtraction({
   reportingPeriod,
   companyName,
   companyId,
+  sheetNames,
   mergeLayer1Result,
   setStatus,
   checkBeforeRun,
@@ -48,6 +52,22 @@ export function useExcelExtraction({
   const [extractionStatus, setExtractionStatus] = useState<ExtractionStatus>('idle')
   const [extractionError, setExtractionError] = useState<string | null>(null)
   const [templateReview, setTemplateReview] = useState<TemplateReviewState>(null)
+
+  // Auto-restore saved tab assignments when company + sheets are both known.
+  // Fires whenever companyId changes (company selected) or sheetNames change (file uploaded).
+  const sheetNamesKey = sheetNames.join(',')
+  useEffect(() => {
+    if (!companyId || sheetNames.length === 0) return
+    getStatementTabConfigs(companyId).then((configs) => {
+      for (const [stmtType, saved] of Object.entries(configs)) {
+        const matched = fuzzyMatchTab(saved.tab, sheetNames)
+        if (matched) {
+          setAssignments((prev) => ({ ...prev, [stmtType]: matched }))
+        }
+      }
+    }).catch(() => {})
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [companyId, sheetNamesKey])
 
   async function runExtractionInner() {
     setExtractionStatus('running')
