@@ -1,4 +1,4 @@
-import { API_BASE, handleResponse } from '../../api/client'
+import { API_BASE, handleResponse, postJson, putJson } from '../../api/client'
 
 // ── Companies ──────────────────────────────────────────────────────────────
 
@@ -28,13 +28,8 @@ export async function adminGetCompanyContext(id: number): Promise<AdminCompanyCo
   return handleResponse(res)
 }
 
-export async function adminUpdateCompanyContext(id: number, content: string): Promise<{ success: boolean; word_count: number }> {
-  const res = await fetch(`${API_BASE}/admin/company-context/${id}`, {
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ content }),
-  })
-  return handleResponse(res)
+export function adminUpdateCompanyContext(id: number, content: string): Promise<{ success: boolean; word_count: number }> {
+  return putJson(`${API_BASE}/admin/company-context/${id}`, { content })
 }
 
 export interface WriteRuleResult {
@@ -46,18 +41,13 @@ export interface WriteRuleResult {
   updated_markdown: string | null
 }
 
-export async function adminWriteRule(payload: {
+export function adminWriteRule(payload: {
   company_id: number
   field_name: string
   statement_type: string
   rule_text: string
 }): Promise<WriteRuleResult> {
-  const res = await fetch(`${API_BASE}/admin/write-rule`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
-  })
-  return handleResponse(res)
+  return postJson(`${API_BASE}/admin/write-rule`, payload)
 }
 
 export interface CompanyPeriodData {
@@ -92,22 +82,12 @@ export async function adminGetCompanyCorrections(id: number): Promise<{ company_
   return handleResponse(res)
 }
 
-export async function adminRenameCompany(id: number, name: string): Promise<{ success: boolean; old_name: string; new_name: string }> {
-  const res = await fetch(`${API_BASE}/admin/companies/${id}/rename`, {
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ name }),
-  })
-  return handleResponse(res)
+export function adminRenameCompany(id: number, name: string): Promise<{ success: boolean; old_name: string; new_name: string }> {
+  return putJson(`${API_BASE}/admin/companies/${id}/rename`, { name })
 }
 
-export async function adminCreateCompany(name: string): Promise<{ id: number; name: string }> {
-  const res = await fetch(`${API_BASE}/admin/companies`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ name }),
-  })
-  return handleResponse(res)
+export function adminCreateCompany(name: string): Promise<{ id: number; name: string }> {
+  return postJson(`${API_BASE}/admin/companies`, { name })
 }
 
 export async function adminDeleteCompany(id: number): Promise<{ success: boolean; deleted_company: string }> {
@@ -174,11 +154,6 @@ export async function adminGetAlerts(status: string = 'open'): Promise<{ total_a
   return handleResponse(res)
 }
 
-export async function adminUpdateAlertStatus(index: number, newStatus: string): Promise<{ success: boolean; index: number; new_status: string }> {
-  const res = await fetch(`${API_BASE}/admin/alerts/update-status`, {
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ index, new_status: newStatus }),
-  })
-  return handleResponse(res)
+export function adminUpdateAlertStatus(index: number, newStatus: string): Promise<{ success: boolean; index: number; new_status: string }> {
+  return putJson(`${API_BASE}/admin/alerts/update-status`, { index, new_status: newStatus })
 }
