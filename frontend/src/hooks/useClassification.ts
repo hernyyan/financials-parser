@@ -1,15 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
 import { runLayer2 } from '../api/client'
 import type { Layer1Result, Layer2Result, StatementType } from '../types'
+import { ALL_STATEMENT_TYPES, STATEMENT_LABELS } from '../utils/statementMeta'
 
 type RunStatus = 'idle' | 'loading' | 'done' | 'error'
 
-const STMT_TYPES: StatementType[] = ['income_statement', 'balance_sheet', 'cash_flow_statement']
-const STMT_LABELS: Record<StatementType, string> = {
-  income_statement: 'Income Statement',
-  balance_sheet: 'Balance Sheet',
-  cash_flow_statement: 'Cash Flow Statement',
-}
+const STMT_TYPES = ALL_STATEMENT_TYPES
+const STMT_LABELS = STATEMENT_LABELS
 
 const INIT_STATUS: Record<StatementType, RunStatus> = {
   income_statement: 'idle',

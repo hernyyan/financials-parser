@@ -8,6 +8,7 @@
 import { useState } from 'react'
 import { runLayer1Pdf, checkExistingReview } from '../api/client'
 import type { Layer1Result, StatusMessage, StatementType, DuplicateCheck, PendingExtraction } from '../types'
+import { ALL_STATEMENT_TYPES } from '../utils/statementMeta'
 
 export interface PdfExtractionDeps {
   sessionId: string | null
@@ -36,7 +37,7 @@ export function usePdfExtraction({
   const [pdfExtracting, setPdfExtracting] = useState<Record<string, boolean>>({})
 
   async function handlePdfRunAllInner() {
-    const stmtTypes: StatementType[] = ['income_statement', 'balance_sheet', 'cash_flow_statement']
+    const stmtTypes = ALL_STATEMENT_TYPES
     const toRun = stmtTypes.filter((type) =>
       Object.values(pdfPageAssignments).includes(type),
     )

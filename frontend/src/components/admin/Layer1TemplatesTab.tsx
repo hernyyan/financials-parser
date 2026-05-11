@@ -7,22 +7,14 @@
 import TemplateTreeEditor from '../wizard/TemplateTreeEditor'
 import { Loader2, CheckCircle2 } from 'lucide-react'
 import { useLayer1Templates, type StmtTab } from '../../hooks/useLayer1Templates'
+import { STATEMENT_LABELS, STATEMENT_ABBREVS, ALL_STATEMENT_TYPES } from '../../utils/statementMeta'
 
 interface Props {
   companyId: number
 }
 
-const STMT_LABELS: Record<StmtTab, string> = {
-  income_statement: 'IS',
-  balance_sheet: 'BS',
-  cash_flow_statement: 'CFS',
-}
-
-const STMT_FULL: Record<StmtTab, string> = {
-  income_statement: 'Income Statement',
-  balance_sheet: 'Balance Sheet',
-  cash_flow_statement: 'Cash Flow Statement',
-}
+const STMT_LABELS = STATEMENT_ABBREVS
+const STMT_FULL = STATEMENT_LABELS
 
 export default function Layer1TemplatesTab({ companyId }: Props) {
   const {
@@ -44,7 +36,7 @@ export default function Layer1TemplatesTab({ companyId }: Props) {
       {/* Statement sub-tabs + save button */}
       <div className="shrink-0 flex items-center justify-between px-3 py-1.5 border-b border-border bg-gray-50">
         <div className="flex gap-1">
-          {(['income_statement', 'balance_sheet', 'cash_flow_statement'] as StmtTab[]).map((stmt) => (
+          {ALL_STATEMENT_TYPES.map((stmt) => (
             <button
               key={stmt}
               onClick={() => setActiveStmt(stmt)}

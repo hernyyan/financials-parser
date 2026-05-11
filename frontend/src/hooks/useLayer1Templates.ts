@@ -12,10 +12,11 @@
 import { useEffect, useState } from 'react'
 import { getLayer1Template, saveLayer1Template } from '../api/client'
 import type { Layer1Template, Layer1TemplateRow, WaterfallStep, StatementType } from '../types'
+import { ALL_STATEMENT_TYPES } from '../utils/statementMeta'
 
 export type StmtTab = StatementType
 
-const ALL_STMTS: StmtTab[] = ['income_statement', 'balance_sheet', 'cash_flow_statement']
+const ALL_STMTS = ALL_STATEMENT_TYPES
 
 interface UseLayer1TemplatesOptions {
   companyId: number

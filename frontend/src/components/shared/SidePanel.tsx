@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import type { Layer2Result, Correction, ValidationCheck, CalculationMeta, StatementType } from '../../types'
+import { STATEMENT_LABELS } from '../../utils/statementMeta'
 import { formatFieldValue } from '../../utils/formatters'
 import { CALCULATED_FIELDS, READONLY_FIELDS } from '../../utils/templateStyling'
 import CalculatedFieldPanel from './CalculatedFieldPanel'
@@ -35,12 +36,6 @@ function highlightDollarAmounts(text: string): React.ReactNode {
   })
 }
 
-function statementLabel(type: string | null): string {
-  if (type === 'income_statement') return 'Income Statement'
-  if (type === 'balance_sheet') return 'Balance Sheet'
-  if (type === 'cash_flow_statement') return 'Cash Flow Statement'
-  return ''
-}
 
 // ─── Main SidePanel ────────────────────────────────────────────────────────────
 
@@ -111,7 +106,7 @@ export default function SidePanel({
       <div className="flex items-start justify-between px-4 py-3 border-b border-border shrink-0">
         <div>
           {statementType && (
-            <p className="text-[11px] text-muted-foreground mb-0.5">{statementLabel(statementType)}</p>
+            <p className="text-[11px] text-muted-foreground mb-0.5">{statementType ? STATEMENT_LABELS[statementType] : ''}</p>
           )}
           <div className="flex items-center gap-2">
             <h3 className="text-[14px]" style={{ fontWeight: 600 }}>{fieldName}</h3>
