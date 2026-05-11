@@ -15,7 +15,6 @@ import { useState, type ReactNode } from 'react'
 import type { Layer1TemplateRow, WaterfallStep } from '../../types'
 import { X } from 'lucide-react'
 import WaterfallEditor from './WaterfallEditor'
-import { usePromoteMode } from '../../hooks/usePromoteMode'
 
 // ── Badge colours ────────────────────────────────────────────────────────────
 
@@ -38,6 +37,45 @@ function formatVal(v: number | null | undefined): string {
   return v < 0 ? `(${s})` : s
 }
 
+function collectAllIds(rows: Layer1TemplateRow[]): Set<number> {
+  const ids = new Set<number>()
+  function walk(rs: Layer1TemplateRow[]) {
+    for (const r of rs) { ids.add(r.id); walk(r.children) }
+  }
+  walk(rows)
+  return ids
+}
+
+/** Flatten rows to a map id→row for quick lookup */
+function buildMap(rows: Layer1TemplateRow[]): Map<number, Layer1TemplateRow> {
+  const map = new Map<number, Layer1TemplateRow>()
+  function walk(rs: Layer1TemplateRow[]) {
+    for (const r of rs) { map.set(r.id, r); walk(r.children) }
+  }
+  walk(rows)
+  return map
+}
+
+/** Deep clone rows array */
+function cloneRows(rows: Layer1TemplateRow[]): Layer1TemplateRow[] {
+  return rows.map(r => ({ ...r, children: cloneRows(r.children) }))
+}
+
+/** Mutate: change the type of node with given id */
+function setNodeType(rows: Layer1TemplateRow[], id: number, type: Layer1TemplateRow['type']): Layer1TemplateRow[] {
+  return rows.map(r => {
+    if (r.id === id) return { ...r, type, children: type === 'individual' ? [] : r.children }
+    return { ...r, children: setNodeType(r.children, id, type) }
+  })
+}
+
+/** Mutate: set children of node with given id */
+function setNodeChildren(rows: Layer1TemplateRow[], id: number, children: Layer1TemplateRow[]): Layer1TemplateRow[] {
+  return rows.map(r => {
+    if (r.id === id) return { ...r, children }
+    return { ...r, children: setNodeChildren(r.children, id, children) }
+  })
+}
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -53,6 +91,12 @@ interface Props {
 export default function TemplateTreeEditor({ rows, waterfall, statementType, onChange }: Props) {
   const isIS = statementType === 'income_statement'
 
+  // Multi-select mode for promoting IND → SUM
+  const [promoteMode, setPromoteMode] = useState<{
+    parentId: number
+    selected: Set<number>
+  } | null>(null)
+
   const [notification, setNotification] = useState<string | null>(null)
 
   function notify(msg: string) {
@@ -60,14 +104,88 @@ export default function TemplateTreeEditor({ rows, waterfall, statementType, onC
     setTimeout(() => setNotification(null), 3500)
   }
 
-  const {
-    promoteMode,
-    promoteParentLabel,
-    handleBadgeClick,
-    togglePromoteChild,
-    confirmPromote,
-    cancelPromote,
-  } = usePromoteMode({ rows, waterfall, isIS, onChange, onNotify: notify })
+  // ── Badge click handlers ────────────────────────────────────────────────
+
+  function handleBadgeClick(row: Layer1TemplateRow, depth: number) {
+    if (promoteMode) return  // locked during promote mode
+
+    const cur = row.type
+    const nodeMap = buildMap(rows)
+
+    if (cur === 'sum') {
+      // SUM → IND: clear children, remove from waterfall
+      const hadChildren = row.children.length > 0
+      const newRows = setNodeType(cloneRows(rows), row.id, 'individual')
+      let newWaterfall = waterfall
+      if (isIS && waterfall) {
+        newWaterfall = waterfall.filter(w => w.row_id !== row.id)
+      }
+      onChange(newRows, newWaterfall)
+      if (hadChildren) {
+        notify(`"${row.label}" demoted to IND — ${row.children.length} child(ren) removed from tree and waterfall.`)
+      }
+      return
+    }
+
+    if (cur === 'individual') {
+      // IND → SUM: enter multi-select mode
+      setPromoteMode({ parentId: row.id, selected: new Set() })
+      return
+    }
+  }
+
+  // ── Promote mode ────────────────────────────────────────────────────────
+
+  function togglePromoteChild(id: number) {
+    if (!promoteMode) return
+    const next = new Set(promoteMode.selected)
+    if (next.has(id)) next.delete(id)
+    else next.add(id)
+    setPromoteMode({ ...promoteMode, selected: next })
+  }
+
+  function confirmPromote() {
+    if (!promoteMode) return
+    const { parentId, selected } = promoteMode
+
+    // Find all selected rows (they must be siblings or top-level)
+    const newRows = cloneRows(rows)
+    const nodeMap = buildMap(newRows)
+    const parent = nodeMap.get(parentId)
+    if (!parent) { setPromoteMode(null); return }
+
+    // Collect selected nodes from the flat top-level list
+    const selectedNodes = [...selected]
+      .map(id => nodeMap.get(id))
+      .filter((r): r is Layer1TemplateRow => !!r)
+
+    const updatedParent: Layer1TemplateRow = {
+      ...parent,
+      type: 'sum',
+      children: selectedNodes,
+    }
+
+    // Set updated rows
+    function replaceNode(rs: Layer1TemplateRow[]): Layer1TemplateRow[] {
+      return rs.map(r => {
+        if (r.id === parentId) return updatedParent
+        // Remove selected children from their current positions (they moved into parent)
+        return { ...r, children: replaceNode(r.children.filter(c => !selected.has(c.id))) }
+      }).filter(r => !selected.has(r.id) || r.id === parentId)
+    }
+
+    const finalRows = replaceNode(newRows)
+
+    // Add to waterfall if IS
+    let newWaterfall = waterfall
+    if (isIS && waterfall) {
+      newWaterfall = [...waterfall, { row_id: parentId, label: parent.label, operator: '+' }]
+    }
+
+    onChange(finalRows, newWaterfall)
+    setPromoteMode(null)
+    notify(`"${parent.label}" promoted to SUM with ${selected.size} child(ren).`)
+  }
 
   // ── Row renderer ────────────────────────────────────────────────────────
   // Sum rows are rendered AFTER their children (financial statement convention:
@@ -97,7 +215,7 @@ export default function TemplateTreeEditor({ rows, waterfall, statementType, onC
         <button
           className={`shrink-0 px-1.5 py-0.5 rounded border text-[10px] font-mono transition-colors ${BADGE[row.type]} ${promoteMode ? 'pointer-events-none' : 'hover:opacity-70'}`}
           style={{ fontWeight: 600 }}
-          onClick={(e) => { e.stopPropagation(); handleBadgeClick(row) }}
+          onClick={(e) => { e.stopPropagation(); handleBadgeClick(row, depth) }}
           title={`Click to change type (current: ${row.type})`}
         >
           {BADGE_LABEL[row.type]}
@@ -153,6 +271,8 @@ export default function TemplateTreeEditor({ rows, waterfall, statementType, onC
     return rs.map(row => renderRow(row, depth))
   }
 
+  const nodeMap = buildMap(rows)
+
   // ── Render ───────────────────────────────────────────────────────────────
 
   return (
@@ -169,7 +289,7 @@ export default function TemplateTreeEditor({ rows, waterfall, statementType, onC
       {/* Promote-mode banner */}
       {promoteMode && (
         <div className="shrink-0 px-3 py-2 bg-blue-50 border-b border-blue-200 text-[11px] text-blue-800 flex items-center justify-between gap-2">
-          <span>Select rows to become children of <strong>"{promoteParentLabel}"</strong>. Click a row to toggle.</span>
+          <span>Select rows to become children of <strong>"{nodeMap.get(promoteMode.parentId)?.label}"</strong>. Click a row to toggle.</span>
           <div className="flex gap-1.5">
             <button
               onClick={confirmPromote}
@@ -179,7 +299,7 @@ export default function TemplateTreeEditor({ rows, waterfall, statementType, onC
             >
               Confirm ({promoteMode.selected.size})
             </button>
-            <button onClick={cancelPromote} className="px-2 py-0.5 rounded border border-blue-300 text-blue-700 text-[11px]">
+            <button onClick={() => setPromoteMode(null)} className="px-2 py-0.5 rounded border border-blue-300 text-blue-700 text-[11px]">
               Cancel
             </button>
           </div>
