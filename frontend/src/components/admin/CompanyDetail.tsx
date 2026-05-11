@@ -1,6 +1,6 @@
-import { useEffect, useRef, useState } from 'react'
+import { useState } from 'react'
 import { ChevronLeft, Check, X, Edit3, Loader2 } from 'lucide-react'
-import { adminGetCompanyContext, adminGetCompanyData, adminGetCompanyCorrections, adminRenameCompany, AdminCompanyContext, CompanyPeriodData, AdminCorrection } from './AdminApiClient'
+import { useCompanyDetail } from '../../hooks/useCompanyDetail'
 import CompanyContextEditor from './CompanyContextEditor'
 import TemplateFieldList from './TemplateFieldList'
 import RuleWriter from './RuleWriter'
@@ -17,58 +17,25 @@ type Tab = 'data' | 'corrections' | 'datasets' | 'l1_templates'
 
 
 export default function CompanyDetail({ companyId, onBack }: Props) {
-  const [context, setContext] = useState<AdminCompanyContext | null>(null)
-  const [contextContent, setContextContent] = useState<string>('')
-  const [periods, setPeriods] = useState<CompanyPeriodData[]>([])
-  const [corrections, setCorrections] = useState<AdminCorrection[]>([])
-  const [loading, setLoading] = useState(true)
+  const {
+    context,
+    contextContent,
+    setContextContent,
+    periods,
+    corrections,
+    loading,
+    renaming,
+    renameText,
+    setRenameText,
+    renameSaving,
+    renameInputRef,
+    startRename,
+    cancelRename,
+    saveRename,
+  } = useCompanyDetail({ companyId })
+
   const [activeTab, setActiveTab] = useState<Tab>('data')
   const [selectedField, setSelectedField] = useState<{ name: string; statementType: string } | null>(null)
-
-  // Rename state
-  const [renaming, setRenaming] = useState(false)
-  const [renameText, setRenameText] = useState('')
-  const [renameSaving, setRenameSaving] = useState(false)
-  const renameInputRef = useRef<HTMLInputElement>(null)
-
-  useEffect(() => {
-    setLoading(true)
-    Promise.all([
-      adminGetCompanyContext(companyId),
-      adminGetCompanyData(companyId),
-      adminGetCompanyCorrections(companyId),
-    ]).then(([ctx, data, corr]) => {
-      setContext(ctx)
-      setContextContent(ctx.content ?? '')
-      setPeriods(data.periods)
-      setCorrections(corr.corrections)
-    }).catch(console.error).finally(() => setLoading(false))
-  }, [companyId])
-
-  function startRename() {
-    setRenameText(context?.name ?? '')
-    setRenaming(true)
-    setTimeout(() => renameInputRef.current?.select(), 0)
-  }
-
-  function cancelRename() {
-    setRenaming(false)
-    setRenameText('')
-  }
-
-  async function saveRename() {
-    if (!renameText.trim() || renameSaving) return
-    setRenameSaving(true)
-    try {
-      const res = await adminRenameCompany(companyId, renameText.trim())
-      setContext((prev) => prev ? { ...prev, name: res.new_name } : prev)
-      setRenaming(false)
-    } catch (err) {
-      alert(err instanceof Error ? err.message : 'Rename failed')
-    } finally {
-      setRenameSaving(false)
-    }
-  }
 
   if (loading) {
     return (
