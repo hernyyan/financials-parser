@@ -24,6 +24,8 @@ from typing import Any, Dict, List, Optional, Tuple
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 
+from app.services.company_service import get_company_or_404
+
 from app.config import LAYER_A_MODEL, LAYER_B_MODEL
 from app.services.claude_service import get_claude_service
 from app.utils.text_utils import markdown_body_word_count, COMPANY_CONTEXT_WORD_LIMIT, COMPANY_CONTEXT_WORD_WARNING
@@ -128,7 +130,7 @@ class CorrectionPipeline:
             )
 
         # Step 4 — Read current context from DB
-        current_markdown = self._load_context(row.company_id, row.company_name, db)
+        current_markdown = self._load_context(row.company_id, db)
 
         # Step 5 — Layer B
         try:
@@ -257,16 +259,10 @@ class CorrectionPipeline:
             referenced_fields=layer_a_data.get("referenced_fields", [row.field_name]),
         )
 
-    def _load_context(self, company_id: int, company_name: str, db: Session) -> str:
+    def _load_context(self, company_id: int, db: Session) -> str:
         """Step 4: Read the company's current context markdown from DB."""
-        ctx_row = db.execute(
-            text("SELECT context FROM companies WHERE id = :id"),
-            {"id": company_id},
-        ).fetchone()
-        current_markdown = (ctx_row[0] or "") if ctx_row else ""
-        if not current_markdown.strip():
-            return f"# {company_name} — Classification Context\n\n"
-        return current_markdown
+        _, company_name, context = get_company_or_404(company_id, db)
+        return context or f"# {company_name} — Classification Context\n\n"
 
     def _run_layer_b(
         self, layer_a: _LayerAResult, current_markdown: str, claude: Any
