@@ -54,49 +54,6 @@ export function getFailingFieldNames(layer2: Layer2Result | undefined): Set<stri
   return failing
 }
 
-// ── Inner row builder (one statement) ─────────────────────────────────────
-
-/**
- * Build FinalizeRows for a single statement's sections.
- * The 'Check' field (BS balance check) is emitted as isBalanceCheck and skipped
- * from the regular row path — safe to pass for any statement since only BS has it.
- */
-function buildStatementRows(
-  sections: TemplateSection[],
-  finalValues: Record<string, number | null>,
-  layer2: Layer2Result | undefined,
-  correctedFieldNames: Set<string>,
-  allFlaggedFields: Set<string>,
-  failingFields: Set<string>,
-): FinalizeRow[] {
-  const rows: FinalizeRow[] = []
-  for (const section of sections) {
-    if (section.header) rows.push({ label: section.header, classifiedValue: null, finalValue: null, isHeader: true })
-    for (const field of section.fields) {
-      if (field === 'Check') {
-        rows.push({ label: 'Check', classifiedValue: null, finalValue: null, isBalanceCheck: true })
-        continue
-      }
-      const rawFinalValue = finalValues[field] ?? null
-      const l2Value = layer2?.values[field] ?? null
-      const corrected = correctedFieldNames.has(field)
-      rows.push({
-        label: field,
-        classifiedValue: l2Value !== null ? formatFieldValue(field, l2Value) : null,
-        finalValue: rawFinalValue !== null ? formatFieldValue(field, rawFinalValue) : null,
-        rawFinalValue,
-        corrected,
-        flagged: allFlaggedFields.has(field) && !corrected,
-        validationFail: failingFields.has(field) && !corrected,
-        isBold: BOLD_FIELDS.has(field),
-        isIndented: isIndented(field),
-        isItalic: ITALIC_FIELDS.has(field),
-      })
-    }
-  }
-  return rows
-}
-
 // ── Row builder ────────────────────────────────────────────────────────────
 
 interface BuildFinalizeRowsParams {
@@ -130,18 +87,81 @@ export function buildFinalizeRows({
   isFailingFields,
   bsFailingFields,
 }: BuildFinalizeRowsParams): FinalizeRow[] {
-  const noValidation = new Set<string>()
-  const rows: FinalizeRow[] = [
-    { label: 'Income Statement', classifiedValue: null, finalValue: null, isStatementHeader: true },
-    ...buildStatementRows(isSections, finalValues.income_statement, isLayer2, correctedFieldNames, allFlaggedFields, isFailingFields),
-    { label: 'Balance Sheet', classifiedValue: null, finalValue: null, isStatementHeader: true },
-    ...buildStatementRows(bsSections, finalValues.balance_sheet, bsLayer2, correctedFieldNames, allFlaggedFields, bsFailingFields),
-  ]
+  const rows: FinalizeRow[] = []
 
-  // CFS validation not yet implemented — pass empty failing set
+  // Income Statement
+  rows.push({ label: 'Income Statement', classifiedValue: null, finalValue: null, isStatementHeader: true })
+  for (const section of isSections) {
+    if (section.header) rows.push({ label: section.header, classifiedValue: null, finalValue: null, isHeader: true })
+    for (const field of section.fields) {
+      const rawFinalValue = finalValues.income_statement[field] ?? null
+      const l2Value = isLayer2?.values[field] ?? null
+      const corrected = correctedFieldNames.has(field)
+      rows.push({
+        label: field,
+        classifiedValue: l2Value !== null ? formatFieldValue(field, l2Value) : null,
+        finalValue: rawFinalValue !== null ? formatFieldValue(field, rawFinalValue) : null,
+        rawFinalValue,
+        corrected,
+        flagged: allFlaggedFields.has(field) && !corrected,
+        validationFail: isFailingFields.has(field) && !corrected,
+        isBold: BOLD_FIELDS.has(field),
+        isIndented: isIndented(field),
+        isItalic: ITALIC_FIELDS.has(field),
+      })
+    }
+  }
+
+  // Balance Sheet
+  rows.push({ label: 'Balance Sheet', classifiedValue: null, finalValue: null, isStatementHeader: true })
+  for (const section of bsSections) {
+    if (section.header) rows.push({ label: section.header, classifiedValue: null, finalValue: null, isHeader: true })
+    for (const field of section.fields) {
+      if (field === 'Check') {
+        rows.push({ label: 'Check', classifiedValue: null, finalValue: null, isBalanceCheck: true })
+        continue
+      }
+      const rawFinalValue = finalValues.balance_sheet[field] ?? null
+      const l2Value = bsLayer2?.values[field] ?? null
+      const corrected = correctedFieldNames.has(field)
+      rows.push({
+        label: field,
+        classifiedValue: l2Value !== null ? formatFieldValue(field, l2Value) : null,
+        finalValue: rawFinalValue !== null ? formatFieldValue(field, rawFinalValue) : null,
+        rawFinalValue,
+        corrected,
+        flagged: allFlaggedFields.has(field) && !corrected,
+        validationFail: bsFailingFields.has(field) && !corrected,
+        isBold: BOLD_FIELDS.has(field),
+        isIndented: isIndented(field),
+        isItalic: ITALIC_FIELDS.has(field),
+      })
+    }
+  }
+
+  // Cash Flow Statement (no validation checks — CFS validation not implemented)
   if (cfsSections.length > 0) {
     rows.push({ label: 'Cash Flow Statement', classifiedValue: null, finalValue: null, isStatementHeader: true })
-    rows.push(...buildStatementRows(cfsSections, finalValues.cash_flow_statement, cfsLayer2, correctedFieldNames, allFlaggedFields, noValidation))
+    for (const section of cfsSections) {
+      if (section.header) rows.push({ label: section.header, classifiedValue: null, finalValue: null, isHeader: true })
+      for (const field of section.fields) {
+        const rawFinalValue = finalValues.cash_flow_statement[field] ?? null
+        const l2Value = cfsLayer2?.values[field] ?? null
+        const corrected = correctedFieldNames.has(field)
+        rows.push({
+          label: field,
+          classifiedValue: l2Value !== null ? formatFieldValue(field, l2Value) : null,
+          finalValue: rawFinalValue !== null ? formatFieldValue(field, rawFinalValue) : null,
+          rawFinalValue,
+          corrected,
+          flagged: allFlaggedFields.has(field) && !corrected,
+          validationFail: false,
+          isBold: BOLD_FIELDS.has(field),
+          isIndented: isIndented(field),
+          isItalic: ITALIC_FIELDS.has(field),
+        })
+      }
+    }
   }
 
   return rows
