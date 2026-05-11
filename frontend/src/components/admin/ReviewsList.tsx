@@ -1,7 +1,6 @@
 import { Loader2, Download, Trash2 } from 'lucide-react'
 import { adminExportReviewUrl } from './AdminApiClient'
 import { useReviewsList, SortField, CorrectionsFilter } from '../../hooks/useReviewsList'
-import ReviewStatusBadge from '../shared/ReviewStatusBadge'
 
 const STATUS_OPTIONS = ['finalized', 'step2_complete', 'step1_complete', 'new']
 
@@ -104,7 +103,11 @@ export default function ReviewsList() {
                   <td className="px-3 py-1.5 text-muted-foreground">{r.reporting_period || '—'}</td>
                   <td className="px-3 py-1.5 font-mono text-muted-foreground text-[11px]">{r.session_id.slice(0, 8)}</td>
                   <td className="px-3 py-1.5 text-center">
-                    <ReviewStatusBadge status={r.status} />
+                    <span className={`px-1.5 py-0.5 rounded text-[10px] ${
+                      r.status === 'finalized' ? 'bg-emerald-50 text-emerald-700' :
+                      r.status === 'step2_complete' ? 'bg-blue-50 text-blue-700' :
+                      'bg-gray-100 text-gray-600'
+                    }`} style={{ fontWeight: 500 }}>{r.status}</span>
                   </td>
                   <td className="px-3 py-1.5 text-right text-muted-foreground">{r.corrections_count}</td>
                   <td className="px-3 py-1.5 text-right text-muted-foreground whitespace-nowrap">

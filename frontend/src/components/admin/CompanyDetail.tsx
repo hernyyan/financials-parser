@@ -7,7 +7,6 @@ import RuleWriter from './RuleWriter'
 import CompanyDataTable from './CompanyDataTable'
 import Layer1TemplatesTab from './Layer1TemplatesTab'
 import CompanyCorrectionsTable from './CompanyCorrectionsTable'
-import ReviewStatusBadge from '../shared/ReviewStatusBadge'
 
 interface Props {
   companyId: number
@@ -175,7 +174,11 @@ export default function CompanyDetail({ companyId, onBack }: Props) {
                     <div key={p.session_id} className="flex items-center gap-4 px-3 py-2 border border-border rounded-lg bg-white text-[12px]">
                       <span className="font-mono text-muted-foreground text-[11px]">{p.session_id.slice(0, 8)}</span>
                       <span style={{ fontWeight: 500 }}>{p.reporting_period || 'No period'}</span>
-                      <ReviewStatusBadge status={p.status ?? ''} />
+                      <span className={`px-1.5 py-0.5 rounded text-[10px] ${
+                        p.status === 'finalized' ? 'bg-emerald-50 text-emerald-700' :
+                        p.status === 'step2_complete' ? 'bg-blue-50 text-blue-700' :
+                        'bg-gray-100 text-gray-600'
+                      }`} style={{ fontWeight: 500 }}>{p.status}</span>
                       <span className="text-muted-foreground ml-auto">{p.created_at ? new Date(p.created_at).toLocaleDateString() : '—'}</span>
                     </div>
                   ))}
