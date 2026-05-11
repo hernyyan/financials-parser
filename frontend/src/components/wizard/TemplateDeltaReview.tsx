@@ -5,10 +5,11 @@
  * unmatched line items were found. User maps new items to existing rows
  * or adds them as new rows, then saves.
  */
-import type { Layer1TemplateRow } from '../../types'
+import { useState, useEffect } from 'react'
+import type { Layer1Template, Layer1TemplateRow, WaterfallStep } from '../../types'
+import { getLayer1Template, saveLayer1Template } from '../../api/client'
 import TemplateTreeEditor from './TemplateTreeEditor'
-import { Loader2, CheckCircle2, ArrowRight } from 'lucide-react'
-import { useTemplateDeltaReview } from '../../hooks/useTemplateDeltaReview'
+import { Loader2, CheckCircle2, Plus, ArrowRight } from 'lucide-react'
 
 interface Props {
   unmatchedItems: Layer1TemplateRow[]
@@ -18,26 +19,100 @@ interface Props {
   onSkip: () => void
 }
 
-const STMT_LABEL: Record<string, string> = {
-  income_statement: 'Income Statement',
-  balance_sheet: 'Balance Sheet',
-  cash_flow_statement: 'Cash Flow Statement',
-}
+type NewItemAction =
+  | { kind: 'add'; type: Layer1TemplateRow['type'] }
+  | { kind: 'map'; targetId: number }
 
 export default function TemplateDeltaReview({ unmatchedItems, statementType, companyId, onSaved, onSkip }: Props) {
-  const {
-    rows,
-    waterfall,
-    loading,
-    error,
-    saving,
-    actions,
-    selectingTargetFor,
-    setSelectingTargetFor,
-    setAction,
-    handleTreeChange,
-    handleSave,
-  } = useTemplateDeltaReview({ unmatchedItems, statementType, companyId, onSaved })
+  const [storedTemplate, setStoredTemplate] = useState<Layer1Template | null>(null)
+  const [rows, setRows] = useState<Layer1TemplateRow[]>([])
+  const [waterfall, setWaterfall] = useState<WaterfallStep[] | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [saving, setSaving] = useState(false)
+
+  // Actions chosen for each unmatched item (index → action)
+  const [actions, setActions] = useState<Record<number, NewItemAction>>({})
+  const [selectingTargetFor, setSelectingTargetFor] = useState<number | null>(null)
+
+  useEffect(() => {
+    getLayer1Template(companyId, statementType)
+      .then(tmpl => {
+        if (tmpl) {
+          setStoredTemplate(tmpl)
+          setRows([...tmpl.rows])
+          setWaterfall(statementType === 'income_statement' ? (tmpl.waterfall ?? []) : null)
+        }
+        setLoading(false)
+      })
+      .catch(err => {
+        setError(err instanceof Error ? err.message : 'Failed to load template.')
+        setLoading(false)
+      })
+  }, [companyId, statementType])
+
+  function nextId(): number {
+    const allIds: number[] = []
+    function walk(rs: Layer1TemplateRow[]) {
+      for (const r of rs) { allIds.push(r.id); walk(r.children) }
+    }
+    walk(rows)
+    return Math.max(0, ...allIds) + 1
+  }
+
+  function setAction(index: number, action: NewItemAction) {
+    setActions(prev => ({ ...prev, [index]: action }))
+  }
+
+  function handleTreeChange(newRows: Layer1TemplateRow[], newWaterfall: WaterfallStep[] | null) {
+    setRows(newRows)
+    setWaterfall(newWaterfall)
+  }
+
+  // Apply all pending actions and save
+  async function handleSave() {
+    setSaving(true)
+    setError(null)
+
+    try {
+      let updatedRows = [...rows]
+
+      for (let i = 0; i < unmatchedItems.length; i++) {
+        const item = unmatchedItems[i]
+        const action = actions[i]
+        if (!action) continue  // skip unmapped items
+
+        if (action.kind === 'add') {
+          // Add as new top-level row
+          updatedRows = [...updatedRows, {
+            ...item,
+            id: nextId(),
+            type: action.type,
+            children: [],
+          }]
+        }
+        // 'map' to existing: we simply ignore it (item already represented in template)
+      }
+
+      const template: Layer1Template = {
+        meta: { statement_type: statementType, created_at: new Date().toISOString() },
+        rows: updatedRows,
+        ...(waterfall !== null ? { waterfall } : {}),
+      }
+      await saveLayer1Template(companyId, statementType, template)
+      onSaved()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to save template.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const stmtLabel: Record<string, string> = {
+    income_statement: 'Income Statement',
+    balance_sheet: 'Balance Sheet',
+    cash_flow_statement: 'Cash Flow Statement',
+  }
 
   if (loading) {
     return (
@@ -53,7 +128,7 @@ export default function TemplateDeltaReview({ unmatchedItems, statementType, com
       <div className="shrink-0 px-4 py-3 border-b border-border bg-white flex items-start justify-between gap-4">
         <div>
           <p className="text-[13px]" style={{ fontWeight: 600 }}>
-            {unmatchedItems.length} New Line Item{unmatchedItems.length !== 1 ? 's' : ''} — {STMT_LABEL[statementType] ?? statementType}
+            {unmatchedItems.length} New Line Item{unmatchedItems.length !== 1 ? 's' : ''} — {stmtLabel[statementType] ?? statementType}
           </p>
           <p className="text-[11px] text-muted-foreground mt-0.5">
             These items weren't in the stored template. Choose what to do with each, then save.
@@ -94,6 +169,7 @@ export default function TemplateDeltaReview({ unmatchedItems, statementType, com
                 <div key={i} className="px-3 py-2 border-b border-gray-100 text-[12px]">
                   <p className="truncate" style={{ fontWeight: 500 }}>{item.label}</p>
                   <div className="flex gap-1.5 mt-1.5 flex-wrap">
+                    {/* Add as IND */}
                     <button
                       onClick={() => setAction(i, { kind: 'add', type: 'individual' })}
                       className={`px-2 py-0.5 rounded border text-[10px] transition-colors ${action?.kind === 'add' && action.type === 'individual' ? 'bg-gray-800 text-white border-gray-800' : 'border-gray-200 text-gray-600 hover:bg-gray-50'}`}
@@ -101,6 +177,7 @@ export default function TemplateDeltaReview({ unmatchedItems, statementType, com
                     >
                       + Add IND
                     </button>
+                    {/* Add as SUM */}
                     <button
                       onClick={() => setAction(i, { kind: 'add', type: 'sum' })}
                       className={`px-2 py-0.5 rounded border text-[10px] transition-colors ${action?.kind === 'add' && action.type === 'sum' ? 'bg-blue-600 text-white border-blue-600' : 'border-blue-200 text-blue-700 hover:bg-blue-50'}`}
@@ -108,6 +185,7 @@ export default function TemplateDeltaReview({ unmatchedItems, statementType, com
                     >
                       + Add SUM
                     </button>
+                    {/* Map to existing */}
                     <button
                       onClick={() => setSelectingTargetFor(selectingTargetFor === i ? null : i)}
                       className={`px-2 py-0.5 rounded border text-[10px] transition-colors ${action?.kind === 'map' ? 'bg-emerald-600 text-white border-emerald-600' : 'border-emerald-200 text-emerald-700 hover:bg-emerald-50'}`}
