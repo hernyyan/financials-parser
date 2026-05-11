@@ -5,6 +5,9 @@ import { ALL_STATEMENT_TYPES, STATEMENT_LABELS, createStmtRecord } from '../util
 
 type RunStatus = 'idle' | 'loading' | 'done' | 'error'
 
+const STMT_TYPES = ALL_STATEMENT_TYPES
+const STMT_LABELS = STATEMENT_LABELS
+
 const INIT_STATUS = createStmtRecord<RunStatus>('idle')
 const INIT_ERROR = createStmtRecord<string | null>(null)
 
@@ -62,7 +65,7 @@ export function useClassification({
     const newResults: Record<string, Layer2Result> = { ...layer2Results }
     const tasks: Promise<void>[] = []
 
-    for (const key of ALL_STATEMENT_TYPES) {
+    for (const key of STMT_TYPES) {
       if (layer1Results[key] && stmtStatus[key] !== 'done') {
         _setRunStatus(key, 'loading')
         tasks.push(
@@ -81,7 +84,7 @@ export function useClassification({
               _setRunStatus(key, 'error')
               _setRunError(
                 key,
-                err instanceof Error ? err.message : `${STATEMENT_LABELS[key]} classification failed.`,
+                err instanceof Error ? err.message : `${STMT_LABELS[key]} classification failed.`,
               )
             }),
         )
@@ -121,7 +124,7 @@ export function useClassification({
     run,
     retry,
     markAllDone,
-    ALL_STATEMENT_TYPES,
-    STATEMENT_LABELS,
+    STMT_TYPES,
+    STMT_LABELS,
   }
 }

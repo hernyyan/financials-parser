@@ -5,11 +5,10 @@
  * unmatched line items were found. User maps new items to existing rows
  * or adds them as new rows, then saves.
  */
-import type { Layer1TemplateRow, StatementType } from '../../types'
+import type { Layer1TemplateRow } from '../../types'
 import TemplateTreeEditor from './TemplateTreeEditor'
 import { Loader2, CheckCircle2, ArrowRight } from 'lucide-react'
 import { useTemplateDeltaReview } from '../../hooks/useTemplateDeltaReview'
-import { STATEMENT_LABELS } from '../../utils/statementMeta'
 
 interface Props {
   unmatchedItems: Layer1TemplateRow[]
@@ -17,6 +16,12 @@ interface Props {
   companyId: number
   onSaved: () => void
   onSkip: () => void
+}
+
+const STMT_LABEL: Record<string, string> = {
+  income_statement: 'Income Statement',
+  balance_sheet: 'Balance Sheet',
+  cash_flow_statement: 'Cash Flow Statement',
 }
 
 export default function TemplateDeltaReview({ unmatchedItems, statementType, companyId, onSaved, onSkip }: Props) {
@@ -48,7 +53,7 @@ export default function TemplateDeltaReview({ unmatchedItems, statementType, com
       <div className="shrink-0 px-4 py-3 border-b border-border bg-white flex items-start justify-between gap-4">
         <div>
           <p className="text-[13px]" style={{ fontWeight: 600 }}>
-            {unmatchedItems.length} New Line Item{unmatchedItems.length !== 1 ? 's' : ''} — {STATEMENT_LABELS[statementType as StatementType] ?? statementType}
+            {unmatchedItems.length} New Line Item{unmatchedItems.length !== 1 ? 's' : ''} — {STMT_LABEL[statementType] ?? statementType}
           </p>
           <p className="text-[11px] text-muted-foreground mt-0.5">
             These items weren't in the stored template. Choose what to do with each, then save.

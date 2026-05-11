@@ -1,5 +1,3 @@
-import { ALL_STATEMENT_TYPES, STATEMENT_LABELS } from './statementMeta'
-
 export const BOLD_FIELDS = new Set([
   // IS
   'Gross Profit',
@@ -30,7 +28,11 @@ export const SECTION_HEADERS = new Set([
   'LTM - Adj EBITDA items',
 ])
 
-export const STATEMENT_HEADERS = new Set(ALL_STATEMENT_TYPES.map((t) => STATEMENT_LABELS[t]))
+export const STATEMENT_HEADERS = new Set([
+  'Income Statement',
+  'Balance Sheet',
+  'Cash Flow Statement',
+])
 
 export const ITALIC_FIELDS = new Set(['Check'])
 
