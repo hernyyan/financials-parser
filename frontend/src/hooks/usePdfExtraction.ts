@@ -9,6 +9,7 @@ import { useState } from 'react'
 import { runLayer1Pdf } from '../api/client'
 import type { Layer1Result, StatusMessage, StatementType } from '../types'
 import { ALL_STATEMENT_TYPES } from '../utils/statementMeta'
+import { toLayer1Result } from '../utils/layer1Utils'
 
 export interface PdfExtractionDeps {
   sessionId: string | null
@@ -61,12 +62,7 @@ export function usePdfExtraction({
           .sort((a, b) => a - b)
         try {
           const result = await runLayer1Pdf(sessionId!, pages, type, reportingPeriod)
-          mergeLayer1Result(type, {
-            lineItems: result.lineItems,
-            sourceScaling: result.sourceScaling,
-            columnIdentified: result.columnIdentified,
-            sourceSheet: `PDF pages ${pages.join(', ')}`,
-          } as Layer1Result)
+          mergeLayer1Result(type, toLayer1Result(result, `PDF pages ${pages.join(', ')}`))
         } catch (err) {
           setStatus({
             type: 'error',
