@@ -44,11 +44,6 @@ export async function getJson<T>(url: string): Promise<T> {
   return handleResponse<T>(res)
 }
 
-export async function deleteJson<T>(url: string): Promise<T> {
-  const res = await fetch(url, { method: 'DELETE' })
-  return handleResponse<T>(res)
-}
-
 export async function handleResponse<T>(res: Response): Promise<T> {
   if (!res.ok) {
     let message = `API error ${res.status}`
