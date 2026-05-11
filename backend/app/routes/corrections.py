@@ -2,19 +2,17 @@
 POST /corrections         — Save an analyst correction for a single template field.
 POST /corrections/process — Batch-route corrections by tag (general_fix → CSV, company_specific → queue).
 """
-from datetime import datetime, timezone
-
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.db.database import get_db
-from app.db.review_store import upsert_correction
 from app.models.schemas import (
     CorrectionRequest,
     CorrectionResponse,
     CorrectionProcessRequest,
     CorrectionProcessResponse,
 )
+from app.services.correction_service import save_correction as _save_correction
 from app.services.correction_router import process_corrections as _process_corrections
 
 router = APIRouter()
@@ -30,29 +28,16 @@ def save_correction(request: CorrectionRequest, db: Session = Depends(get_db)):
     if not request.fieldName or not request.fieldName.strip():
         raise HTTPException(status_code=400, detail="fieldName is required.")
 
-    timestamp = datetime.now(timezone.utc).isoformat()
-
-    correction_record = {
-        "fieldName": request.fieldName,
-        "statementType": request.statementType,
-        "originalValue": request.originalValue,
-        "correctedValue": request.correctedValue,
-        "reasoning": request.reasoning,
-        "tag": request.tag,
-        "timestamp": timestamp,
-    }
-
-    correction_id = 1
-
-    if request.sessionId:
-        try:
-            correction_id = upsert_correction(db, request.sessionId, correction_record)
-            db.commit()
-        except HTTPException:
-            raise
-        except Exception:
-            db.rollback()
-
+    correction_id, timestamp = _save_correction(
+        session_id=request.sessionId,
+        field_name=request.fieldName,
+        statement_type=request.statementType,
+        original_value=request.originalValue,
+        corrected_value=request.correctedValue,
+        reasoning=request.reasoning,
+        tag=request.tag,
+        db=db,
+    )
     return CorrectionResponse(
         success=True,
         correctionId=correction_id,
