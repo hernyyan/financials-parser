@@ -2,13 +2,13 @@
  * useStep2Classify — owns template loading and all derived data for Step 2.
  *
  * Hides:
- *   - template state + fetch (delegated to useTemplate)
+ *   - template state + fetch useEffect (getTemplate)
  *   - fieldStatementMap useMemo (field → statement type mapping)
  *   - selectedCellType derivation
  *   - layer2 result references (isLayer2, bsLayer2, cfsLayer2)
  *   - hasBothResults gate
  *   - activeLayer2, existingCorrection lookups
- *   - isSections / bsSections / cfsSections fallback resolution (via useTemplate)
+ *   - isSections / bsSections / cfsSections fallback resolution
  *   - sourceIsRows / sourceBsRows / sourceCfsRows (buildSourceRows)
  *   - relevantSourceLabels (Set from activeLayer2.sourceLabels)
  *   - passCount / failCount / flaggedCount from allValidation
@@ -17,10 +17,10 @@
  * pendingValues comes from useCorrections which itself needs selectedCellType —
  * extracting them here would create a circular dependency.
  */
-import { useMemo } from 'react'
+import { useEffect, useMemo, useState } from 'react'
+import { getTemplate } from '../api/client'
 import { IS_TEMPLATE_FIELDS, BS_TEMPLATE_FIELDS } from '../utils/templateFields'
 import { buildSourceRows } from '../utils/classifyRows'
-import { useTemplate } from './useTemplate'
 import type { DataTableRow } from '../components/shared/DataTable'
 import type {
   Correction,
@@ -59,13 +59,24 @@ export interface Step2ClassifyData {
   flaggedCount: number
 }
 
+function buildFallbackSections(): { is: TemplateSection[]; bs: TemplateSection[] } {
+  return {
+    is: [{ header: null, fields: IS_TEMPLATE_FIELDS }],
+    bs: [{ header: null, fields: BS_TEMPLATE_FIELDS }],
+  }
+}
+
 export function useStep2Classify({
   selectedCell,
   layer1Results,
   layer2Results,
   corrections,
 }: UseStep2ClassifyOptions): Step2ClassifyData {
-  const { template, isSections, bsSections, cfsSections } = useTemplate()
+  const [template, setTemplate] = useState<TemplateResponse | null>(null)
+
+  useEffect(() => {
+    getTemplate().then(setTemplate).catch(() => {})
+  }, [])
 
   const isLayer2 = layer2Results['income_statement'] ?? null
   const bsLayer2 = layer2Results['balance_sheet'] ?? null
@@ -94,6 +105,11 @@ export function useStep2Classify({
   const existingCorrection = selectedCell
     ? corrections.find((c) => c.fieldName === selectedCell)
     : undefined
+
+  const { is: fallbackIs, bs: fallbackBs } = buildFallbackSections()
+  const isSections = template?.income_statement.sections ?? fallbackIs
+  const bsSections = template?.balance_sheet.sections ?? fallbackBs
+  const cfsSections = template?.cash_flow_statement?.sections ?? []
 
   const isData = layer1Results['income_statement']
   const bsData = layer1Results['balance_sheet']
