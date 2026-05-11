@@ -1,112 +1,43 @@
-import { useEffect, useRef, useState } from 'react'
 import { Search, Building2, Loader2, Plus, Check, X, Trash2, ChevronUp, ChevronDown } from 'lucide-react'
-import { adminGetCompanies, adminCreateCompany, adminDeleteCompany, AdminCompany } from './AdminApiClient'
-
-type SortField = 'name' | 'context_word_count' | 'total_corrections'
+import { useCompanyList, CompanySortField } from '../../hooks/useCompanyList'
 
 interface Props {
   onSelect: (id: number) => void
 }
 
+function SortIcon({ field, sortField, sortDir }: { field: CompanySortField; sortField: CompanySortField; sortDir: 'asc' | 'desc' }) {
+  if (sortField !== field) return <ChevronUp className="w-3 h-3 opacity-20" />
+  return sortDir === 'asc'
+    ? <ChevronUp className="w-3 h-3 text-blue-600" />
+    : <ChevronDown className="w-3 h-3 text-blue-600" />
+}
+
+const SORT_OPTIONS: { field: CompanySortField; label: string }[] = [
+  { field: 'name', label: 'Name' },
+  { field: 'context_word_count', label: 'Words' },
+  { field: 'total_corrections', label: 'Corrections' },
+]
+
 export default function CompanyList({ onSelect }: Props) {
-  const [companies, setCompanies] = useState<AdminCompany[]>([])
-  const [loading, setLoading] = useState(true)
-  const [search, setSearch] = useState('')
-  const [adding, setAdding] = useState(false)
-  const [addText, setAddText] = useState('')
-  const [addSaving, setAddSaving] = useState(false)
-  const [sortField, setSortField] = useState<SortField>('name')
-  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
-  const addInputRef = useRef<HTMLInputElement>(null)
-
-  useEffect(() => {
-    adminGetCompanies()
-      .then(setCompanies)
-      .catch(console.error)
-      .finally(() => setLoading(false))
-  }, [])
-
-  function startAdding() {
-    setAddText('')
-    setAdding(true)
-    setTimeout(() => addInputRef.current?.focus(), 0)
-  }
-
-  function cancelAdding() {
-    setAdding(false)
-    setAddText('')
-  }
-
-  async function handleCreate() {
-    if (!addText.trim() || addSaving) return
-    setAddSaving(true)
-    try {
-      const created = await adminCreateCompany(addText.trim())
-      setCompanies((prev) => [...prev, {
-        id: created.id,
-        name: created.name,
-        context_word_count: 0,
-        total_corrections: 0,
-        processed_corrections: 0,
-        pending_corrections: 0,
-      }])
-      setAdding(false)
-      setAddText('')
-    } catch (err) {
-      alert(err instanceof Error ? err.message : 'Failed to create company')
-    } finally {
-      setAddSaving(false)
-    }
-  }
-
-  async function handleDelete(e: React.MouseEvent, company: AdminCompany) {
-    e.stopPropagation()
-    if (!window.confirm(`Delete ${company.name} and all its context data? This cannot be undone.`)) return
-    try {
-      await adminDeleteCompany(company.id)
-      setCompanies((prev) => prev.filter((c) => c.id !== company.id))
-    } catch (err) {
-      alert(err instanceof Error ? err.message : 'Failed to delete company')
-    }
-  }
-
-  function handleSort(field: SortField) {
-    if (sortField === field) {
-      setSortDir((d) => d === 'asc' ? 'desc' : 'asc')
-    } else {
-      setSortField(field)
-      setSortDir(field === 'name' ? 'asc' : 'desc')
-    }
-  }
-
-  function SortIcon({ field }: { field: SortField }) {
-    if (sortField !== field) return <ChevronUp className="w-3 h-3 opacity-20" />
-    return sortDir === 'asc'
-      ? <ChevronUp className="w-3 h-3 text-blue-600" />
-      : <ChevronDown className="w-3 h-3 text-blue-600" />
-  }
-
-  const filtered = companies
-    .filter((c) => c.name.toLowerCase().includes(search.toLowerCase()))
-    .sort((a, b) => {
-      let av: string | number, bv: string | number
-      if (sortField === 'name') {
-        av = a.name.toLowerCase()
-        bv = b.name.toLowerCase()
-      } else {
-        av = a[sortField]
-        bv = b[sortField]
-      }
-      if (av < bv) return sortDir === 'asc' ? -1 : 1
-      if (av > bv) return sortDir === 'asc' ? 1 : -1
-      return 0
-    })
-
-  const SORT_OPTIONS: { field: SortField; label: string }[] = [
-    { field: 'name', label: 'Name' },
-    { field: 'context_word_count', label: 'Words' },
-    { field: 'total_corrections', label: 'Corrections' },
-  ]
+  const {
+    companies,
+    loading,
+    search,
+    setSearch,
+    adding,
+    addText,
+    setAddText,
+    addSaving,
+    addInputRef,
+    sortField,
+    sortDir,
+    handleSort,
+    filtered,
+    startAdding,
+    cancelAdding,
+    handleCreate,
+    handleDelete,
+  } = useCompanyList()
 
   return (
     <div className="p-6">
@@ -149,7 +80,7 @@ export default function CompanyList({ onSelect }: Props) {
             style={{ fontWeight: sortField === field ? 600 : 400 }}
           >
             {label}
-            <SortIcon field={field} />
+            <SortIcon field={field} sortField={sortField} sortDir={sortDir} />
           </button>
         ))}
       </div>
