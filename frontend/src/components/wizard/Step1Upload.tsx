@@ -80,12 +80,13 @@ export default function Step1Upload() {
   const [contextStatus, setContextStatus] = useState<CompanyContextStatus | null>(null)
   const [contextLoading, setContextLoading] = useState(false)
 
-  // Duplicate-check modal — owns state + handleContinuePrevious
+  // Duplicate-check modal — owns state + pre-run check + handleContinuePrevious
   const {
     duplicateCheck,
     setDuplicateCheck,
     pendingExtraction,
     setPendingExtraction,
+    checkBeforeRun,
     handleContinuePrevious,
   } = useDuplicateResolution({
     companyId,
@@ -118,8 +119,7 @@ export default function Step1Upload() {
     companyId,
     mergeLayer1Result,
     setStatus,
-    setDuplicateCheck,
-    setPendingExtraction,
+    checkBeforeRun,
   })
 
   // PDF extraction path
@@ -138,8 +138,7 @@ export default function Step1Upload() {
     pdfPageAssignments,
     mergeLayer1Result,
     setStatus,
-    setDuplicateCheck,
-    setPendingExtraction,
+    checkBeforeRun,
   })
 
   const {

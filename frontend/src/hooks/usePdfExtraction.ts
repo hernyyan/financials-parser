@@ -6,8 +6,8 @@
  *   pdfPageAssignments, mergeLayer1Result, setStatus, setDuplicateCheck, setPendingExtraction
  */
 import { useState } from 'react'
-import { runLayer1Pdf, checkExistingReview } from '../api/client'
-import type { Layer1Result, StatusMessage, StatementType, DuplicateCheck, PendingExtraction } from '../types'
+import { runLayer1Pdf } from '../api/client'
+import type { Layer1Result, StatusMessage, StatementType } from '../types'
 import { ALL_STATEMENT_TYPES } from '../utils/statementMeta'
 
 export interface PdfExtractionDeps {
@@ -18,8 +18,7 @@ export interface PdfExtractionDeps {
   pdfPageAssignments: Record<number, StatementType>
   mergeLayer1Result: (type: string, result: Layer1Result) => void
   setStatus: (s: StatusMessage) => void
-  setDuplicateCheck: (v: DuplicateCheck) => void
-  setPendingExtraction: (v: PendingExtraction) => void
+  checkBeforeRun: (pendingType: 'pdf' | 'global') => Promise<boolean>
 }
 
 export function usePdfExtraction({
@@ -30,8 +29,7 @@ export function usePdfExtraction({
   pdfPageAssignments,
   mergeLayer1Result,
   setStatus,
-  setDuplicateCheck,
-  setPendingExtraction,
+  checkBeforeRun,
 }: PdfExtractionDeps) {
   const [pdfActiveTab, setPdfActiveTab] = useState<StatementType>('income_statement')
   const [pdfExtracting, setPdfExtracting] = useState<Record<string, boolean>>({})
@@ -89,24 +87,7 @@ export function usePdfExtraction({
       })
       return
     }
-
-    if (companyId) {
-      try {
-        const existing = await checkExistingReview(companyId, reportingPeriod)
-        if (existing.exists) {
-          setDuplicateCheck({
-            exists: true,
-            sessionId: existing.session_id!,
-            finalizedAt: existing.finalized_at ?? null,
-          })
-          setPendingExtraction({ type: 'pdf' })
-          return
-        }
-      } catch {
-        // proceed on check failure
-      }
-    }
-
+    if (await checkBeforeRun('pdf')) return
     handlePdfRunAllInner()
   }
 

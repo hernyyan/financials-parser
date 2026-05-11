@@ -10,7 +10,7 @@
  * setDuplicateCheck / setPendingExtraction to trigger the modal.
  */
 import { useState } from 'react'
-import { continuePreviousReview } from '../api/client'
+import { checkExistingReview, continuePreviousReview } from '../api/client'
 import type { Layer1Result, Layer2Result, Correction, StatusMessage, DuplicateCheck, PendingExtraction } from '../types'
 
 interface UseDuplicateResolutionDeps {
@@ -36,6 +36,30 @@ export function useDuplicateResolution({
 }: UseDuplicateResolutionDeps) {
   const [duplicateCheck, setDuplicateCheck] = useState<DuplicateCheck>(null)
   const [pendingExtraction, setPendingExtraction] = useState<PendingExtraction>(null)
+
+  /**
+   * Check for an existing finalized review before running extraction.
+   * Returns true if a duplicate was found (extraction should be deferred);
+   * false if extraction can proceed immediately.
+   */
+  async function checkBeforeRun(pendingType: 'pdf' | 'global'): Promise<boolean> {
+    if (!companyId) return false
+    try {
+      const existing = await checkExistingReview(companyId, reportingPeriod)
+      if (existing.exists) {
+        setDuplicateCheck({
+          exists: true,
+          sessionId: existing.session_id!,
+          finalizedAt: existing.finalized_at ?? null,
+        })
+        setPendingExtraction({ type: pendingType })
+        return true
+      }
+    } catch {
+      // proceed on check failure
+    }
+    return false
+  }
 
   async function handleContinuePrevious() {
     if (!companyId) return
@@ -81,6 +105,7 @@ export function useDuplicateResolution({
     setDuplicateCheck,
     pendingExtraction,
     setPendingExtraction,
+    checkBeforeRun,
     handleContinuePrevious,
   }
 }
