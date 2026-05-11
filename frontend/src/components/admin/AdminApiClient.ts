@@ -1,4 +1,4 @@
-import { API_BASE, handleResponse, postJson, putJson } from '../../api/client'
+import { API_BASE, getJson, deleteJson, postJson, putJson } from '../../api/client'
 
 // ── Companies ──────────────────────────────────────────────────────────────
 
@@ -11,9 +11,8 @@ export interface AdminCompany {
   pending_corrections: number
 }
 
-export async function adminGetCompanies(): Promise<AdminCompany[]> {
-  const res = await fetch(`${API_BASE}/admin/companies`)
-  return handleResponse(res)
+export function adminGetCompanies(): Promise<AdminCompany[]> {
+  return getJson(`${API_BASE}/admin/companies`)
 }
 
 export interface AdminCompanyContext {
@@ -23,9 +22,8 @@ export interface AdminCompanyContext {
   content: string | null
 }
 
-export async function adminGetCompanyContext(id: number): Promise<AdminCompanyContext> {
-  const res = await fetch(`${API_BASE}/admin/company-context/${id}`)
-  return handleResponse(res)
+export function adminGetCompanyContext(id: number): Promise<AdminCompanyContext> {
+  return getJson(`${API_BASE}/admin/company-context/${id}`)
 }
 
 export function adminUpdateCompanyContext(id: number, content: string): Promise<{ success: boolean; word_count: number }> {
@@ -60,9 +58,8 @@ export interface CompanyPeriodData {
   created_at: string | null
 }
 
-export async function adminGetCompanyData(id: number): Promise<{ company_id: number; company_name: string; periods: CompanyPeriodData[] }> {
-  const res = await fetch(`${API_BASE}/admin/company-data/${id}`)
-  return handleResponse(res)
+export function adminGetCompanyData(id: number): Promise<{ company_id: number; company_name: string; periods: CompanyPeriodData[] }> {
+  return getJson(`${API_BASE}/admin/company-data/${id}`)
 }
 
 export interface AdminCorrection {
@@ -77,9 +74,8 @@ export interface AdminCorrection {
   created_at: string | null
 }
 
-export async function adminGetCompanyCorrections(id: number): Promise<{ company_id: number; corrections: AdminCorrection[] }> {
-  const res = await fetch(`${API_BASE}/admin/company-corrections/${id}`)
-  return handleResponse(res)
+export function adminGetCompanyCorrections(id: number): Promise<{ company_id: number; corrections: AdminCorrection[] }> {
+  return getJson(`${API_BASE}/admin/company-corrections/${id}`)
 }
 
 export function adminRenameCompany(id: number, name: string): Promise<{ success: boolean; old_name: string; new_name: string }> {
@@ -90,9 +86,8 @@ export function adminCreateCompany(name: string): Promise<{ id: number; name: st
   return postJson(`${API_BASE}/admin/companies`, { name })
 }
 
-export async function adminDeleteCompany(id: number): Promise<{ success: boolean; deleted_company: string }> {
-  const res = await fetch(`${API_BASE}/admin/companies/${id}`, { method: 'DELETE' })
-  return handleResponse(res)
+export function adminDeleteCompany(id: number): Promise<{ success: boolean; deleted_company: string }> {
+  return deleteJson(`${API_BASE}/admin/companies/${id}`)
 }
 
 // ── Reviews ────────────────────────────────────────────────────────────────
@@ -108,50 +103,45 @@ export interface AdminReview {
   corrections_count: number
 }
 
-export async function adminGetReviews(params?: { status?: string; company?: string; limit?: number }): Promise<{ total: number; reviews: AdminReview[] }> {
+export function adminGetReviews(params?: { status?: string; company?: string; limit?: number }): Promise<{ total: number; reviews: AdminReview[] }> {
   const query = new URLSearchParams()
   if (params?.status) query.set('status', params.status)
   if (params?.company) query.set('company', params.company)
   if (params?.limit) query.set('limit', String(params.limit))
-  const res = await fetch(`${API_BASE}/admin/reviews?${query}`)
-  return handleResponse(res)
+  return getJson(`${API_BASE}/admin/reviews?${query}`)
 }
 
 export function adminExportReviewUrl(sessionId: string): string {
   return `${API_BASE}/admin/reviews/${sessionId}/export`
 }
 
-export async function adminDeleteReview(sessionId: string): Promise<{ success: boolean; deleted_session_id: string }> {
-  const res = await fetch(`${API_BASE}/admin/reviews/${sessionId}`, { method: 'DELETE' })
-  return handleResponse(res)
+export function adminDeleteReview(sessionId: string): Promise<{ success: boolean; deleted_session_id: string }> {
+  return deleteJson(`${API_BASE}/admin/reviews/${sessionId}`)
 }
 
 // ── General Fixes ──────────────────────────────────────────────────────────
 
-export async function adminGetGeneralFixes(params?: { company?: string; limit?: number }): Promise<{ total_entries: number; entries: Record<string, string>[] }> {
+export function adminGetGeneralFixes(params?: { company?: string; limit?: number }): Promise<{ total_entries: number; entries: Record<string, string>[] }> {
   const query = new URLSearchParams()
   if (params?.company) query.set('company', params.company)
   if (params?.limit) query.set('limit', String(params.limit))
-  const res = await fetch(`${API_BASE}/admin/general-fixes?${query}`)
-  return handleResponse(res)
+  return getJson(`${API_BASE}/admin/general-fixes?${query}`)
 }
 
 // ── Changelog ──────────────────────────────────────────────────────────────
 
-export async function adminGetChangelog(params?: { company_id?: number; limit?: number }): Promise<{ total_entries: number; entries: Record<string, unknown>[] }> {
+export function adminGetChangelog(params?: { company_id?: number; limit?: number }): Promise<{ total_entries: number; entries: Record<string, unknown>[] }> {
   const query = new URLSearchParams()
   if (params?.company_id) query.set('company_id', String(params.company_id))
   if (params?.limit) query.set('limit', String(params.limit))
-  const res = await fetch(`${API_BASE}/admin/changelog?${query}`)
-  return handleResponse(res)
+  return getJson(`${API_BASE}/admin/changelog?${query}`)
 }
 
 // ── Alerts ─────────────────────────────────────────────────────────────────
 
-export async function adminGetAlerts(status: string = 'open'): Promise<{ total_alerts: number; alerts: Record<string, unknown>[] }> {
+export function adminGetAlerts(status: string = 'open'): Promise<{ total_alerts: number; alerts: Record<string, unknown>[] }> {
   const params = new URLSearchParams({ status })
-  const res = await fetch(`${API_BASE}/admin/alerts?${params}`)
-  return handleResponse(res)
+  return getJson(`${API_BASE}/admin/alerts?${params}`)
 }
 
 export function adminUpdateAlertStatus(index: number, newStatus: string): Promise<{ success: boolean; index: number; new_status: string }> {
