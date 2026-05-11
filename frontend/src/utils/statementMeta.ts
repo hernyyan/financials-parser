@@ -2,10 +2,9 @@
  * statementMeta — canonical constants for the three financial statement types.
  *
  * Single source of truth for:
- *   ALL_STATEMENT_TYPES    — ordered array used for iteration and exhaustiveness
- *   STATEMENT_LABELS       — full display names (e.g. "Income Statement")
- *   STATEMENT_ABBREVS      — short tab labels (e.g. "IS")
- *   STATEMENT_TAB_COLORS   — Tailwind badge classes for each statement type
+ *   ALL_STATEMENT_TYPES   — ordered array used for iteration and exhaustiveness
+ *   STATEMENT_LABELS      — full display names (e.g. "Income Statement")
+ *   STATEMENT_ABBREVS     — short tab labels (e.g. "IS")
  *
  * Import these instead of declaring local label maps or type arrays inline.
  */
@@ -27,12 +26,6 @@ export const STATEMENT_ABBREVS: Record<StatementType, string> = {
   income_statement: 'IS',
   balance_sheet: 'BS',
   cash_flow_statement: 'CFS',
-}
-
-export const STATEMENT_TAB_COLORS: Record<StatementType, string> = {
-  income_statement: 'bg-blue-50 text-blue-700 border border-blue-200',
-  balance_sheet: 'bg-emerald-50 text-emerald-700 border border-emerald-200',
-  cash_flow_statement: 'bg-purple-50 text-purple-700 border border-purple-200',
 }
 
 /**

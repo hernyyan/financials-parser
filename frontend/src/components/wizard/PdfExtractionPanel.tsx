@@ -2,12 +2,21 @@ import { Loader2 } from 'lucide-react'
 import TabSelector from '../shared/TabSelector'
 import Layer1ResultsTable from '../shared/Layer1ResultsTable'
 import type { Layer1Result, StatementType } from '../../types'
-import { STATEMENT_LABELS, ALL_STATEMENT_TYPES, STATEMENT_TAB_COLORS } from '../../utils/statementMeta'
+import { STATEMENT_LABELS, ALL_STATEMENT_TYPES } from '../../utils/statementMeta'
 
+const LABEL_FOR = STATEMENT_LABELS
 const STMT_TAB_NAMES = ALL_STATEMENT_TYPES.map((t) => STATEMENT_LABELS[t])
 
+const TAB_COLORS: Record<StatementType, string> = {
+  income_statement: 'bg-blue-50 text-blue-700 border border-blue-200',
+  balance_sheet: 'bg-emerald-50 text-emerald-700 border border-emerald-200',
+  cash_flow_statement: 'bg-purple-50 text-purple-700 border border-purple-200',
+}
+
 function tabNameToStatementType(tab: string): StatementType {
-  return ALL_STATEMENT_TYPES.find((t) => STATEMENT_LABELS[t] === tab) ?? 'cash_flow_statement'
+  if (tab === 'Income Statement') return 'income_statement'
+  if (tab === 'Balance Sheet') return 'balance_sheet'
+  return 'cash_flow_statement'
 }
 
 interface PdfExtractionPanelProps {
@@ -32,7 +41,7 @@ export default function PdfExtractionPanel({
 
   const extractedTabs = ALL_STATEMENT_TYPES
     .filter((t) => layer1Results[t])
-    .map((t) => STATEMENT_LABELS[t])
+    .map((t) => LABEL_FOR[t])
 
   const assignedPagesForActive = Object.entries(pdfPageAssignments)
     .filter(([, type]) => type === pdfActiveTab)
@@ -58,7 +67,7 @@ export default function PdfExtractionPanel({
 
       <TabSelector
         tabs={[...STMT_TAB_NAMES]}
-        activeTab={STATEMENT_LABELS[pdfActiveTab]}
+        activeTab={LABEL_FOR[pdfActiveTab]}
         onChange={(tab) => onSetActiveTab(tabNameToStatementType(tab))}
         extractedTabs={extractedTabs}
         smallText
@@ -79,7 +88,7 @@ export default function PdfExtractionPanel({
         <div className="flex-1 overflow-auto p-4">
           <div className="space-y-3">
             <p className="text-[12px] text-muted-foreground">
-              Select pages from the PDF that contain the {STATEMENT_LABELS[pdfActiveTab]}, then click Run
+              Select pages from the PDF that contain the {LABEL_FOR[pdfActiveTab]}, then click Run
               Extraction above.
             </p>
             {assignedPagesForActive.length > 0 && (
@@ -87,7 +96,7 @@ export default function PdfExtractionPanel({
                 {assignedPagesForActive.map((page) => (
                   <span
                     key={page}
-                    className={`px-2 py-0.5 rounded text-[11px] ${STATEMENT_TAB_COLORS[pdfActiveTab]}`}
+                    className={`px-2 py-0.5 rounded text-[11px] ${TAB_COLORS[pdfActiveTab]}`}
                     style={{ fontWeight: 500 }}
                   >
                     Page {page}

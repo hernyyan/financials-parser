@@ -2,7 +2,12 @@ import { useState, useEffect } from 'react'
 import { Save, Trash2 } from 'lucide-react'
 import { CALCULATED_FIELDS } from '../../utils/templateStyling'
 import type { Correction } from '../../types'
-import { CORRECTION_TAG_OPTIONS } from '../../utils/correctionMeta'
+
+const TAG_OPTIONS: { value: Correction['tag']; label: string; description: string }[] = [
+  { value: 'one_off_error', label: 'One-off Error', description: 'Isolated mistake, no further action' },
+  { value: 'company_specific', label: 'Company-specific', description: 'Pattern unique to this company, saved for future' },
+  { value: 'general_fix', label: 'General Fix', description: 'Systematic issue, logged for review' },
+]
 
 interface CorrectionFormProps {
   fieldName: string
@@ -100,7 +105,7 @@ export default function CorrectionForm({
       <div>
         <label className="text-[11px] text-muted-foreground block mb-2">Correction Type</label>
         <div className="space-y-2">
-          {CORRECTION_TAG_OPTIONS.map((opt) => (
+          {TAG_OPTIONS.map((opt) => (
             <label
               key={opt.value}
               className={`flex items-start gap-2.5 p-2 rounded-lg border cursor-pointer transition-colors ${
