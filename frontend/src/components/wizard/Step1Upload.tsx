@@ -9,8 +9,6 @@ import PdfPageViewer from '../shared/PdfPageViewer'
 import StatusBanner from '../shared/StatusBanner'
 import CompanyCombobox from '../shared/CompanyCombobox'
 import DuplicateCheckModal from '../shared/DuplicateCheckModal'
-import Layer1ResultsTable from '../shared/Layer1ResultsTable'
-import PdfExtractionPanel from './PdfExtractionPanel'
 import ExcelSheetAssignmentPanel from './ExcelSheetAssignmentPanel'
 import TemplateReview from './TemplateReview'
 import TemplateDeltaReview from './TemplateDeltaReview'
@@ -21,7 +19,7 @@ import {
   appendToCompanyDataset,
 } from '../../api/client'
 import { API_BASE } from '../../api/client'
-import type { Company, CompanyContextStatus } from '../../types'
+import type { Company, CompanyContextStatus, Layer1Result } from '../../types'
 import {
   Upload,
   Loader2,
@@ -38,6 +36,83 @@ approveAudio.preload = 'auto'
 approveAudio.load()
 
 type StatusMessage = { type: 'success' | 'error' | 'info'; message: string } | null
+
+// ── Helpers ───────────────────────────────────────────────────────────────
+
+function formatLineItemValue(value: number): string {
+  if (value === 0) return '—'
+  const abs = Math.abs(value)
+  const formatted = abs.toLocaleString('en-US', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })
+  return value < 0 ? `(${formatted})` : formatted
+}
+
+// Results table used in PDF mode
+function Layer1ResultsTable({ result, label }: { result: Layer1Result; label?: string }) {
+  return (
+    <div>
+      {label && (
+        <p className="text-[11px] text-muted-foreground mb-1.5" style={{ fontWeight: 600 }}>
+          {label}
+        </p>
+      )}
+      <div className="bg-gray-50 rounded-lg px-3 py-2 mb-3 text-[11px] text-muted-foreground flex flex-wrap gap-x-3 gap-y-1">
+        <span>
+          Scaling:{' '}
+          <span style={{ fontWeight: 500 }} className="text-foreground">
+            {result.sourceScaling}
+          </span>
+        </span>
+        <span>
+          Column:{' '}
+          <span style={{ fontWeight: 500 }} className="text-foreground">
+            {result.columnIdentified}
+          </span>
+        </span>
+        <span>
+          Items:{' '}
+          <span style={{ fontWeight: 500 }} className="text-foreground">
+            {Object.keys(result.lineItems).length}
+          </span>
+        </span>
+      </div>
+      <table className="w-full text-[12px]">
+        <thead>
+          <tr className="border-b border-border">
+            <th className="text-left py-1.5 px-2 text-muted-foreground" style={{ fontWeight: 500 }}>
+              Line Item
+            </th>
+            <th className="text-right py-1.5 px-2 text-muted-foreground" style={{ fontWeight: 500 }}>
+              Value
+            </th>
+          </tr>
+        </thead>
+        <tbody>
+          {Object.entries(result.lineItems).map(([label, value], i) => {
+            const isBold =
+              label.includes('Total') ||
+              label.includes('Gross') ||
+              label.includes('Net') ||
+              label.includes('Operating Income') ||
+              label.includes('Pre-Tax')
+            return (
+              <tr key={i} className={`border-b border-gray-100 ${isBold ? 'bg-gray-50/50' : ''}`}>
+                <td className="py-1.5 px-2" style={{ fontWeight: isBold ? 500 : 400 }}>
+                  {label}
+                </td>
+                <td className={`py-1.5 px-2 text-right font-mono ${value < 0 ? 'text-red-600' : ''}`}>
+                  {formatLineItemValue(value)}
+                </td>
+              </tr>
+            )
+          })}
+        </tbody>
+      </table>
+    </div>
+  )
+}
 
 // ── Main component ────────────────────────────────────────────────────────
 
@@ -695,14 +770,93 @@ export default function Step1Upload() {
 
         {/* Right panel */}
         {uploadFileType === 'pdf' ? (
-          <PdfExtractionPanel
-            pdfActiveTab={pdfActiveTab}
-            pdfPageAssignments={pdfPageAssignments}
-            pdfExtracting={pdfExtracting}
-            layer1Results={layer1Results}
-            onSetActiveTab={setPdfActiveTab}
-            onRunAll={handlePdfRunAll}
-          />
+          /* PDF extraction panel */
+          <div className="flex-1 flex flex-col min-w-[320px]">
+            <div className="px-4 py-2.5 border-b border-border shrink-0">
+              <button
+                onClick={handlePdfRunAll}
+                disabled={
+                  Object.keys(pdfPageAssignments).length === 0 ||
+                  Object.values(pdfExtracting).some(Boolean)
+                }
+                className="w-full flex items-center justify-center gap-2 py-2 rounded-lg text-[13px] transition-colors disabled:opacity-50"
+                style={{ backgroundColor: '#030213', color: 'white', fontWeight: 500 }}
+              >
+                {Object.values(pdfExtracting).some(Boolean) ? (
+                  <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Running...</>
+                ) : (
+                  'Run Extraction'
+                )}
+              </button>
+            </div>
+
+            <TabSelector
+              tabs={['Income Statement', 'Balance Sheet', 'Cash Flow Statement']}
+              activeTab={
+                pdfActiveTab === 'income_statement' ? 'Income Statement'
+                  : pdfActiveTab === 'balance_sheet' ? 'Balance Sheet'
+                  : 'Cash Flow Statement'
+              }
+              onChange={(tab) =>
+                setPdfActiveTab(
+                  tab === 'Income Statement' ? 'income_statement'
+                    : tab === 'Balance Sheet' ? 'balance_sheet'
+                    : 'cash_flow_statement',
+                )
+              }
+              extractedTabs={[
+                ...(layer1Results['income_statement'] ? ['Income Statement'] : []),
+                ...(layer1Results['balance_sheet'] ? ['Balance Sheet'] : []),
+                ...(layer1Results['cash_flow_statement'] ? ['Cash Flow Statement'] : []),
+              ]}
+              smallText
+            />
+
+            {layer1Results[pdfActiveTab] ? (
+              <div className="flex-1 overflow-auto p-4">
+                <Layer1ResultsTable result={layer1Results[pdfActiveTab]} />
+              </div>
+            ) : pdfExtracting[pdfActiveTab] ? (
+              <div className="flex-1 flex flex-col items-center justify-center gap-3">
+                <Loader2 className="w-8 h-8 animate-spin" style={{ color: '#030213' }} />
+                <p className="text-[13px] text-muted-foreground">
+                  Running AI extraction on selected pages...
+                </p>
+              </div>
+            ) : (
+              <div className="flex-1 overflow-auto p-4">
+                <div className="space-y-3">
+                  <p className="text-[12px] text-muted-foreground">
+                    Select pages from the PDF that contain the{' '}
+                    {pdfActiveTab === 'income_statement' ? 'Income Statement'
+                      : pdfActiveTab === 'balance_sheet' ? 'Balance Sheet'
+                      : 'Cash Flow Statement'},
+                    then click Run Extraction above.
+                  </p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {Object.entries(pdfPageAssignments)
+                      .filter(([, type]) => type === pdfActiveTab)
+                      .sort(([a], [b]) => parseInt(a) - parseInt(b))
+                      .map(([page]) => (
+                        <span
+                          key={page}
+                          className={`px-2 py-0.5 rounded text-[11px] ${
+                            pdfActiveTab === 'income_statement'
+                              ? 'bg-blue-50 text-blue-700 border border-blue-200'
+                              : pdfActiveTab === 'balance_sheet'
+                                ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                                : 'bg-purple-50 text-purple-700 border border-purple-200'
+                          }`}
+                          style={{ fontWeight: 500 }}
+                        >
+                          Page {page}
+                        </span>
+                      ))}
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
         ) : (
           <ExcelSheetAssignmentPanel
             sheetNames={sheetNames}
