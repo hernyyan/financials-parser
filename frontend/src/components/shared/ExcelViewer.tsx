@@ -1,6 +1,7 @@
+import { useEffect, useMemo, useState } from 'react'
 import ExcelJS from 'exceljs'
 import LoadingSpinner from './LoadingSpinner'
-import { useExcelViewer } from '../../hooks/useExcelViewer'
+import { API_BASE } from '../../api/client'
 
 interface ExcelViewerProps {
   workbookUrl: string | null
@@ -13,7 +14,84 @@ function formatCellValue(cell: ExcelJS.Cell): string {
 }
 
 export default function ExcelViewer({ workbookUrl, activeSheet }: ExcelViewerProps) {
-  const { loading, error, sheet, tableData } = useExcelViewer({ workbookUrl, activeSheet })
+  const [workbook, setWorkbook] = useState<ExcelJS.Workbook | null>(null)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!workbookUrl) {
+      setWorkbook(null)
+      setError(null)
+      return
+    }
+    setLoading(true)
+    setError(null)
+    setWorkbook(null)
+
+    fetch(`${API_BASE}${workbookUrl}`)
+      .then((res) => {
+        if (!res.ok) throw new Error(`HTTP ${res.status}`)
+        return res.arrayBuffer()
+      })
+      .then(async (buf) => {
+        const wb = new ExcelJS.Workbook()
+        await wb.xlsx.load(buf)
+        setWorkbook(wb)
+      })
+      .catch(() => {
+        setError(
+          'Unable to preview workbook. The file may be corrupted or in an unsupported format.',
+        )
+      })
+      .finally(() => setLoading(false))
+  }, [workbookUrl])
+
+  const sheet = workbook?.getWorksheet(activeSheet) ?? null
+
+  // Pre-compute merge and layout data so render is fast
+  const tableData = useMemo(() => {
+    if (!sheet) return null
+
+    const dims = sheet.dimensions as { top: number; left: number; bottom: number; right: number } | null | undefined
+    if (!dims || typeof dims.top !== 'number') return null
+
+    const { top, left, bottom, right } = dims
+    const numRows = bottom - top + 1
+    const numCols = right - left + 1
+
+    const MAX_RENDER_ROWS = 300
+    const MAX_RENDER_COLS = 40
+    const renderRows = Math.min(numRows, MAX_RENDER_ROWS)
+    const renderCols = Math.min(numCols, MAX_RENDER_COLS)
+
+    // Merge map: "absRow,absCol" (0-indexed) → {rowSpan, colSpan}
+    const mergeMap = new Map<string, { rowSpan: number; colSpan: number }>()
+    const skipped = new Set<string>()
+    const mergesRaw = (sheet as unknown as { model?: { merges?: string[] } }).model?.merges ?? []
+    for (const mergeStr of mergesRaw) {
+      const [startRef, endRef] = mergeStr.split(':')
+      if (!startRef || !endRef) continue
+      const startCell = sheet.getCell(startRef)
+      const endCell = sheet.getCell(endRef)
+      const r1 = Number(startCell.row) - 1
+      const c1 = Number(startCell.col) - 1
+      const r2 = Number(endCell.row) - 1
+      const c2 = Number(endCell.col) - 1
+      mergeMap.set(`${r1},${c1}`, { rowSpan: r2 - r1 + 1, colSpan: c2 - c1 + 1 })
+      for (let r = r1; r <= r2; r++) {
+        for (let c = c1; c <= c2; c++) {
+          if (r === r1 && c === c1) continue
+          skipped.add(`${r},${c}`)
+        }
+      }
+    }
+
+    // Frozen rows from sheet views
+    const views = sheet.views as ExcelJS.WorksheetView[]
+    const frozenRows = views.find((v) => v.state === 'frozen')?.ySplit ?? 0
+
+    return { top, left, numRows, numCols, renderRows, renderCols, mergeMap, skipped, frozenRows }
+  }, [sheet])
 
   // ── Loading / error / empty states ─────────────────────────────────────────
 
@@ -33,7 +111,7 @@ export default function ExcelViewer({ workbookUrl, activeSheet }: ExcelViewerPro
     )
   }
 
-  if (!workbookUrl) {
+  if (!workbookUrl || !workbook) {
     return (
       <div className="flex-1 flex items-center justify-center text-gray-400 text-sm">
         No file uploaded yet
