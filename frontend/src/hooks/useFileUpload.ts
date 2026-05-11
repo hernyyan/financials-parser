@@ -8,8 +8,8 @@
  * Returns handlers ready to attach to DOM events and toolbar buttons.
  */
 import { useState } from 'react'
-import { uploadFile, getCompanyContextStatus } from '../api/client'
-import type { CompanyContextStatus, Layer1Result, StatusMessage, StatementType } from '../types'
+import { uploadFile } from '../api/client'
+import type { Layer1Result, StatusMessage, StatementType } from '../types'
 import { getErrorMessage } from '../utils/errorUtils'
 
 interface UseFileUploadDeps {
@@ -32,8 +32,8 @@ interface UseFileUploadDeps {
   resetPdfExtraction: () => void
   // status / context
   setStatus: (s: StatusMessage) => void
-  setContextStatus: (s: CompanyContextStatus | null) => void
-  setContextLoading: (v: boolean) => void
+  onContextFetch: (companyId: number) => void
+  onClearContext: () => void
 }
 
 export function useFileUpload({
@@ -53,8 +53,8 @@ export function useFileUpload({
   resetExcelExtraction,
   resetPdfExtraction,
   setStatus,
-  setContextStatus,
-  setContextLoading,
+  onContextFetch,
+  onClearContext,
 }: UseFileUploadDeps) {
   const [uploading, setUploading] = useState(false)
   const [isDragOver, setIsDragOver] = useState(false)
@@ -93,11 +93,7 @@ export function useFileUpload({
       })
 
       if (companyId) {
-        setContextLoading(true)
-        getCompanyContextStatus(companyId)
-          .then(setContextStatus)
-          .catch(() => setContextStatus(null))
-          .finally(() => setContextLoading(false))
+        onContextFetch(companyId)
       }
     } catch (err) {
       setStatus({
@@ -153,7 +149,7 @@ export function useFileUpload({
     resetExcelExtraction()
     resetPdfExtraction()
     setStatus(null)
-    setContextStatus(null)
+    onClearContext()
     setUploadFileType(null)
     setPdfPageCount(0)
     setPdfUrl(null)
