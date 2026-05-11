@@ -3,27 +3,36 @@
  *
  * Hides:
  *   - alerts / total / loading / statusFilter / updating state
- *   - fetch (refetches on statusFilter change)
- *   - handleStatusUpdate — marks updating, calls API, then reloads
+ *   - loadAlerts useCallback + useEffect (refetches on statusFilter change)
+ *   - handleStatusUpdate — optimistically marks updating, calls API, reloads
  */
-import { useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { adminGetAlerts, adminUpdateAlertStatus } from '../api/client'
 import { getErrorMessage } from '../utils/errorUtils'
-import { useFetchData } from './useFetchData'
 
 export type AlertStatus = 'open' | 'resolved' | 'fixed' | 'all'
 
 export function useAlertsList() {
+  const [alerts, setAlerts] = useState<Record<string, unknown>[]>([])
+  const [total, setTotal] = useState(0)
+  const [loading, setLoading] = useState(true)
   const [statusFilter, setStatusFilter] = useState<AlertStatus>('open')
   const [updating, setUpdating] = useState<number | null>(null)
 
-  const { data, loading, reload: loadAlerts } = useFetchData(
-    () => adminGetAlerts(statusFilter),
-    [statusFilter],
-  )
+  const loadAlerts = useCallback(() => {
+    setLoading(true)
+    adminGetAlerts(statusFilter)
+      .then((data) => {
+        setAlerts(data.alerts)
+        setTotal(data.total_alerts)
+      })
+      .catch(console.error)
+      .finally(() => setLoading(false))
+  }, [statusFilter])
 
-  const alerts = data?.alerts ?? []
-  const total = data?.total_alerts ?? 0
+  useEffect(() => {
+    loadAlerts()
+  }, [loadAlerts])
 
   async function handleStatusUpdate(fileIndex: number, newStatus: string) {
     setUpdating(fileIndex)
