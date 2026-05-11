@@ -13,6 +13,7 @@
 import { formatFieldValue } from './formatters'
 import { BOLD_FIELDS, ITALIC_FIELDS, isIndented } from './templateStyling'
 import type { Layer2Result, TemplateSection } from '../types'
+import { STATEMENT_LABELS } from './statementMeta'
 
 export interface FinalizeRow {
   label: string
@@ -132,15 +133,15 @@ export function buildFinalizeRows({
 }: BuildFinalizeRowsParams): FinalizeRow[] {
   const noValidation = new Set<string>()
   const rows: FinalizeRow[] = [
-    { label: 'Income Statement', classifiedValue: null, finalValue: null, isStatementHeader: true },
+    { label: STATEMENT_LABELS.income_statement, classifiedValue: null, finalValue: null, isStatementHeader: true },
     ...buildStatementRows(isSections, finalValues.income_statement, isLayer2, correctedFieldNames, allFlaggedFields, isFailingFields),
-    { label: 'Balance Sheet', classifiedValue: null, finalValue: null, isStatementHeader: true },
+    { label: STATEMENT_LABELS.balance_sheet, classifiedValue: null, finalValue: null, isStatementHeader: true },
     ...buildStatementRows(bsSections, finalValues.balance_sheet, bsLayer2, correctedFieldNames, allFlaggedFields, bsFailingFields),
   ]
 
   // CFS validation not yet implemented — pass empty failing set
   if (cfsSections.length > 0) {
-    rows.push({ label: 'Cash Flow Statement', classifiedValue: null, finalValue: null, isStatementHeader: true })
+    rows.push({ label: STATEMENT_LABELS.cash_flow_statement, classifiedValue: null, finalValue: null, isStatementHeader: true })
     rows.push(...buildStatementRows(cfsSections, finalValues.cash_flow_statement, cfsLayer2, correctedFieldNames, allFlaggedFields, noValidation))
   }
 

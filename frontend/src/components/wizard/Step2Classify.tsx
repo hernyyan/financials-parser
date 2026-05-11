@@ -11,6 +11,7 @@ import StatusBanner from '../shared/StatusBanner'
 import ClassifyActionBar from './ClassifyActionBar'
 import ClassifyLoadingView from './ClassifyLoadingView'
 import type { StatusMessage } from '../../types'
+import { STATEMENT_LABELS } from '../../utils/statementMeta'
 
 export default function Step2Classify() {
   const {
@@ -63,8 +64,7 @@ export default function Step2Classify() {
     run: runClassification,
     retry: handleRetry,
     markAllDone,
-    STMT_TYPES,
-    STMT_LABELS,
+    ALL_STATEMENT_TYPES,
   } = useClassification({
     sessionId,
     companyId,
@@ -116,10 +116,10 @@ export default function Step2Classify() {
   const isPending = selectedCellType === 'income_statement' ? pendingValues : null
   const bsPending = selectedCellType === 'balance_sheet' ? pendingValues : null
   const cfsPending = selectedCellType === 'cash_flow_statement' ? pendingValues : null
-  const isTemplateRows = buildTemplateRows(isSections, 'Income Statement', isLayer2 ?? undefined, corrections, selectedCell, isPending)
-  const bsTemplateRows = buildTemplateRows(bsSections, 'Balance Sheet', bsLayer2 ?? undefined, corrections, selectedCell, bsPending)
+  const isTemplateRows = buildTemplateRows(isSections, STATEMENT_LABELS.income_statement, isLayer2 ?? undefined, corrections, selectedCell, isPending)
+  const bsTemplateRows = buildTemplateRows(bsSections, STATEMENT_LABELS.balance_sheet, bsLayer2 ?? undefined, corrections, selectedCell, bsPending)
   const cfsTemplateRows = cfsSections.length > 0
-    ? buildTemplateRows(cfsSections, 'Cash Flow Statement', cfsLayer2 ?? undefined, corrections, selectedCell, cfsPending)
+    ? buildTemplateRows(cfsSections, STATEMENT_LABELS.cash_flow_statement, cfsLayer2 ?? undefined, corrections, selectedCell, cfsPending)
     : []
 
   async function handleApproveStep2() {
@@ -130,9 +130,9 @@ export default function Step2Classify() {
   if (isClassifying && !hasAnyResults) {
     return (
       <ClassifyLoadingView
-        stmtTypes={STMT_TYPES}
+        stmtTypes={ALL_STATEMENT_TYPES}
         stmtStatus={stmtStatus}
-        stmtLabels={STMT_LABELS}
+        stmtLabels={STATEMENT_LABELS}
         layer1HasCfs={!!layer1Results['cash_flow_statement']}
         elapsedSeconds={elapsedSeconds}
         onBack={backToStep1}
@@ -212,8 +212,8 @@ export default function Step2Classify() {
             ) : !hasAnyResults && hasAnyError ? (
               <div className="flex flex-col items-center justify-center gap-3 px-6 py-12 text-center">
                 <p className="text-[13px] text-red-600" style={{ fontWeight: 500 }}>Classification failed</p>
-                {STMT_TYPES.map(key => stmtError[key] ? (
-                  <p key={key} className="text-[12px] text-red-500">{STMT_LABELS[key]}: {stmtError[key]}</p>
+                {ALL_STATEMENT_TYPES.map(key => stmtError[key] ? (
+                  <p key={key} className="text-[12px] text-red-500">{STATEMENT_LABELS[key]}: {stmtError[key]}</p>
                 ) : null)}
                 <button
                   onClick={handleRetry}

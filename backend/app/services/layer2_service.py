@@ -27,16 +27,19 @@ from app.services.recalculate_service import (
     CALCULATED_FIELDS,
 )
 
-PROMPT_MAP = {
-    "income_statement": "layer2_income_statement",
-    "balance_sheet": "layer2_balance_sheet",
-    "cash_flow_statement": "layer2_cash_flow_statement",
-}
-
-_RECALC_FN = {
-    "income_statement": recalculate_income_statement,
-    "balance_sheet": recalculate_balance_sheet,
-    "cash_flow_statement": recalculate_cash_flow_statement,
+STATEMENT_CONFIG = {
+    "income_statement": {
+        "prompt_key": "layer2_income_statement",
+        "recalc_fn": recalculate_income_statement,
+    },
+    "balance_sheet": {
+        "prompt_key": "layer2_balance_sheet",
+        "recalc_fn": recalculate_balance_sheet,
+    },
+    "cash_flow_statement": {
+        "prompt_key": "layer2_cash_flow_statement",
+        "recalc_fn": recalculate_cash_flow_statement,
+    },
 }
 
 
@@ -69,13 +72,13 @@ class Layer2Service:
         model = os.getenv("LAYER2_MODEL", "claude-opus-4-6")
 
         normalized = statement_type.lower().replace(" ", "_")
-        prompt_key = PROMPT_MAP.get(normalized)
-
-        if prompt_key is None:
+        config = STATEMENT_CONFIG.get(normalized)
+        if config is None:
             raise ValueError(
                 f"Unknown statement_type '{statement_type}'. "
                 "Expected 'income_statement', 'balance_sheet', or 'cash_flow_statement'."
             )
+        prompt_key = config["prompt_key"]
 
         # Load company context if toggled on
         company_context = ""
@@ -120,7 +123,7 @@ class Layer2Service:
                               f"but regex could not extract a number. Claude format may have changed.")
 
         # Run Python recalculation — overwrite calculated fields, preserve ai_matched
-        recalc_fn = _RECALC_FN.get(normalized)
+        recalc_fn = config["recalc_fn"]
         if recalc_fn:
             ai_matched = dict(split['values'])  # raw AI values before recalc
             # For calculated fields: use source-reported value if extracted, else None
