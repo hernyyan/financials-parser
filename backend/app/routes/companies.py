@@ -6,11 +6,10 @@ POST /companies/{id}/reprocess-corrections
 """
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from sqlalchemy import text
 
 from app.db.database import get_db
 from app.models.schemas import CompanyCreate, CompanyResponse, ReprocessResponse, ReprocessCorrectionResult
-from app.services.company_service import create_company as _create_company, get_company_or_404
+from app.services.company_service import create_company as _create_company, get_company_or_404, list_companies as _list_companies
 from app.utils.text_utils import markdown_body_word_count, count_context_rules
 
 router = APIRouter()
@@ -19,10 +18,7 @@ router = APIRouter()
 @router.get("/companies", response_model=list[CompanyResponse])
 def list_companies(db: Session = Depends(get_db)):
     """Return all companies ordered alphabetically by name."""
-    rows = db.execute(
-        text("SELECT id, name FROM companies ORDER BY name ASC")
-    ).fetchall()
-    return [CompanyResponse(id=row[0], name=row[1]) for row in rows]
+    return [CompanyResponse(id=cid, name=name) for cid, name in _list_companies(db)]
 
 
 @router.post("/companies", response_model=CompanyResponse, status_code=201)

@@ -19,21 +19,10 @@ from app.config import UPLOADS_DIR
 from app.db.database import get_db
 from app.db.review_store import merge_layer1_data
 from app.models.schemas import Layer1Request, Layer1Response
-from app.services.layer1_service import get_layer1_service
+from app.services.layer1_service import get_layer1_service, find_excel_file
 from app.utils.claude_errors import claude_api_errors
 
 router = APIRouter()
-
-
-def _find_xlsx(session_dir: Path) -> Path:
-    """Return path to the uploaded Excel file in the session directory."""
-    for ext in ("original.xlsx", "original.xls"):
-        p = session_dir / ext
-        if p.exists():
-            return p
-    raise FileNotFoundError(
-        f"No Excel file found in uploads session directory: {session_dir}"
-    )
 
 
 @router.post("/layer1/run", response_model=Layer1Response)
@@ -53,7 +42,7 @@ def run_layer1(
     # Locate uploaded file
     session_dir = UPLOADS_DIR / request.sessionId
     try:
-        filepath = str(_find_xlsx(session_dir))
+        filepath = str(find_excel_file(session_dir))
     except FileNotFoundError as e:
         raise HTTPException(status_code=404, detail=str(e))
 

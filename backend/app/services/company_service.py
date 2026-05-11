@@ -170,6 +170,14 @@ def create_company(name: str, db: Session) -> tuple[int, str]:
 
 # ── Read paths ────────────────────────────────────────────────────────────────
 
+def list_companies(db: Session) -> list[tuple[int, str]]:
+    """Return all companies as (id, name) ordered alphabetically."""
+    rows = db.execute(
+        text("SELECT id, name FROM companies ORDER BY name ASC")
+    ).fetchall()
+    return [(row[0], row[1]) for row in rows]
+
+
 def list_companies_with_metadata(db: Session) -> list[dict[str, Any]]:
     """
     Return all companies with context word count and correction counts
