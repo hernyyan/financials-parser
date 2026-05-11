@@ -43,6 +43,9 @@ def save_correction(request: CorrectionRequest, db: Session = Depends(get_db)):
             db=db,
         )
         db.commit()
+    except HTTPException:
+        db.rollback()
+        raise
     except Exception as exc:
         db.rollback()
         logger.warning("Failed to save correction for field '%s': %s", request.fieldName, exc)

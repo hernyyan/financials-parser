@@ -39,6 +39,9 @@ def admin_update_company_context(
     try:
         word_count = update_company_context(company_id, request.content, db)
         db.commit()
+    except HTTPException:
+        db.rollback()
+        raise
     except Exception as exc:
         db.rollback()
         logger.warning("Failed to update context for company %s: %s", company_id, exc)
