@@ -5,13 +5,17 @@ GET  /admin/company-context/{company_id} — Full context contents from DB
 PUT  /admin/company-context/{company_id} — Overwrite the context in DB
 POST /admin/write-rule                   — Submit a rule through Layer A → Layer B pipeline
 """
+import json
+from datetime import datetime, timezone
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 
+from app.config import LAYER_A_MODEL, LAYER_B_MODEL
 from app.db.database import get_db
 from app.models.schemas import AdminContextUpdateRequest, AdminWriteRuleRequest
-from app.services.company_context_service import write_rule
+from app.services.claude_service import get_claude_service
 from app.utils.text_utils import markdown_body_word_count
 
 router = APIRouter(prefix="/admin")
@@ -78,12 +82,74 @@ def admin_write_rule(
     company_id, company_name, current_context = row
     current_markdown = current_context or f"# {company_name} — Classification Context\n\n"
 
-    return write_rule(
-        company_id=company_id,
-        company_name=company_name,
-        current_markdown=current_markdown,
-        field_name=request.field_name,
-        statement_type=request.statement_type,
-        rule_text=request.rule_text,
-        db=db,
+    claude = get_claude_service()
+    timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S")
+
+    layer_a_raw = claude.call_claude(
+        prompt_key="layer_a_instruction_rewriter",
+        variables={
+            "field_name": request.field_name,
+            "statement_type": request.statement_type,
+            "layer2_value": "N/A (admin-authored rule)",
+            "layer2_reasoning": "N/A (admin-authored rule)",
+            "corrected_value": "N/A (admin-authored rule)",
+            "analyst_reasoning": request.rule_text,
+        },
+        model=LAYER_A_MODEL,
+        max_tokens=2048,
     )
+    layer_a_parsed = claude.parse_json_response(layer_a_raw)
+    instruction = layer_a_parsed.get("instruction", "")
+    referenced_fields = layer_a_parsed.get("referenced_fields", [request.field_name])
+
+    layer_b_raw = claude.call_claude(
+        prompt_key="layer_b_markdown_integrator",
+        variables={
+            "new_instruction": instruction,
+            "referenced_fields": json.dumps(referenced_fields),
+            "current_markdown": current_markdown,
+        },
+        model=LAYER_B_MODEL,
+        max_tokens=8192,
+    )
+    layer_b_parsed = claude.parse_json_response(layer_b_raw)
+    action = layer_b_parsed.get("action", "UNKNOWN")
+    detail = layer_b_parsed.get("detail", "")
+    updated_markdown = layer_b_parsed.get("updated_markdown")
+
+    if updated_markdown and action != "DISCARD":
+        db.execute(
+            text("UPDATE companies SET context = :ctx WHERE id = :id"),
+            {"ctx": updated_markdown, "id": company_id},
+        )
+        db.commit()
+
+    db.execute(
+        text("""
+            INSERT INTO correction_changelog
+                (timestamp, company_id, company_name, field_name, statement_type,
+                 layer_a_instruction, layer_b_action, layer_b_detail, source)
+            VALUES
+                (:ts, :cid, :cn, :fn, :st, :la_instr, :lb_action, :lb_detail, 'admin_portal')
+        """),
+        {
+            "ts": timestamp,
+            "cid": company_id,
+            "cn": company_name,
+            "fn": request.field_name,
+            "st": request.statement_type,
+            "la_instr": instruction,
+            "lb_action": action,
+            "lb_detail": detail,
+        },
+    )
+    db.commit()
+
+    return {
+        "success": True,
+        "layer_a_instruction": instruction,
+        "layer_a_referenced_fields": referenced_fields,
+        "layer_b_action": action,
+        "layer_b_detail": detail,
+        "updated_markdown": updated_markdown if action != "DISCARD" else current_markdown,
+    }
