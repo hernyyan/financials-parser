@@ -5,7 +5,7 @@
  *   - reviews/total/loading state + fetch effect (re-triggers on filter change)
  *   - statusFilter / companyFilter / correctionsFilter state
  *   - sortField / sortDir state + handleSort toggle logic
- *   - periodToSortKey (from periodUtils) for chronological sort of reporting_period
+ *   - parsePeriod (financial "Month Year" string → sortable integer)
  *   - client-side filter + multi-field sort derivation (displayed)
  *   - two-click confirm-delete pattern + async handleDelete
  *
@@ -14,10 +14,25 @@
 import { useEffect, useState } from 'react'
 import { adminGetReviews, adminDeleteReview, AdminReview } from '../components/admin/AdminApiClient'
 import { useTableSort } from './useTableSort'
-import { periodToSortKey } from '../utils/periodUtils'
 
 export type SortField = 'company_name' | 'reporting_period' | 'status' | 'corrections_count' | 'created_at'
 export type CorrectionsFilter = 'all' | 'has' | 'none'
+
+const MONTH_ORDER: Record<string, number> = {
+  january: 0, february: 1, march: 2, april: 3, may: 4, june: 5,
+  july: 6, august: 7, september: 8, october: 9, november: 10, december: 11,
+}
+
+function parsePeriod(period: string | null): number {
+  if (!period) return -Infinity
+  const parts = period.trim().split(/\s+/)
+  if (parts.length === 2) {
+    const month = MONTH_ORDER[parts[0].toLowerCase()]
+    const year = parseInt(parts[1])
+    if (!isNaN(month) && !isNaN(year)) return year * 12 + month
+  }
+  return -Infinity
+}
 
 export function useReviewsList() {
   const [reviews, setReviews] = useState<AdminReview[]>([])
@@ -69,8 +84,8 @@ export function useReviewsList() {
     .sort((a, b) => {
       let av: string | number, bv: string | number
       if (sortField === 'reporting_period') {
-        av = periodToSortKey(a.reporting_period)
-        bv = periodToSortKey(b.reporting_period)
+        av = parsePeriod(a.reporting_period)
+        bv = parsePeriod(b.reporting_period)
       } else if (sortField === 'corrections_count') {
         av = a.corrections_count
         bv = b.corrections_count

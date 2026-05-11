@@ -17,12 +17,34 @@ import { useState } from 'react'
 import type { CompanyPeriodData } from '../components/admin/AdminApiClient'
 import { useTemplate } from './useTemplate'
 import { ALL_STATEMENT_TYPES } from '../utils/statementMeta'
-import { type ParsedPeriod, parseReportingPeriod } from '../utils/periodUtils'
 
 // ── Private constants + pure helpers ─────────────────────────────────────────
 
 const MONTH_NAMES = ['January','February','March','April','May','June','July','August','September','October','November','December']
 const MONTH_SHORT  = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
+
+type ParsedPeriod = { year: number; month: number; key: string }
+
+function parseReportingPeriod(period: string): ParsedPeriod | null {
+  const months: Record<string, number> = {
+    january: 1, february: 2, march: 3, april: 4, may: 5, june: 6,
+    july: 7, august: 8, september: 9, october: 10, november: 11, december: 12,
+    jan: 1, feb: 2, mar: 3, apr: 4, jun: 6, jul: 7, aug: 8,
+    sep: 9, oct: 10, nov: 11, dec: 12,
+  }
+  const parts = period.trim().split(/[\s\-_]+/)
+  if (parts.length < 2) return null
+  let month: number | undefined
+  let year: number | undefined
+  for (const part of parts) {
+    const asNum = parseInt(part)
+    if (!isNaN(asNum) && asNum > 1900) { year = asNum; continue }
+    const m = months[part.toLowerCase()]
+    if (m) { month = m; continue }
+  }
+  if (!month || !year) return null
+  return { year, month, key: `${year}-${String(month).padStart(2, '0')}` }
+}
 
 export type ColumnDescriptor = { year: number; month: number; key: string; label: string; shortLabel: string }
 
