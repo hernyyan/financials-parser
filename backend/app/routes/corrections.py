@@ -3,6 +3,9 @@ POST /corrections         — Save an analyst correction for a single template f
 POST /corrections/process — Batch-route corrections by tag (general_fix → CSV, company_specific → queue).
 """
 from fastapi import APIRouter, Depends, HTTPException
+import logging
+
+logger = logging.getLogger(__name__)
 from sqlalchemy.orm import Session
 
 from app.db.database import get_db
@@ -28,16 +31,23 @@ def save_correction(request: CorrectionRequest, db: Session = Depends(get_db)):
     if not request.fieldName or not request.fieldName.strip():
         raise HTTPException(status_code=400, detail="fieldName is required.")
 
-    correction_id, timestamp = _save_correction(
-        session_id=request.sessionId,
-        field_name=request.fieldName,
-        statement_type=request.statementType,
-        original_value=request.originalValue,
-        corrected_value=request.correctedValue,
-        reasoning=request.reasoning,
-        tag=request.tag,
-        db=db,
-    )
+    try:
+        correction_id, timestamp = _save_correction(
+            session_id=request.sessionId,
+            field_name=request.fieldName,
+            statement_type=request.statementType,
+            original_value=request.originalValue,
+            corrected_value=request.correctedValue,
+            reasoning=request.reasoning,
+            tag=request.tag,
+            db=db,
+        )
+        db.commit()
+    except Exception as exc:
+        db.rollback()
+        logger.warning("Failed to save correction for field '%s': %s", request.fieldName, exc)
+        raise HTTPException(status_code=500, detail=f"Failed to save correction: {exc}")
+
     return CorrectionResponse(
         success=True,
         correctionId=correction_id,

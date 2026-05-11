@@ -29,6 +29,7 @@ def finalize_output(request: FinalizeRequest, db: Session = Depends(get_db)):
             corrections=[c.model_dump() for c in request.corrections],
             db=db,
         )
+        db.commit()
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=str(e))

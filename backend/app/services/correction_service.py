@@ -4,7 +4,7 @@ CorrectionService — owns single-correction persistence.
 Responsibilities:
   - Timestamp generation (always UTC ISO-8601)
   - Correction record construction
-  - DB upsert + transaction (commit/rollback)
+  - DB upsert (does NOT commit — caller owns the transaction boundary)
 
 The batch-processing path (process_corrections) lives in correction_router.py
 and is not duplicated here — that path handles multi-tag routing logic.
@@ -12,7 +12,6 @@ and is not duplicated here — that path handles multi-tag routing logic.
 from datetime import datetime, timezone
 from typing import Any
 
-from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
 from app.db.review_store import upsert_correction
@@ -29,13 +28,11 @@ def save_correction(
     db: Session,
 ) -> tuple[int, str]:
     """
-    Persist a single analyst correction.
+    Build and upsert a single analyst correction. Does NOT commit.
 
-    Builds the correction record, upserts it into the session's corrections
-    list, and commits. Returns (correction_id, timestamp_iso).
-
-    If session_id is None the correction is not persisted (no-op path) —
-    correction_id defaults to 1 for response compatibility.
+    Returns (correction_id, timestamp_iso). If session_id is None the
+    upsert is skipped (correction_id defaults to 1 for response compatibility).
+    Caller is responsible for commit/rollback.
     """
     timestamp = datetime.now(timezone.utc).isoformat()
     correction_record = {
@@ -50,12 +47,6 @@ def save_correction(
 
     correction_id = 1
     if session_id:
-        try:
-            correction_id = upsert_correction(db, session_id, correction_record)
-            db.commit()
-        except HTTPException:
-            raise
-        except Exception:
-            db.rollback()
+        correction_id = upsert_correction(db, session_id, correction_record)
 
     return correction_id, timestamp
