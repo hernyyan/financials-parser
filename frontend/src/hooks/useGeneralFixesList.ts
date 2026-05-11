@@ -11,6 +11,7 @@
  */
 import { useEffect, useState } from 'react'
 import { adminGetGeneralFixes } from '../components/admin/AdminApiClient'
+import { useTableSort } from './useTableSort'
 
 export type SortField = 'timestamp' | 'period' | 'statement_type' | 'field_name' | 'company'
 
@@ -21,8 +22,7 @@ export function useGeneralFixesList() {
   const [companyFilter, setCompanyFilter] = useState('')
   const [stmtFilter, setStmtFilter] = useState('')
   const [fieldFilter, setFieldFilter] = useState('')
-  const [sortField, setSortField] = useState<SortField>('timestamp')
-  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc')
+  const { sortField, sortDir, handleSort } = useTableSort<SortField>('timestamp', 'desc', ['timestamp'])
   const [expandedCell, setExpandedCell] = useState<{ column: string; value: string } | null>(null)
 
   useEffect(() => {
@@ -35,15 +35,6 @@ export function useGeneralFixesList() {
       .catch(console.error)
       .finally(() => setLoading(false))
   }, [companyFilter])
-
-  function handleSort(field: SortField) {
-    if (sortField === field) {
-      setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'))
-    } else {
-      setSortField(field)
-      setSortDir(field === 'timestamp' ? 'desc' : 'asc')
-    }
-  }
 
   const filtered = entries
     .filter((r) => {
