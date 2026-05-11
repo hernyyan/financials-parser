@@ -53,12 +53,22 @@ def admin_write_rule(
 ):
     """Submit a rule through Layer A → Layer B pipeline."""
     company_id, company_name, current_context = get_company_or_404(request.company_id, db)
-    return write_rule(
-        company_id=company_id,
-        company_name=company_name,
-        current_context=current_context,
-        field_name=request.field_name,
-        statement_type=request.statement_type,
-        rule_text=request.rule_text,
-        db=db,
-    )
+    try:
+        result = write_rule(
+            company_id=company_id,
+            company_name=company_name,
+            current_context=current_context,
+            field_name=request.field_name,
+            statement_type=request.statement_type,
+            rule_text=request.rule_text,
+            db=db,
+        )
+        db.commit()
+    except HTTPException:
+        db.rollback()
+        raise
+    except Exception as exc:
+        db.rollback()
+        logger.warning("write_rule failed for company %s: %s", company_id, exc)
+        raise HTTPException(status_code=500, detail=f"Failed to write rule: {exc}")
+    return result

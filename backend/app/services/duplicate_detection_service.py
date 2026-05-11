@@ -35,6 +35,7 @@ def scan_duplicate_companies(db: Session) -> None:
     Detect normalized-name collisions among all companies and insert
     new alerts into context_alerts. Idempotent: pairs already tracked
     as 'open' or 'resolved' are skipped.
+    Does NOT commit — caller owns the transaction.
     """
     all_companies = db.execute(
         text("SELECT id, name FROM companies ORDER BY id ASC")
@@ -108,4 +109,3 @@ def scan_duplicate_companies(db: Session) -> None:
                 "msg": msg_data,
             },
         )
-    db.commit()

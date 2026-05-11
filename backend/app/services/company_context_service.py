@@ -85,6 +85,7 @@ def write_rule(
     """
     Run Layer A (instruction rewriting) → Layer B (markdown integration) for an
     admin-authored rule, persist the result, and log to correction_changelog.
+    Does NOT commit — caller owns the transaction so context + changelog land atomically.
 
     Returns a dict suitable for direct JSON serialisation:
       success, layer_a_instruction, layer_a_referenced_fields,
@@ -132,8 +133,8 @@ def write_rule(
     updated_markdown = layer_b_parsed.get("updated_markdown")
 
     # ── Persist: context update + changelog in a single transaction ──────────
-    # Both writes committed together so changelog is never missing if context
-    # update succeeds (or vice versa).
+    # Both writes must land together — changelog is always written even on DISCARD.
+    # Caller commits atomically so context update and changelog entry are never split.
     if updated_markdown and action != "DISCARD":
         db.execute(
             text("UPDATE companies SET context = :ctx WHERE id = :id"),
@@ -159,7 +160,6 @@ def write_rule(
             "lb_detail": detail,
         },
     )
-    db.commit()
 
     return {
         "success": True,
