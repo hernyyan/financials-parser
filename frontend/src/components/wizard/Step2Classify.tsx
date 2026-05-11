@@ -1,11 +1,10 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useWizardState } from '../../hooks/useWizardState'
-import { useClassification } from '../../hooks/useClassification'
 import DataTable from '../shared/DataTable'
 import SidePanel from '../shared/SidePanel'
 import LoadingSpinner from '../shared/LoadingSpinner'
 import StatusBanner from '../shared/StatusBanner'
-import { getTemplate } from '../../api/client'
+import { runLayer2, getTemplate } from '../../api/client'
 import { IS_TEMPLATE_FIELDS, BS_TEMPLATE_FIELDS } from '../../mocks/mockData'
 import { formatFieldValue } from '../../utils/formatters'
 import { BOLD_FIELDS, ITALIC_FIELDS, isIndented } from '../../utils/templateStyling'
@@ -22,7 +21,26 @@ import {
   Flag,
 } from 'lucide-react'
 
+type RunStatus = 'idle' | 'loading' | 'done' | 'error'
+type StmtType = 'income_statement' | 'balance_sheet' | 'cash_flow_statement'
 type StatusMessage = { type: 'success' | 'error' | 'info'; message: string } | null
+
+const STMT_TYPES: StmtType[] = ['income_statement', 'balance_sheet', 'cash_flow_statement']
+const STMT_LABELS: Record<StmtType, string> = {
+  income_statement: 'Income Statement',
+  balance_sheet: 'Balance Sheet',
+  cash_flow_statement: 'Cash Flow Statement',
+}
+const INIT_STATUS: Record<StmtType, RunStatus> = {
+  income_statement: 'idle',
+  balance_sheet: 'idle',
+  cash_flow_statement: 'idle',
+}
+const INIT_ERROR: Record<StmtType, string | null> = {
+  income_statement: null,
+  balance_sheet: null,
+  cash_flow_statement: null,
+}
 
 function formatSourceValue(value: number): string {
   if (value === 0) return '—'
@@ -128,40 +146,43 @@ export default function Step2Classify() {
     setSidePanelOpen,
   } = useWizardState()
 
+  const [stmtStatus, setStmtStatus] = useState<Record<StmtType, RunStatus>>(INIT_STATUS)
+  const [stmtError, setStmtError] = useState<Record<StmtType, string | null>>(INIT_ERROR)
   const [template, setTemplate] = useState<TemplateResponse | null>(null)
+
+  function setRunStatus(type: StmtType, s: RunStatus) {
+    setStmtStatus(prev => ({ ...prev, [type]: s }))
+  }
+  function setRunError(type: StmtType, err: string | null) {
+    setStmtError(prev => ({ ...prev, [type]: err }))
+  }
   const [status, setStatus] = useState<StatusMessage>(null)
   const [showBackConfirm, setShowBackConfirm] = useState(false)
+  const [elapsedSeconds, setElapsedSeconds] = useState(0)
   const [approvingStep2, setApprovingStep2] = useState(false)
+  const classifyingRef = useRef(false)
 
   const isLayer2 = layer2Results['income_statement']
   const bsLayer2 = layer2Results['balance_sheet']
   const cfsLayer2 = layer2Results['cash_flow_statement']
+  const isClassifying = Object.values(stmtStatus).some(s => s === 'loading')
 
-  const hasBothResults =
-    !!isLayer2 && !!bsLayer2 && (!layer1Results['cash_flow_statement'] || !!cfsLayer2)
+  // Tick elapsed seconds while classification is running
+  useEffect(() => {
+    if (!isClassifying) {
+      setElapsedSeconds(0)
+      return
+    }
+    setElapsedSeconds(0)
+    const interval = setInterval(() => setElapsedSeconds((s) => s + 1), 1000)
+    return () => clearInterval(interval)
+  }, [isClassifying])
 
-  const {
-    stmtStatus,
-    stmtError,
-    isClassifying,
-    elapsedSeconds,
-    run: runClassification,
-    retry: handleRetry,
-    markAllDone,
-    STMT_TYPES,
-    STMT_LABELS,
-  } = useClassification({
-    sessionId,
-    companyId,
-    useCompanyContext,
-    layer1Results,
-    layer2Results,
-    setLayer2Results,
-  })
-
+  const hasBothResults = !!isLayer2 && !!bsLayer2 &&
+    (!layer1Results['cash_flow_statement'] || !!cfsLayer2)
   const hasAnyResults = !!isLayer2 || !!bsLayer2
-  const allSettled = Object.values(stmtStatus).every((s) => s !== 'loading')
-  const hasAnyError = Object.values(stmtStatus).some((s) => s === 'error')
+  const allSettled = Object.values(stmtStatus).every(s => s !== 'loading')
+  const hasAnyError = Object.values(stmtStatus).some(s => s === 'error')
 
   useEffect(() => {
     getTemplate().then(setTemplate).catch(() => {})
@@ -180,12 +201,69 @@ export default function Step2Classify() {
 
   useEffect(() => {
     if (hasBothResults) {
-      markAllDone()
+      setStmtStatus({ income_statement: 'done', balance_sheet: 'done', cash_flow_statement: 'done' })
       return
     }
     runClassification()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  async function runClassification() {
+    if (classifyingRef.current) {
+      console.warn('[Step2] runClassification: already running, skipping')
+      return
+    }
+    classifyingRef.current = true
+    setStmtError(INIT_ERROR)
+    setStatus(null)
+
+    const newResults: Record<string, Layer2Result> = { ...layer2Results }
+    const tasks: Promise<void>[] = []
+
+    for (const key of STMT_TYPES) {
+      if (layer1Results[key] && stmtStatus[key] !== 'done') {
+        setRunStatus(key, 'loading')
+        tasks.push(
+          runLayer2({
+            session_id: sessionId,
+            statement_type: key,
+            layer1_data: layer1Results[key].lineItems,
+            company_id: companyId,
+            use_company_context: useCompanyContext,
+          })
+            .then((result) => {
+              newResults[key] = result
+              setRunStatus(key, 'done')
+            })
+            .catch((err) => {
+              setRunStatus(key, 'error')
+              setRunError(key, err instanceof Error ? err.message : `${STMT_LABELS[key]} classification failed.`)
+            }),
+        )
+      } else if (!layer1Results[key]) {
+        setRunStatus(key, 'done')
+      }
+    }
+
+    console.log('[Step2] waiting for', tasks.length, 'task(s) to settle') // eslint-disable-line no-console
+    await Promise.allSettled(tasks)
+    console.log('[Step2] all tasks settled — newResults keys:', Object.keys(newResults), 'layer2Results keys (closure):', Object.keys(layer2Results))
+
+    if (Object.keys(newResults).length > 0) {
+      console.log('[Step2] calling setLayer2Results with keys:', Object.keys(newResults))
+      setLayer2Results(newResults)
+    } else {
+      console.warn('[Step2] no results to persist — both tasks failed or skipped with no prior data')
+    }
+    classifyingRef.current = false
+    console.log('[Step2] runClassification complete')
+  }
+
+  function handleRetry() {
+    classifyingRef.current = false
+    setRunStatus('cash_flow_statement', 'idle')
+    runClassification()
+  }
 
   const isAllFields = template?.income_statement.allFields ?? IS_TEMPLATE_FIELDS
   const cfsAllFields = template?.cash_flow_statement?.allFields ?? []
