@@ -6,7 +6,6 @@ GET    /admin/reviews/{session_id}/export  — Download finalized output as CSV 
 DELETE /admin/reviews/{session_id}         — Delete a review
 """
 import csv
-import json
 import re
 from io import StringIO
 from typing import Optional
@@ -18,6 +17,7 @@ from sqlalchemy import text
 
 from app.db.database import get_db
 from app.services.template_service import get_template_service
+from app.utils.json_utils import deserialize_dict, deserialize_list
 
 router = APIRouter(prefix="/admin")
 
@@ -61,16 +61,8 @@ def admin_list_reviews(
 
     reviews = []
     for row in rows:
-        corrections_raw = row[7]
-        try:
-            corrections_list = (
-                json.loads(corrections_raw)
-                if isinstance(corrections_raw, str)
-                else (corrections_raw or [])
-            )
-            corrections_count = len(corrections_list) if isinstance(corrections_list, list) else 0
-        except (json.JSONDecodeError, TypeError):
-            corrections_count = 0
+        corrections_list = deserialize_list(row[7])
+        corrections_count = len(corrections_list)
 
         reviews.append({
             "id": row[0],
@@ -105,8 +97,8 @@ def admin_export_review(session_id: str, db: Session = Depends(get_db)):
 
     company_name: str = row[0]
     reporting_period: str = row[1]
-    final_output: dict = json.loads(row[2]) if isinstance(row[2], str) else (row[2] or {})
-    corrections: list = json.loads(row[3]) if isinstance(row[3], str) else (row[3] or [])
+    final_output: dict = deserialize_dict(row[2])
+    corrections: list = deserialize_list(row[3])
 
     template_svc = get_template_service()
     blank_row_before = template_svc.blank_row_before_fields

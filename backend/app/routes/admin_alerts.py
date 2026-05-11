@@ -7,7 +7,6 @@ PUT /admin/alerts/update-status— Update alert status by DB id
 GET /admin/general-fixes       — Rows from general_fixes.csv
 """
 import csv
-import json
 from io import StringIO
 from typing import Optional
 
@@ -18,6 +17,7 @@ from sqlalchemy import text
 from app.db.database import get_db
 from app.models.schemas import AlertStatusUpdateRequest
 from app.routes.admin_utils import GENERAL_FIXES_PATH, read_jsonl, scan_duplicate_companies
+from app.utils.json_utils import deserialize_list
 
 router = APIRouter(prefix="/admin")
 
@@ -68,7 +68,7 @@ def admin_changelog(
             "field_name": r[5],
             "statement_type": r[6],
             "layer_a_instruction": r[7],
-            "layer_a_referenced_fields": _parse_json_field(r[8]),
+            "layer_a_referenced_fields": deserialize_list(r[8]),
             "layer_b_action": r[9],
             "layer_b_detail": r[10],
             "markdown_section_affected": r[11],
@@ -179,15 +179,3 @@ def admin_general_fixes(
     return {"total_entries": len(rows), "entries": rows}
 
 
-# ── Helpers ───────────────────────────────────────────────────────────────────
-
-def _parse_json_field(value) -> list:
-    """Parse a JSON string field that may be None or already a list."""
-    if value is None:
-        return []
-    if isinstance(value, list):
-        return value
-    try:
-        return json.loads(value)
-    except (json.JSONDecodeError, TypeError):
-        return []

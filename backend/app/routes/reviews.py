@@ -2,7 +2,6 @@
 GET /reviews/check-existing   — Check if finalized data exists for a company+period.
 POST /reviews/continue-previous — Create a new session pre-populated from the latest finalized review.
 """
-import json
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -11,6 +10,7 @@ from sqlalchemy import text
 
 from app.db.database import get_db
 from app.models.schemas import ContinuePreviousRequest
+from app.utils.json_utils import deserialize_dict, deserialize_list
 
 router = APIRouter()
 
@@ -104,7 +104,7 @@ def continue_previous_review(
         "session_id": new_session_id,
         "company_name": company[0],
         "reporting_period": request.reporting_period,
-        "layer1_data": json.loads(source[1]) if isinstance(source[1], str) else source[1],
-        "layer2_data": json.loads(source[2]) if isinstance(source[2], str) else source[2],
-        "corrections": json.loads(source[3]) if isinstance(source[3], str) else (source[3] or []),
+        "layer1_data": deserialize_dict(source[1]),
+        "layer2_data": deserialize_dict(source[2]),
+        "corrections": deserialize_list(source[3]),
     }

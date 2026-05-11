@@ -16,14 +16,16 @@ None of these functions commit — the caller decides when to commit.
 On DB errors they raise; the caller should rollback and handle.
 
 Design note: both SQLite and Postgres can return the JSON column as either
-a native dict/list (Postgres JSONB) or a raw string (SQLite). The private
-helpers handle both cases so callers never need to care.
+a native dict/list (Postgres JSONB) or a raw string (SQLite). The shared
+helpers in json_utils handle both cases so callers never need to care.
 """
 import json
 from typing import Any, Dict, List, Optional
 
 from sqlalchemy.orm import Session
 from sqlalchemy import text
+
+from app.utils.json_utils import deserialize_dict, deserialize_list
 
 # Column whitelist guards against SQL injection in _merge_json.
 _JSON_COLUMNS = frozenset({"layer1_data", "layer2_data"})
@@ -64,7 +66,7 @@ def upsert_correction(
         text("SELECT corrections FROM reviews WHERE session_id = :sid"),
         {"sid": session_id},
     ).fetchone()
-    existing: List[Dict] = _deserialize_list(row[0] if row else None)
+    existing: List[Dict] = deserialize_list(row[0] if row else None)
 
     found = False
     index = len(existing) + 1
@@ -84,7 +86,7 @@ def upsert_correction(
     return index
 
 
-# ── Private helpers ───────────────────────────────────────────────────────────
+# ── Internal helpers ─────────────────────────────────────────────────────────
 
 def _merge_json(
     db: Session, session_id: str, column: str, key: str, value: Any
@@ -97,7 +99,7 @@ def _merge_json(
         text(f"SELECT {column} FROM reviews WHERE session_id = :sid"),  # noqa: S608
         {"sid": session_id},
     ).fetchone()
-    existing: Dict[str, Any] = _deserialize_dict(row[0] if row else None)
+    existing: Dict[str, Any] = deserialize_dict(row[0] if row else None)
     existing[key] = value
     db.execute(
         text(f"UPDATE reviews SET {column} = :data WHERE session_id = :sid"),  # noqa: S608
@@ -105,27 +107,3 @@ def _merge_json(
     )
 
 
-def _deserialize_dict(raw: Any) -> Dict[str, Any]:
-    """Return a dict from a DB value that may be None, a dict, or a JSON string."""
-    if raw is None:
-        return {}
-    if isinstance(raw, dict):
-        return raw
-    try:
-        result = json.loads(raw)
-        return result if isinstance(result, dict) else {}
-    except (json.JSONDecodeError, TypeError):
-        return {}
-
-
-def _deserialize_list(raw: Any) -> List[Dict]:
-    """Return a list from a DB value that may be None, a list, or a JSON string."""
-    if raw is None:
-        return []
-    if isinstance(raw, list):
-        return raw
-    try:
-        result = json.loads(raw)
-        return result if isinstance(result, list) else []
-    except (json.JSONDecodeError, TypeError):
-        return []

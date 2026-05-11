@@ -8,7 +8,6 @@ PUT    /admin/companies/{company_id}/rename   — Rename a company everywhere
 POST   /admin/companies                       — Create a new company
 DELETE /admin/companies/{company_id}          — Delete a company and all its data
 """
-import json
 import shutil
 from datetime import datetime, timezone
 
@@ -20,6 +19,7 @@ from app.config import COMPANY_DATASETS_DIR
 from app.db.database import get_db
 from app.models.schemas import AdminRenameCompanyRequest
 from app.services.company_service import create_company as _create_company
+from app.utils.json_utils import deserialize_dict
 from app.utils.text_utils import markdown_body_word_count
 
 router = APIRouter(prefix="/admin")
@@ -94,8 +94,8 @@ def admin_company_data(company_id: int, db: Session = Depends(get_db)):
         periods.append({
             "session_id": row[0],
             "reporting_period": row[1],
-            "layer1_data": json.loads(row[2]) if isinstance(row[2], str) else row[2],
-            "layer2_data": json.loads(row[3]) if isinstance(row[3], str) else row[3],
+            "layer1_data": deserialize_dict(row[2]),
+            "layer2_data": deserialize_dict(row[3]),
             "finalized_at": str(row[4]) if row[4] else None,
             "status": row[5],
             "created_at": str(row[6]) if row[6] else None,

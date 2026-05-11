@@ -17,6 +17,7 @@ from app.db.database import get_db
 from app.models.schemas import Layer1PdfRequest, Layer1Response
 from app.services.claude_service import get_claude_service
 from app.utils.claude_errors import claude_api_errors
+from app.utils.json_utils import deserialize_dict
 
 router = APIRouter()
 
@@ -124,7 +125,7 @@ def run_layer1_pdf(request: Layer1PdfRequest, db: Session = Depends(get_db)):
             text("SELECT layer1_data FROM reviews WHERE session_id = :sid"),
             {"sid": request.sessionId},
         ).fetchone()
-        existing = json.loads(row[0]) if row and row[0] else {}
+        existing = deserialize_dict(row[0] if row else None)
         existing[request.statementType] = result
         db.execute(
             text("UPDATE reviews SET layer1_data = :data WHERE session_id = :sid"),
