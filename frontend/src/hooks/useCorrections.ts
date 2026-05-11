@@ -43,6 +43,26 @@ export function useCorrections({
   const [pendingValues, setPendingValues] = useState<Record<string, number | null> | null>(null)
   const liveEditTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
+  async function applyRecalculate(
+    stmtType: string,
+    currentL2: Layer2Result,
+    baseValues: Record<string, number | null>,
+    allCorrections: Correction[],
+  ) {
+    for (const c of allCorrections) {
+      baseValues[c.fieldName] = c.correctedValue
+    }
+    try {
+      const result = await recalculate(stmtType, baseValues, buildOverrides(allCorrections))
+      setLayer2Results({
+        ...layer2Results,
+        [stmtType]: { ...currentL2, values: result.values },
+      })
+    } catch {
+      // Non-fatal: display values unchanged, correction is already persisted.
+    }
+  }
+
   async function save(correctionData: Omit<Correction, 'timestamp'>) {
     const correction: Correction = { ...correctionData, timestamp: new Date().toISOString() }
     setPendingValues(null)
@@ -76,18 +96,7 @@ export function useCorrections({
         ...corrections.filter((c) => c.fieldName !== correctionData.fieldName),
         correction,
       ]
-      for (const c of allCorrections) {
-        baseValues[c.fieldName] = c.correctedValue
-      }
-      try {
-        const result = await recalculate(stmtType, baseValues, buildOverrides(allCorrections))
-        setLayer2Results({
-          ...layer2Results,
-          [stmtType]: { ...currentL2, values: result.values },
-        })
-      } catch {
-        // Non-fatal: display values unchanged, but correction is saved.
-      }
+      await applyRecalculate(stmtType, currentL2, baseValues, allCorrections)
     }
 
     // 4. Background AI processing for company_specific / general_fix corrections.
@@ -134,20 +143,9 @@ export function useCorrections({
     const currentL2 = layer2Results[stmtType]
     if (currentL2) {
       const baseValues: Record<string, number | null> = { ...currentL2.values }
-      const allCorrections = corrections.filter((c) => c.fieldName !== fieldName)
       baseValues[fieldName] = currentL2.aiMatchedValues?.[fieldName] ?? currentL2.values[fieldName]
-      for (const c of allCorrections) {
-        baseValues[c.fieldName] = c.correctedValue
-      }
-      try {
-        const result = await recalculate(stmtType, baseValues, buildOverrides(allCorrections))
-        setLayer2Results({
-          ...layer2Results,
-          [stmtType]: { ...currentL2, values: result.values },
-        })
-      } catch {
-        // Non-fatal
-      }
+      const allCorrections = corrections.filter((c) => c.fieldName !== fieldName)
+      await applyRecalculate(stmtType, currentL2, baseValues, allCorrections)
     }
 
     onStatus?.({ type: 'info', message: `Correction removed for "${fieldName}".` })
