@@ -21,25 +21,7 @@ import {
 } from 'lucide-react'
 
 type RunStatus = 'idle' | 'loading' | 'done' | 'error'
-type StmtType = 'income_statement' | 'balance_sheet' | 'cash_flow_statement'
 type StatusMessage = { type: 'success' | 'error' | 'info'; message: string } | null
-
-const STMT_TYPES: StmtType[] = ['income_statement', 'balance_sheet', 'cash_flow_statement']
-const STMT_LABELS: Record<StmtType, string> = {
-  income_statement: 'Income Statement',
-  balance_sheet: 'Balance Sheet',
-  cash_flow_statement: 'Cash Flow Statement',
-}
-const INIT_STATUS: Record<StmtType, RunStatus> = {
-  income_statement: 'idle',
-  balance_sheet: 'idle',
-  cash_flow_statement: 'idle',
-}
-const INIT_ERROR: Record<StmtType, string | null> = {
-  income_statement: null,
-  balance_sheet: null,
-  cash_flow_statement: null,
-}
 
 function formatSourceValue(value: number): string {
   if (value === 0) return '—'
@@ -147,16 +129,13 @@ export default function Step2Classify() {
     setSidePanelOpen,
   } = useWizardState()
 
-  const [stmtStatus, setStmtStatus] = useState<Record<StmtType, RunStatus>>(INIT_STATUS)
-  const [stmtError, setStmtError] = useState<Record<StmtType, string | null>>(INIT_ERROR)
+  const [isStatus, setIsStatus] = useState<RunStatus>('idle')
+  const [bsStatus, setBsStatus] = useState<RunStatus>('idle')
+  const [cfsStatus, setCfsStatus] = useState<RunStatus>('idle')
+  const [isError, setIsError] = useState<string | null>(null)
+  const [bsError, setBsError] = useState<string | null>(null)
+  const [cfsError, setCfsError] = useState<string | null>(null)
   const [template, setTemplate] = useState<TemplateResponse | null>(null)
-
-  function setRunStatus(type: StmtType, s: RunStatus) {
-    setStmtStatus(prev => ({ ...prev, [type]: s }))
-  }
-  function setRunError(type: StmtType, err: string | null) {
-    setStmtError(prev => ({ ...prev, [type]: err }))
-  }
   const [status, setStatus] = useState<StatusMessage>(null)
   const [showBackConfirm, setShowBackConfirm] = useState(false)
   const [elapsedSeconds, setElapsedSeconds] = useState(0)
@@ -166,7 +145,7 @@ export default function Step2Classify() {
   const isLayer2 = layer2Results['income_statement']
   const bsLayer2 = layer2Results['balance_sheet']
   const cfsLayer2 = layer2Results['cash_flow_statement']
-  const isClassifying = Object.values(stmtStatus).some(s => s === 'loading')
+  const isClassifying = isStatus === 'loading' || bsStatus === 'loading' || cfsStatus === 'loading'
 
   // Tick elapsed seconds while classification is running
   useEffect(() => {
@@ -182,8 +161,8 @@ export default function Step2Classify() {
   const hasBothResults = !!isLayer2 && !!bsLayer2 &&
     (!layer1Results['cash_flow_statement'] || !!cfsLayer2)
   const hasAnyResults = !!isLayer2 || !!bsLayer2
-  const allSettled = Object.values(stmtStatus).every(s => s !== 'loading')
-  const hasAnyError = Object.values(stmtStatus).some(s => s === 'error')
+  const allSettled = isStatus !== 'loading' && bsStatus !== 'loading' && cfsStatus !== 'loading'
+  const hasAnyError = isStatus === 'error' || bsStatus === 'error' || cfsStatus === 'error'
 
   useEffect(() => {
     getTemplate().then(setTemplate).catch(() => {})
@@ -202,7 +181,9 @@ export default function Step2Classify() {
 
   useEffect(() => {
     if (hasBothResults) {
-      setStmtStatus({ income_statement: 'done', balance_sheet: 'done', cash_flow_statement: 'done' })
+      setIsStatus('done')
+      setBsStatus('done')
+      setCfsStatus('done')
       return
     }
     runClassification()
@@ -215,38 +196,102 @@ export default function Step2Classify() {
       return
     }
     classifyingRef.current = true
-    setStmtError(INIT_ERROR)
+    setIsError(null)
+    setBsError(null)
+    setCfsError(null)
     setStatus(null)
 
     const newResults: Record<string, Layer2Result> = { ...layer2Results }
     const tasks: Promise<void>[] = []
 
-    for (const key of STMT_TYPES) {
-      if (layer1Results[key] && stmtStatus[key] !== 'done') {
-        setRunStatus(key, 'loading')
-        tasks.push(
-          runLayer2({
-            session_id: sessionId,
-            statement_type: key,
-            layer1_data: layer1Results[key].lineItems,
-            company_id: companyId,
-            use_company_context: useCompanyContext,
+    console.log('[Step2] runClassification start — isStatus:', isStatus, 'bsStatus:', bsStatus, 'layer2Results keys:', Object.keys(layer2Results))
+
+    if (layer1Results['income_statement'] && isStatus !== 'done') {
+      console.log('[Step2] IS: queuing task')
+      setIsStatus('loading')
+      tasks.push(
+        runLayer2({
+          session_id: sessionId,
+          statement_type: 'income_statement',
+          layer1_data: layer1Results['income_statement'].lineItems,
+          company_id: companyId,
+          use_company_context: useCompanyContext,
+        })
+          .then((result) => {
+            console.log('[Step2] IS .then() fired — result truthy:', !!result, 'statementType:', result?.statementType)
+            newResults['income_statement'] = result
+            console.log('[Step2] IS: calling setIsStatus(done)')
+            setIsStatus('done')
           })
-            .then((result) => {
-              newResults[key] = result
-              setRunStatus(key, 'done')
-            })
-            .catch((err) => {
-              setRunStatus(key, 'error')
-              setRunError(key, err instanceof Error ? err.message : `${STMT_LABELS[key]} classification failed.`)
-            }),
-        )
-      } else if (!layer1Results[key]) {
-        setRunStatus(key, 'done')
-      }
+          .catch((err) => {
+            console.error('[Step2] IS .catch() fired — error:', err)
+            setIsStatus('error')
+            setIsError(err instanceof Error ? err.message : 'Income statement classification failed.')
+          }),
+      )
+    } else if (!layer1Results['income_statement']) {
+      console.log('[Step2] IS: no layer1 data — setting done immediately')
+      setIsStatus('done')
+    } else {
+      console.log('[Step2] IS: skipped (isStatus already done)')
     }
 
-    console.log('[Step2] waiting for', tasks.length, 'task(s) to settle') // eslint-disable-line no-console
+    if (layer1Results['balance_sheet'] && bsStatus !== 'done') {
+      console.log('[Step2] BS: queuing task — layer1 lineItems keys:', Object.keys(layer1Results['balance_sheet'].lineItems).length)
+      setBsStatus('loading')
+      tasks.push(
+        runLayer2({
+          session_id: sessionId,
+          statement_type: 'balance_sheet',
+          layer1_data: layer1Results['balance_sheet'].lineItems,
+          company_id: companyId,
+          use_company_context: useCompanyContext,
+        })
+          .then((result) => {
+            console.log('[Step2] BS .then() fired — result truthy:', !!result, 'statementType:', result?.statementType)
+            console.log('[Step2] BS response:', result)
+            newResults['balance_sheet'] = result
+            console.log('[Step2] BS: calling setBsStatus(done)')
+            setBsStatus('done')
+            console.log('[Step2] BS: setBsStatus(done) called')
+          })
+          .catch((err) => {
+            console.error('[Step2] BS .catch() fired — error:', err)
+            setBsStatus('error')
+            setBsError(err instanceof Error ? err.message : 'Balance sheet classification failed.')
+          }),
+      )
+    } else if (!layer1Results['balance_sheet']) {
+      console.log('[Step2] BS: no layer1 data — setting done immediately')
+      setBsStatus('done')
+    } else {
+      console.log('[Step2] BS: skipped (bsStatus already done)')
+    }
+
+    if (layer1Results['cash_flow_statement'] && cfsStatus !== 'done') {
+      setCfsStatus('loading')
+      tasks.push(
+        runLayer2({
+          session_id: sessionId,
+          statement_type: 'cash_flow_statement',
+          layer1_data: layer1Results['cash_flow_statement'].lineItems,
+          company_id: companyId,
+          use_company_context: useCompanyContext,
+        })
+          .then((result) => {
+            newResults['cash_flow_statement'] = result
+            setCfsStatus('done')
+          })
+          .catch((err) => {
+            setCfsStatus('error')
+            setCfsError(err instanceof Error ? err.message : 'Cash flow statement classification failed.')
+          }),
+      )
+    } else if (!layer1Results['cash_flow_statement']) {
+      setCfsStatus('done')
+    }
+
+    console.log('[Step2] waiting for', tasks.length, 'task(s) to settle')
     await Promise.allSettled(tasks)
     console.log('[Step2] all tasks settled — newResults keys:', Object.keys(newResults), 'layer2Results keys (closure):', Object.keys(layer2Results))
 
@@ -262,7 +307,7 @@ export default function Step2Classify() {
 
   function handleRetry() {
     classifyingRef.current = false
-    setRunStatus('cash_flow_statement', 'idle')
+    setCfsStatus('idle')
     runClassification()
   }
 
@@ -370,21 +415,47 @@ export default function Step2Classify() {
           <h2 className="text-[16px] mb-1" style={{ fontWeight: 600 }}>Classifying Financial Data</h2>
           <p className="text-[13px] text-muted-foreground mb-6">{elapsedSeconds}s elapsed</p>
           <div className="w-[300px] space-y-3">
-            {STMT_TYPES.filter(key => key !== 'cash_flow_statement' || !!layer1Results['cash_flow_statement']).map(key => (
-              <div key={key} className="flex items-center gap-3 p-3 border border-[#e2e8f0]" style={{ backgroundColor: '#f8fafc', borderRadius: '4px' }}>
-                {stmtStatus[key] === 'done' ? (
+            <div className="flex items-center gap-3 p-3 border border-[#e2e8f0]" style={{ backgroundColor: '#f8fafc', borderRadius: '4px' }}>
+              {isStatus === 'done' ? (
+                <CheckCircle2 className="w-5 h-5 shrink-0" style={{ color: '#065f46' }} />
+              ) : (
+                <Loader2 className="w-5 h-5 text-primary animate-spin shrink-0" />
+              )}
+              <div>
+                <p className="text-[13px]" style={{ fontWeight: 500 }}>Income Statement</p>
+                <p className="text-[11px] text-muted-foreground">
+                  {isStatus === 'done' ? 'Classification complete' : 'Classifying line items...'}
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-3 p-3 border border-[#e2e8f0]" style={{ backgroundColor: '#f8fafc', borderRadius: '4px' }}>
+              {bsStatus === 'done' ? (
+                <CheckCircle2 className="w-5 h-5 shrink-0" style={{ color: '#065f46' }} />
+              ) : (
+                <Loader2 className="w-5 h-5 text-primary animate-spin shrink-0" />
+              )}
+              <div>
+                <p className="text-[13px]" style={{ fontWeight: 500 }}>Balance Sheet</p>
+                <p className="text-[11px] text-muted-foreground">
+                  {bsStatus === 'done' ? 'Classification complete' : 'Classifying line items...'}
+                </p>
+              </div>
+            </div>
+            {layer1Results['cash_flow_statement'] && (
+              <div className="flex items-center gap-3 p-3 border border-[#e2e8f0]" style={{ backgroundColor: '#f8fafc', borderRadius: '4px' }}>
+                {cfsStatus === 'done' ? (
                   <CheckCircle2 className="w-5 h-5 shrink-0" style={{ color: '#065f46' }} />
                 ) : (
                   <Loader2 className="w-5 h-5 text-primary animate-spin shrink-0" />
                 )}
                 <div>
-                  <p className="text-[13px]" style={{ fontWeight: 500 }}>{STMT_LABELS[key]}</p>
+                  <p className="text-[13px]" style={{ fontWeight: 500 }}>Cash Flow Statement</p>
                   <p className="text-[11px] text-muted-foreground">
-                    {stmtStatus[key] === 'done' ? 'Classification complete' : 'Classifying line items...'}
+                    {cfsStatus === 'done' ? 'Classification complete' : 'Classifying line items...'}
                   </p>
                 </div>
               </div>
-            ))}
+            )}
           </div>
         </div>
       </div>
@@ -534,9 +605,9 @@ export default function Step2Classify() {
             ) : !hasAnyResults && hasAnyError ? (
               <div className="flex flex-col items-center justify-center gap-3 px-6 py-12 text-center">
                 <p className="text-[13px] text-red-600" style={{ fontWeight: 500 }}>Classification failed</p>
-                {STMT_TYPES.map(key => stmtError[key] ? (
-                  <p key={key} className="text-[12px] text-red-500">{STMT_LABELS[key]}: {stmtError[key]}</p>
-                ) : null)}
+                {isError && <p className="text-[12px] text-red-500">Income Statement: {isError}</p>}
+                {bsError && <p className="text-[12px] text-red-500">Balance Sheet: {bsError}</p>}
+                {cfsError && <p className="text-[12px] text-red-500">Cash Flow Statement: {cfsError}</p>}
                 <button
                   onClick={handleRetry}
                   className="mt-2 text-[12px] border border-[#e2e8f0] px-4 py-2 hover:bg-[#f8fafc] transition-colors"
@@ -547,7 +618,7 @@ export default function Step2Classify() {
               </div>
             ) : (
               <>
-                {stmtStatus['income_statement'] === 'loading' ? (
+                {isStatus === 'loading' ? (
                   <div className="flex items-center justify-center py-8">
                     <LoadingSpinner size="sm" message="Classifying Income Statement..." />
                   </div>
@@ -559,7 +630,7 @@ export default function Step2Classify() {
                     selectedCell={selectedCell}
                   />
                 )}
-                {stmtStatus['balance_sheet'] === 'loading' ? (
+                {bsStatus === 'loading' ? (
                   <div className="flex items-center justify-center py-8">
                     <LoadingSpinner size="sm" message="Classifying Balance Sheet..." />
                   </div>
