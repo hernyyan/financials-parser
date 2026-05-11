@@ -2,17 +2,14 @@
 GET  /companies/{company_id}/layer1-templates/{statement_type}  — fetch stored template
 POST /companies/{company_id}/layer1-templates/{statement_type}  — upsert template
 """
-import logging
-
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.db.database import get_db
+from app.db.transaction import db_transaction
 from app.models.schemas import Layer1TemplateResponse
 from app.services.layer1_service import get_layer1_service
 from app.utils.statement_meta import validate_statement_type
-
-logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -54,11 +51,6 @@ def upsert_layer1_template(
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
-    try:
+    with db_transaction(db, "Failed to save layer1 template"):
         get_layer1_service().save_template(company_id, statement_type, payload, db)
-        db.commit()
-    except Exception as exc:
-        db.rollback()
-        logger.warning("Failed to save layer1 template for company %s: %s", company_id, exc)
-        raise HTTPException(status_code=500, detail=f"Failed to save template: {exc}")
     return {"success": True}
