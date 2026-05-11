@@ -18,6 +18,7 @@ from sqlalchemy import text
 from app.db.database import get_db
 from app.services.template_service import get_template_service
 from app.utils.json_utils import deserialize_dict, deserialize_list
+from app.utils.statement_meta import STATEMENT_TYPES
 
 router = APIRouter(prefix="/admin")
 
@@ -106,11 +107,7 @@ def admin_export_review(session_id: str, db: Session = Depends(get_db)):
     output = StringIO()
     writer = csv.writer(output)
 
-    for stmt_label, stmt_key in [
-        ("Income Statement", "income_statement"),
-        ("Balance Sheet", "balance_sheet"),
-        ("Cash Flow Statement", "cash_flow_statement"),
-    ]:
+    for stmt_key, stmt_label in STATEMENT_TYPES:
         stmt_values: dict = final_output.get(stmt_label, {})
         if not stmt_values:
             continue

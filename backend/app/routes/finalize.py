@@ -11,6 +11,7 @@ from sqlalchemy import text
 from app.models.schemas import FinalizeRequest, FinalizeResponse
 from app.db.database import get_db
 from app.services.template_service import get_template_service
+from app.utils.statement_meta import STATEMENT_TYPES
 
 router = APIRouter()
 
@@ -25,19 +26,11 @@ def finalize_output(request: FinalizeRequest, db: Session = Depends(get_db)):
 
     # Order output fields by the canonical template sequence
     template_svc = get_template_service()
-    is_fields = template_svc.get_field_order("income_statement")
-    bs_fields = template_svc.get_field_order("balance_sheet")
-    cfs_fields = template_svc.get_field_order("cash_flow_statement")
-
-    is_raw = request.finalValues.get("income_statement", {})
-    bs_raw = request.finalValues.get("balance_sheet", {})
-    cfs_raw = request.finalValues.get("cash_flow_statement", {})
-
-    final_output = {
-        "Income Statement": {f: is_raw.get(f) for f in is_fields if f in is_raw},
-        "Balance Sheet": {f: bs_raw.get(f) for f in bs_fields if f in bs_raw},
-        "Cash Flow Statement": {f: cfs_raw.get(f) for f in cfs_fields if f in cfs_raw},
-    }
+    final_output = {}
+    for key, label in STATEMENT_TYPES:
+        raw = request.finalValues.get(key, {})
+        fields = template_svc.get_field_order(key)
+        final_output[label] = {f: raw.get(f) for f in fields if f in raw}
 
     corrections_json = json.dumps([c.model_dump() for c in request.corrections])
     final_output_json = json.dumps(final_output)

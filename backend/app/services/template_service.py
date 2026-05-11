@@ -10,8 +10,9 @@ from pathlib import Path
 from typing import Any, Dict, FrozenSet, List, Optional
 
 from app.config import TEMPLATES_DIR
+from app.utils.statement_meta import STATEMENT_LABELS_SET
 
-STATEMENT_MARKERS = frozenset({"Income Statement", "Balance Sheet", "Cash Flow Statement"})
+STATEMENT_MARKERS = STATEMENT_LABELS_SET  # alias kept so template parsing code is unchanged
 
 
 @dataclass
