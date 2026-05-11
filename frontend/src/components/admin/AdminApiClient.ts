@@ -1,14 +1,4 @@
-import { API_BASE } from '../../api/client'
-
-async function handleResponse<T>(res: Response): Promise<T> {
-  if (!res.ok) {
-    const text = await res.text()
-    let detail = text
-    try { detail = JSON.parse(text).detail ?? text } catch {}
-    throw new Error(detail)
-  }
-  return res.json() as Promise<T>
-}
+import { API_BASE, handleResponse } from '../../api/client'
 
 // ── Companies ──────────────────────────────────────────────────────────────
 
@@ -190,6 +180,5 @@ export async function adminUpdateAlertStatus(index: number, newStatus: string): 
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ index, new_status: newStatus }),
   })
-  if (!res.ok) throw new Error('Failed to update alert status')
-  return res.json()
+  return handleResponse(res)
 }

@@ -1,5 +1,7 @@
 import { useState } from 'react'
 import { Loader2, CheckCircle2, XCircle } from 'lucide-react'
+import type { StatementType } from '../../types'
+import { STATEMENT_LABELS } from '../../utils/statementMeta'
 import { adminWriteRule, WriteRuleResult } from './AdminApiClient'
 
 interface Props {
@@ -59,7 +61,7 @@ export default function RuleWriter({ companyId, selectedField, onRuleApplied }: 
           <p className="text-[11px] text-muted-foreground mb-0.5">Field</p>
           <p className="text-[13px]" style={{ fontWeight: 500 }}>{selectedField.name}</p>
           <p className="text-[11px] text-muted-foreground mt-0.5">
-            {selectedField.statementType === 'income_statement' ? 'Income Statement' : 'Balance Sheet'}
+            {STATEMENT_LABELS[selectedField.statementType as StatementType] ?? selectedField.statementType}
           </p>
         </div>
 
