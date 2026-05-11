@@ -9,7 +9,6 @@ import { useState } from 'react'
 import { runLayer1, saveLayer1Template, saveStatementTabConfig } from '../api/client'
 import type { Layer1Result, Layer1Template, Layer1TemplateRow, TemplateCheckResult, StatusMessage, StatementType } from '../types'
 import { ALL_STATEMENT_TYPES, createStmtRecord } from '../utils/statementMeta'
-import { toLayer1Result } from '../utils/layer1Utils'
 
 export type ExtractionStatus = 'idle' | 'running' | 'done' | 'error'
 
@@ -75,7 +74,14 @@ export function useExcelExtraction({
           sharedTab,
         )
         results[stmtType] = result
-        mergeLayer1Result(stmtType, toLayer1Result(result, tab))
+        mergeLayer1Result(stmtType, {
+          lineItems: result.lineItems,
+          sourceScaling: result.sourceScaling,
+          columnIdentified: result.columnIdentified,
+          sourceSheet: tab,
+          structured: result.structured,
+          templateCheck: result.templateCheck,
+        } as Layer1Result)
       })
 
     try {
