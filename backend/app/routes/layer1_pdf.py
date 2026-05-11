@@ -7,7 +7,6 @@ import io
 import json
 import os
 
-import anthropic
 from fastapi import APIRouter, Depends, HTTPException
 from pypdf import PdfReader, PdfWriter
 from sqlalchemy.orm import Session
@@ -17,6 +16,7 @@ from app.config import UPLOADS_DIR, PROMPTS_DIR
 from app.db.database import get_db
 from app.models.schemas import Layer1PdfRequest, Layer1Response
 from app.services.claude_service import get_claude_service
+from app.utils.claude_errors import claude_api_errors
 
 router = APIRouter()
 
@@ -70,7 +70,7 @@ def run_layer1_pdf(request: Layer1PdfRequest, db: Session = Depends(get_db)):
     model = os.getenv("LAYER1_MODEL", "claude-sonnet-4-6")
     claude_service = get_claude_service()
 
-    try:
+    with claude_api_errors():
         message = claude_service.client.messages.create(
             model=model,
             max_tokens=8192,
@@ -94,14 +94,6 @@ def run_layer1_pdf(request: Layer1PdfRequest, db: Session = Depends(get_db)):
                 }
             ],
         )
-    except anthropic.AuthenticationError:
-        raise HTTPException(status_code=401, detail="Invalid Anthropic API key.")
-    except anthropic.RateLimitError:
-        raise HTTPException(status_code=429, detail="Rate limit reached. Please wait and retry.")
-    except anthropic.APITimeoutError:
-        raise HTTPException(status_code=504, detail="Extraction timed out. Please try again.")
-    except anthropic.APIError as e:
-        raise HTTPException(status_code=502, detail=f"Anthropic API error: {e}")
 
     response_text = message.content[0].text
     raw = claude_service.parse_json_response(response_text)
