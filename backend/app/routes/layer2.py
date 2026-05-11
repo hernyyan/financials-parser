@@ -14,7 +14,6 @@ logger = logging.getLogger(__name__)
 
 from app.db.database import get_db
 from app.db.review_store import merge_layer2_data
-from app.db.transaction import db_transaction
 from app.models.schemas import Layer2Request, Layer2Response
 from app.services.layer2_service import get_layer2_service
 from app.utils.claude_errors import claude_api_errors
@@ -46,10 +45,14 @@ def run_layer2(request: Layer2Request, db: Session = Depends(get_db)):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-    # Persist layer2_data to DB (non-fatal — classification result returned regardless)
+    # Persist layer2_data to DB (non-fatal)
     if request.session_id:
-        with db_transaction(db, "Layer 2 DB persistence failed", fatal=False):
+        try:
             merge_layer2_data(db, request.session_id, request.statement_type, result)
+            db.commit()
+        except Exception as exc:
+            db.rollback()
+            logger.warning("Layer 2 DB persistence failed for session %s: %s", request.session_id, exc)
 
     logger.info("Layer 2 completed for %s", request.statement_type)
     return result

@@ -18,7 +18,6 @@ logger = logging.getLogger(__name__)
 from app.config import UPLOADS_DIR
 from app.db.database import get_db
 from app.db.review_store import merge_layer1_data
-from app.db.transaction import db_transaction
 from app.models.schemas import Layer1Request, Layer1Response
 from app.services.layer1_service import get_layer1_service, find_excel_file
 from app.utils.claude_errors import claude_api_errors
@@ -81,14 +80,18 @@ def run_layer1(
         except Exception as exc:
             logger.warning("check_template failed for company %s: %s", company_id, exc)
 
-    # Persist result to DB (non-fatal — extraction result returned regardless)
-    with db_transaction(db, "Layer 1 DB persistence failed", fatal=False):
+    # Persist result to DB
+    try:
         merge_layer1_data(db, request.sessionId, request.sheetName, {
             "lineItems": result["lineItems"],
             "sourceScaling": result["sourceScaling"],
             "columnIdentified": result["columnIdentified"],
             "structured": result.get("structured"),
         })
+        db.commit()
+    except Exception as exc:
+        db.rollback()
+        logger.warning("Layer 1 DB persistence failed for session %s: %s", request.sessionId, exc)
 
     return Layer1Response(
         sheetName=request.sheetName,
