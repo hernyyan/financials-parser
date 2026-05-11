@@ -5,16 +5,17 @@ GET    /admin/reviews                      — List all reviews with optional fi
 GET    /admin/reviews/{session_id}/export  — Download finalized output as CSV attachment
 DELETE /admin/reviews/{session_id}         — Delete a review
 """
+import logging
 from typing import Optional
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import Response
 from sqlalchemy.orm import Session
 
 from app.db.database import get_db
-from app.db.transaction import db_transaction
 from app.services.review_service import delete_review, export_review, list_reviews
 
+logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/admin")
 
 
@@ -43,6 +44,14 @@ def admin_export_review(session_id: str, db: Session = Depends(get_db)):
 @router.delete("/reviews/{session_id}")
 def admin_delete_review(session_id: str, db: Session = Depends(get_db)):
     """Delete a review by session_id."""
-    with db_transaction(db, "Failed to delete review"):
+    try:
         delete_review(session_id, db)
+        db.commit()
+    except HTTPException:
+        db.rollback()
+        raise
+    except Exception as exc:
+        db.rollback()
+        logger.warning("Failed to delete review %s: %s", session_id, exc)
+        raise HTTPException(status_code=500, detail=f"Failed to delete review: {exc}")
     return {"success": True, "deleted_session_id": session_id}
