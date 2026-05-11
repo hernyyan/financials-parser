@@ -11,12 +11,7 @@ import { useCorrections } from '../../hooks/useCorrections'
 import { buildSourceRows, buildTemplateRows } from '../../utils/classifyRows'
 import type { Layer2Result, TemplateResponse, TemplateSection } from '../../types'
 import ClassifyActionBar from './ClassifyActionBar'
-import {
-  ArrowLeft,
-  CheckCircle2,
-  Loader2,
-  XCircle,
-} from 'lucide-react'
+import ClassifyLoadingView from './ClassifyLoadingView'
 
 type StatusMessage = { type: 'success' | 'error' | 'info'; message: string } | null
 
@@ -195,39 +190,14 @@ export default function Step2Classify() {
   // Full-page loading view while classification is running and no results available yet
   if (isClassifying && !hasAnyResults) {
     return (
-      <div className="flex flex-col h-full">
-        <div className="flex items-center px-4 py-2.5 border-b border-border bg-gray-50/80 shrink-0">
-          <button
-            onClick={backToStep1}
-            className="flex items-center gap-1.5 text-[13px] text-muted-foreground hover:text-foreground transition-colors"
-          >
-            <ArrowLeft className="w-3.5 h-3.5" />
-            Back to Extraction
-          </button>
-        </div>
-        <div className="flex-1 flex flex-col items-center justify-center pt-20">
-          <Loader2 className="w-10 h-10 text-primary animate-spin mb-4" />
-          <h2 className="text-[16px] mb-1" style={{ fontWeight: 600 }}>Classifying Financial Data</h2>
-          <p className="text-[13px] text-muted-foreground mb-6">{elapsedSeconds}s elapsed</p>
-          <div className="w-[300px] space-y-3">
-            {STMT_TYPES.filter(key => key !== 'cash_flow_statement' || !!layer1Results['cash_flow_statement']).map(key => (
-              <div key={key} className="flex items-center gap-3 p-3 border border-[#e2e8f0]" style={{ backgroundColor: '#f8fafc', borderRadius: '4px' }}>
-                {stmtStatus[key] === 'done' ? (
-                  <CheckCircle2 className="w-5 h-5 shrink-0" style={{ color: '#065f46' }} />
-                ) : (
-                  <Loader2 className="w-5 h-5 text-primary animate-spin shrink-0" />
-                )}
-                <div>
-                  <p className="text-[13px]" style={{ fontWeight: 500 }}>{STMT_LABELS[key]}</p>
-                  <p className="text-[11px] text-muted-foreground">
-                    {stmtStatus[key] === 'done' ? 'Classification complete' : 'Classifying line items...'}
-                  </p>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
+      <ClassifyLoadingView
+        stmtTypes={STMT_TYPES}
+        stmtStatus={stmtStatus}
+        stmtLabels={STMT_LABELS}
+        layer1HasCfs={!!layer1Results['cash_flow_statement']}
+        elapsedSeconds={elapsedSeconds}
+        onBack={backToStep1}
+      />
     )
   }
 
