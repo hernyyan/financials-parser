@@ -6,9 +6,6 @@ Step B: AI identifies which column matches the reporting period.
 Step C: Python extracts full rows with formatting metadata.
 Step D: AI classifies rows into a nested hierarchy (structured JSON).
 
-Each step is a named private method with a typed interface, so individual
-steps can be tested in isolation without running the full pipeline.
-
 Also provides:
   check_template   — fuzzy-match extracted rows against a stored template.
   save_template    — upsert a template into layer1_templates.
@@ -17,7 +14,6 @@ import json
 import logging
 import os
 import re
-from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
 
 from sqlalchemy.orm import Session
@@ -33,17 +29,6 @@ from app.services.layer1_extractor import (
 logger = logging.getLogger(__name__)
 
 _VALID_TYPES = {"income_statement", "balance_sheet", "cash_flow_statement"}
-
-
-@dataclass
-class _ColumnInfo:
-    """Output of Step B (AI column identifier)."""
-    column_index: int
-    source_scaling: str
-    skip_rows: int
-    column_identified: str   # human-readable: period label or column letter
-    section_start_row: int   # 0 = not applicable (dedicated tab)
-    section_end_row: int     # 0 = not applicable (dedicated tab)
 
 
 class Layer1Service:
@@ -81,37 +66,80 @@ class Layer1Service:
                 "Expected 'income_statement', 'balance_sheet', or 'cash_flow_statement'."
             )
 
-        # Step A: extract header rows for AI column identification
-        header_text = self._extract_headers(filepath, sheet_name)
+        # ── Step A: header extraction ────────────────────────────────────────
+        header_text = extract_header_rows(filepath, sheet_name, n_rows=150)
 
-        # Step B: AI identifies the reporting period column (+ section bounds for shared tabs)
-        col_info = self._identify_column(header_text, reporting_period, normalized, shared_tab, model)
+        # ── Step B: AI column identifier ─────────────────────────────────────
+        # When multiple statements share the same tab, pass statement_type so
+        # the AI can locate the correct section and return row boundaries.
+        # For a dedicated single-statement tab, skip section detection entirely.
+        col_prompt_vars: Dict[str, Any] = {
+            "reporting_period": reporting_period,
+            "header_rows": header_text,
+            # Pass statement_type only for shared tabs so the AI locates the section.
+            # Pass empty string for dedicated tabs so the AI skips section detection.
+            "statement_type": normalized if shared_tab else "",
+        }
+
+        col_response = self.claude.call_claude(
+            "layer1_column_identifier",
+            col_prompt_vars,
+            model,
+            max_tokens=1024,
+        )
+        col_info = self.claude.parse_json_response(col_response)
+        column_index: int = int(col_info.get("column_index", 1))
+        source_scaling: str = str(col_info.get("source_scaling", "actual_dollars"))
+        skip_rows: int = int(col_info.get("skip_rows", 0))
+        column_identified: str = str(col_info.get("period_matched", col_info.get("column_letter", "")))
+
+        # Section bounds only meaningful when shared_tab=True
+        section_start_row: int = int(col_info.get("section_start_row", 0)) if shared_tab else 0
+        section_end_row: int = int(col_info.get("section_end_row", 0)) if shared_tab else 0
 
         logger.info(
             "[Layer1] %s: col=%d scaling=%s shared=%s section=%s-%s",
-            normalized, col_info.column_index, col_info.source_scaling, shared_tab,
-            col_info.section_start_row or "auto", col_info.section_end_row or "end",
+            normalized, column_index, source_scaling, shared_tab,
+            section_start_row or "auto", section_end_row or "end",
         )
 
-        # Step C: full row extraction with formatting metadata
-        rows = self._extract_rows(filepath, sheet_name, col_info)
+        # ── Step C: full extraction with metadata ────────────────────────────
+        rows = extract_rows_with_metadata(
+            filepath,
+            sheet_name,
+            column_index=column_index,
+            source_scaling=source_scaling,
+            skip_rows=skip_rows,
+            section_start_row=section_start_row,
+            section_end_row=section_end_row,
+        )
         rows_csv = rows_to_csv_with_metadata(rows)
 
-        # Step D: AI hierarchy classification
-        structured = self._classify_rows(rows_csv, normalized, reporting_period, model)
+        # ── Step D: AI hierarchy classification ──────────────────────────────
+        struct_response = self.claude.call_claude(
+            "layer1_structured_extractor",
+            {
+                "statement_type": normalized,
+                "reporting_period": reporting_period,
+                "rows_csv": rows_csv,
+            },
+            model,
+            max_tokens=16384,
+        )
+        structured = self.claude.parse_json_response(struct_response)
 
         # Strip margin rows — margins are calculated outside this app
         if "rows" in structured:
             structured["rows"] = _strip_margins(structured["rows"])
 
-        # Build flat lineItems from structured (backward compat for Layer 2)
+        # ── Build flat lineItems from structured (backward compat for Layer 2) ─
         line_items = _flatten_structured(structured.get("rows", []))
 
         return {
             "lineItems": line_items,
             "structured": structured,
-            "sourceScaling": col_info.source_scaling,
-            "columnIdentified": col_info.column_identified,
+            "sourceScaling": source_scaling,
+            "columnIdentified": column_identified,
         }
 
     # ── Public: template helpers ─────────────────────────────────────────────
@@ -192,85 +220,6 @@ class Layer1Service:
                 {"cid": company_id, "st": statement_type, "tmpl": tmpl},
             )
         db.commit()
-
-    # ── Named pipeline steps ─────────────────────────────────────────────────
-
-    def _extract_headers(self, filepath: str, sheet_name: str, n_rows: int = 150) -> str:
-        """Step A: Extract the first N rows of the sheet as text for AI column identification."""
-        return extract_header_rows(filepath, sheet_name, n_rows=n_rows)
-
-    def _identify_column(
-        self,
-        header_text: str,
-        reporting_period: str,
-        normalized_type: str,
-        shared_tab: bool,
-        model: str,
-    ) -> _ColumnInfo:
-        """Step B: AI identifies which column matches the reporting period.
-
-        When shared_tab=True, also returns section_start_row/section_end_row
-        so Step C can extract only the relevant statement section.
-        Raises on Claude or parse error — caller decides how to handle.
-        """
-        col_response = self.claude.call_claude(
-            "layer1_column_identifier",
-            {
-                "reporting_period": reporting_period,
-                "header_rows": header_text,
-                # Pass statement_type only for shared tabs so the AI locates the section.
-                # Pass empty string for dedicated tabs so the AI skips section detection.
-                "statement_type": normalized_type if shared_tab else "",
-            },
-            model,
-            max_tokens=1024,
-        )
-        col_info = self.claude.parse_json_response(col_response)
-        return _ColumnInfo(
-            column_index=int(col_info.get("column_index", 1)),
-            source_scaling=str(col_info.get("source_scaling", "actual_dollars")),
-            skip_rows=int(col_info.get("skip_rows", 0)),
-            column_identified=str(col_info.get("period_matched", col_info.get("column_letter", ""))),
-            section_start_row=int(col_info.get("section_start_row", 0)) if shared_tab else 0,
-            section_end_row=int(col_info.get("section_end_row", 0)) if shared_tab else 0,
-        )
-
-    def _extract_rows(
-        self, filepath: str, sheet_name: str, col_info: _ColumnInfo
-    ) -> List[Dict]:
-        """Step C: Extract full rows with formatting metadata using the column identified in Step B."""
-        return extract_rows_with_metadata(
-            filepath,
-            sheet_name,
-            column_index=col_info.column_index,
-            source_scaling=col_info.source_scaling,
-            skip_rows=col_info.skip_rows,
-            section_start_row=col_info.section_start_row,
-            section_end_row=col_info.section_end_row,
-        )
-
-    def _classify_rows(
-        self,
-        rows_csv: str,
-        normalized_type: str,
-        reporting_period: str,
-        model: str,
-    ) -> Dict:
-        """Step D: AI classifies rows into a nested hierarchy (structured JSON).
-
-        Raises on Claude or parse error — caller decides how to handle.
-        """
-        struct_response = self.claude.call_claude(
-            "layer1_structured_extractor",
-            {
-                "statement_type": normalized_type,
-                "reporting_period": reporting_period,
-                "rows_csv": rows_csv,
-            },
-            model,
-            max_tokens=16384,
-        )
-        return self.claude.parse_json_response(struct_response)
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
