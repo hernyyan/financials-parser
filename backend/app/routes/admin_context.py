@@ -44,10 +44,11 @@ def admin_write_rule(
 ):
     """Submit a rule through Layer A → Layer B pipeline."""
     company_id, company_name, current_context = get_company_or_404(request.company_id, db)
+    current_markdown = current_context or f"# {company_name} — Classification Context\n\n"
     return write_rule(
         company_id=company_id,
         company_name=company_name,
-        current_context=current_context,
+        current_markdown=current_markdown,
         field_name=request.field_name,
         statement_type=request.statement_type,
         rule_text=request.rule_text,

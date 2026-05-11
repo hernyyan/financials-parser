@@ -28,11 +28,6 @@ from app.services.correction_pipeline import get_pipeline, PipelineResult
 logger = logging.getLogger(__name__)
 
 
-def _default_context(company_name: str) -> str:
-    """Canonical blank context header for a company. Single source of truth."""
-    return f"# {company_name} — Classification Context\n\n"
-
-
 def reset_company_for_reprocessing(company_id: int, company_name: str, db: Session) -> None:
     """
     Prepare a company for a full correction reprocess:
@@ -44,7 +39,7 @@ def reset_company_for_reprocessing(company_id: int, company_name: str, db: Sessi
     """
     db.execute(
         text("UPDATE companies SET context = :ctx WHERE id = :id"),
-        {"ctx": _default_context(company_name), "id": company_id},
+        {"ctx": f"# {company_name} — Classification Context\n\n", "id": company_id},
     )
     db.execute(
         text("DELETE FROM correction_changelog WHERE company_id = :company_id"),
@@ -76,7 +71,7 @@ def process_correction(correction_id: int, db: Session) -> dict:
 def write_rule(
     company_id: int,
     company_name: str,
-    current_context: str,
+    current_markdown: str,
     field_name: str,
     statement_type: str,
     rule_text: str,
@@ -93,7 +88,6 @@ def write_rule(
     from app.config import LAYER_A_MODEL, LAYER_B_MODEL
     from app.services.claude_service import get_claude_service
 
-    current_markdown = current_context or _default_context(company_name)
     claude = get_claude_service()
     timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S")
 
