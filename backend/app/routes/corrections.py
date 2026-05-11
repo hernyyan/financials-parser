@@ -2,13 +2,14 @@
 POST /corrections         — Save an analyst correction for a single template field.
 POST /corrections/process — Batch-route corrections by tag (general_fix → CSV, company_specific → queue).
 """
+import json
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
+from sqlalchemy import text
 
 from app.db.database import get_db
-from app.db.review_store import upsert_correction
 from app.models.schemas import (
     CorrectionRequest,
     CorrectionResponse,
@@ -46,7 +47,32 @@ def save_correction(request: CorrectionRequest, db: Session = Depends(get_db)):
 
     if request.sessionId:
         try:
-            correction_id = upsert_correction(db, request.sessionId, correction_record)
+            row = db.execute(
+                text("SELECT corrections FROM reviews WHERE session_id = :sid"),
+                {"sid": request.sessionId},
+            ).fetchone()
+
+            existing: list = json.loads(row[0]) if row and row[0] else []
+            if not isinstance(existing, list):
+                existing = []
+
+            # Replace existing correction for the same field, or append
+            found = False
+            for i, c in enumerate(existing):
+                if c.get("fieldName") == request.fieldName:
+                    existing[i] = correction_record
+                    correction_id = i + 1
+                    found = True
+                    break
+
+            if not found:
+                existing.append(correction_record)
+                correction_id = len(existing)
+
+            db.execute(
+                text("UPDATE reviews SET corrections = :data WHERE session_id = :sid"),
+                {"data": json.dumps(existing), "sid": request.sessionId},
+            )
             db.commit()
         except HTTPException:
             raise

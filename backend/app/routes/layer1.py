@@ -7,18 +7,19 @@ POST /layer1/run — 4-step Layer 1 extraction pipeline.
 4. Persist result to DB.
 5. Return lineItems + structured + templateCheck.
 """
+import json
 import logging
 from pathlib import Path
 
 import anthropic
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
+from sqlalchemy import text
 
 logger = logging.getLogger(__name__)
 
 from app.config import UPLOADS_DIR
 from app.db.database import get_db
-from app.db.review_store import merge_layer1_data
 from app.models.schemas import Layer1Request, Layer1Response
 from app.services.layer1_service import get_layer1_service
 
@@ -103,12 +104,29 @@ def run_layer1(
 
     # Persist result to DB
     try:
-        merge_layer1_data(db, request.sessionId, request.sheetName, {
+        row = db.execute(
+            text("SELECT layer1_data FROM reviews WHERE session_id = :sid"),
+            {"sid": request.sessionId},
+        ).fetchone()
+
+        raw = row[0] if row else None
+        if raw is None:
+            existing = {}
+        elif isinstance(raw, dict):
+            existing = raw
+        else:
+            existing = json.loads(raw)
+
+        existing[request.sheetName] = {
             "lineItems": result["lineItems"],
             "sourceScaling": result["sourceScaling"],
             "columnIdentified": result["columnIdentified"],
             "structured": result.get("structured"),
-        })
+        }
+        db.execute(
+            text("UPDATE reviews SET layer1_data = :data WHERE session_id = :sid"),
+            {"data": json.dumps(existing), "sid": request.sessionId},
+        )
         db.commit()
     except Exception as exc:
         db.rollback()

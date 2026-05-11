@@ -5,16 +5,17 @@ Uses a synchronous `def` route so FastAPI automatically runs it in a thread pool
 This avoids the async/sync mismatch that occurs when a synchronous Anthropic SDK call
 is made inside an `async def` handler, which would block the event loop.
 """
+import json
 import logging
 
 import anthropic
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
+from sqlalchemy import text
 
 logger = logging.getLogger(__name__)
 
 from app.db.database import get_db
-from app.db.review_store import merge_layer2_data
 from app.models.schemas import Layer2Request, Layer2Response
 from app.services.layer2_service import get_layer2_service
 
@@ -61,7 +62,22 @@ def run_layer2(request: Layer2Request, db: Session = Depends(get_db)):
     # Persist layer2_data to DB (non-fatal)
     if request.session_id:
         try:
-            merge_layer2_data(db, request.session_id, request.statement_type, result)
+            row = db.execute(
+                text("SELECT layer2_data FROM reviews WHERE session_id = :sid"),
+                {"sid": request.session_id},
+            ).fetchone()
+            raw = row[0] if row else None
+            if raw is None:
+                existing_data = {}
+            elif isinstance(raw, dict):
+                existing_data = raw
+            else:
+                existing_data = json.loads(raw)
+            existing_data[request.statement_type] = result
+            db.execute(
+                text("UPDATE reviews SET layer2_data = :data WHERE session_id = :sid"),
+                {"data": json.dumps(existing_data), "sid": request.session_id},
+            )
             db.commit()
         except Exception as exc:
             db.rollback()
