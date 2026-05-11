@@ -21,6 +21,15 @@ import type {
 
 export const API_BASE = import.meta.env.VITE_API_URL || '/api'
 
+async function postJson<T>(url: string, body: unknown): Promise<T> {
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+  return handleResponse<T>(res)
+}
+
 export async function handleResponse<T>(res: Response): Promise<T> {
   if (!res.ok) {
     let message = `API error ${res.status}`
@@ -71,20 +80,15 @@ export async function runLayer1(
   companyId?: number | null,
   sharedTab?: boolean,
 ): Promise<Layer1Response> {
-  const res = await fetch(`${API_BASE}/layer1/run`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      sessionId,
-      sheetName,
-      sheetType,
-      reportingPeriod,
-      ...(companyId != null ? { companyId } : {}),
-      ...(fieldsFilter && fieldsFilter.length > 0 ? { fieldsFilter } : {}),
-      ...(sharedTab ? { sharedTab: true } : {}),
-    }),
+  return postJson<Layer1Response>(`${API_BASE}/layer1/run`, {
+    sessionId,
+    sheetName,
+    sheetType,
+    reportingPeriod,
+    ...(companyId != null ? { companyId } : {}),
+    ...(fieldsFilter && fieldsFilter.length > 0 ? { fieldsFilter } : {}),
+    ...(sharedTab ? { sharedTab: true } : {}),
   })
-  return handleResponse<Layer1Response>(res)
 }
 
 // POST /layer1/run-pdf
@@ -94,47 +98,32 @@ export async function runLayer1Pdf(
   statementType: string,
   reportingPeriod: string,
 ): Promise<Layer1Response> {
-  const res = await fetch(`${API_BASE}/layer1/run-pdf`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ sessionId, pages, statementType, reportingPeriod }),
-  })
-  return handleResponse<Layer1Response>(res)
+  return postJson<Layer1Response>(`${API_BASE}/layer1/run-pdf`, { sessionId, pages, statementType, reportingPeriod })
 }
 
 // POST /layer2/run
 // layer1_data is just the lineItems dict (not the full Layer1Result)
 export async function runLayer2(request: Layer2Request): Promise<Layer2Result> {
-  const res = await fetch(`${API_BASE}/layer2/run`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      session_id: request.session_id ?? undefined,
-      statement_type: request.statement_type,
-      layer1_data: request.layer1_data,
-      company_id: request.company_id ?? undefined,
-      use_company_context: request.use_company_context ?? false,
-    }),
+  return postJson<Layer2Result>(`${API_BASE}/layer2/run`, {
+    session_id: request.session_id ?? undefined,
+    statement_type: request.statement_type,
+    layer1_data: request.layer1_data,
+    company_id: request.company_id ?? undefined,
+    use_company_context: request.use_company_context ?? false,
   })
-  return handleResponse<Layer2Result>(res)
 }
 
 // POST /corrections
 export async function saveCorrection(payload: CorrectionRequest): Promise<void> {
-  const res = await fetch(`${API_BASE}/corrections`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      sessionId: payload.sessionId ?? undefined,
-      fieldName: payload.fieldName,
-      statementType: payload.statementType,
-      originalValue: payload.originalValue,
-      correctedValue: payload.correctedValue,
-      reasoning: payload.reasoning,
-      tag: payload.tag,
-    }),
+  await postJson<{ success: boolean }>(`${API_BASE}/corrections`, {
+    sessionId: payload.sessionId ?? undefined,
+    fieldName: payload.fieldName,
+    statementType: payload.statementType,
+    originalValue: payload.originalValue,
+    correctedValue: payload.correctedValue,
+    reasoning: payload.reasoning,
+    tag: payload.tag,
   })
-  await handleResponse<{ success: boolean }>(res)
 }
 
 // GET /template
@@ -145,12 +134,7 @@ export async function getTemplate(): Promise<TemplateResponse> {
 
 // POST /finalize
 export async function finalizeOutput(data: FinalizeRequest): Promise<FinalizeResponse> {
-  const res = await fetch(`${API_BASE}/finalize`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(data),
-  })
-  return handleResponse<FinalizeResponse>(res)
+  return postJson<FinalizeResponse>(`${API_BASE}/finalize`, data)
 }
 
 // GET /export/{session_id}/csv
@@ -172,24 +156,14 @@ export async function getCompanies(): Promise<Company[]> {
 
 // POST /companies
 export async function createCompany(name: string): Promise<Company> {
-  const res = await fetch(`${API_BASE}/companies`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ name }),
-  })
-  return handleResponse<Company>(res)
+  return postJson<Company>(`${API_BASE}/companies`, { name })
 }
 
 // POST /corrections/process
 export async function processCorrections(
   payload: CorrectionProcessRequest,
 ): Promise<CorrectionProcessResponse> {
-  const res = await fetch(`${API_BASE}/corrections/process`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
-  })
-  return handleResponse<CorrectionProcessResponse>(res)
+  return postJson<CorrectionProcessResponse>(`${API_BASE}/corrections/process`, payload)
 }
 
 // GET /companies/{id}/context-status
@@ -208,13 +182,7 @@ export async function checkExistingReview(companyId: number, reportingPeriod: st
 
 // POST /reviews/continue-previous
 export async function continuePreviousReview(companyId: number, reportingPeriod: string): Promise<ContinuedReview> {
-  const res = await fetch(`${API_BASE}/reviews/continue-previous`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ company_id: companyId, reporting_period: reportingPeriod }),
-  })
-  if (!res.ok) throw new Error('Failed to continue previous review')
-  return res.json()
+  return postJson<ContinuedReview>(`${API_BASE}/reviews/continue-previous`, { company_id: companyId, reporting_period: reportingPeriod })
 }
 
 // POST /datasets/append
@@ -224,17 +192,12 @@ export async function appendToCompanyDataset(
   reportingPeriod: string,
   layer1Results: Record<string, Layer1Result>,
 ): Promise<void> {
-  const res = await fetch(`${API_BASE}/datasets/append`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      session_id: sessionId,
-      company_name: companyName,
-      reporting_period: reportingPeriod,
-      layer1_results: layer1Results,
-    }),
+  await postJson<{ success: boolean }>(`${API_BASE}/datasets/append`, {
+    session_id: sessionId,
+    company_name: companyName,
+    reporting_period: reportingPeriod,
+    layer1_results: layer1Results,
   })
-  await handleResponse<{ success: boolean }>(res)
 }
 
 // POST /recalculate
@@ -243,12 +206,7 @@ export async function recalculate(
   values: Record<string, number | null>,
   overrides: Record<string, number> = {},
 ): Promise<{ values: Record<string, number | null>; calculationMeta: Record<string, CalculationMeta>; flaggedFields: string[] }> {
-  const res = await fetch(`${API_BASE}/recalculate`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ statement_type: statementType, values, overrides }),
-  })
-  return handleResponse(res)
+  return postJson(`${API_BASE}/recalculate`, { statement_type: statementType, values, overrides })
 }
 
 // GET /companies/{id}/layer1-templates/{statement_type}
@@ -267,11 +225,6 @@ export async function saveLayer1Template(
   statementType: string,
   template: Layer1Template,
 ): Promise<void> {
-  const res = await fetch(`${API_BASE}/companies/${companyId}/layer1-templates/${statementType}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(template),
-  })
-  await handleResponse<{ success: boolean }>(res)
+  await postJson<{ success: boolean }>(`${API_BASE}/companies/${companyId}/layer1-templates/${statementType}`, template)
 }
 

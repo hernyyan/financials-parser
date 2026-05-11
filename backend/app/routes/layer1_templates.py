@@ -13,12 +13,13 @@ from sqlalchemy import text
 from app.db.database import get_db
 from app.models.schemas import Layer1TemplateResponse
 from app.utils.json_utils import deserialize_dict
+from app.utils.statement_meta import STATEMENT_KEYS_SET
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
-_VALID_TYPES = {"income_statement", "balance_sheet", "cash_flow_statement"}
+_VALID_TYPES = STATEMENT_KEYS_SET
 
 
 @router.get("/companies/{company_id}/layer1-templates/{statement_type}", response_model=Layer1TemplateResponse)

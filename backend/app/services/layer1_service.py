@@ -29,10 +29,11 @@ from app.services.layer1_extractor import (
     extract_rows_with_metadata,
     rows_to_csv_with_metadata,
 )
+from app.utils.statement_meta import STATEMENT_KEYS_SET
 
 logger = logging.getLogger(__name__)
 
-_VALID_TYPES = {"income_statement", "balance_sheet", "cash_flow_statement"}
+_VALID_TYPES = STATEMENT_KEYS_SET
 
 
 @dataclass

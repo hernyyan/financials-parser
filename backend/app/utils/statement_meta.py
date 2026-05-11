@@ -20,3 +20,5 @@ STATEMENT_TYPES: list[tuple[str, str]] = [
 STATEMENT_KEY_TO_LABEL: dict[str, str] = {k: label for k, label in STATEMENT_TYPES}
 STATEMENT_LABEL_TO_KEY: dict[str, str] = {label: k for k, label in STATEMENT_TYPES}
 STATEMENT_LABELS_SET: frozenset[str] = frozenset(label for _, label in STATEMENT_TYPES)
+STATEMENT_KEYS: list[str] = [k for k, _ in STATEMENT_TYPES]
+STATEMENT_KEYS_SET: frozenset[str] = frozenset(STATEMENT_KEYS)
