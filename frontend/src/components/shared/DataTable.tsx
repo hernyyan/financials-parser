@@ -1,6 +1,6 @@
 import { Flag, AlertTriangle, Edit3 } from 'lucide-react'
 
-export interface DataTableRow {
+interface DataTableRow {
   label: string
   value: string | number | null
   isHeader?: boolean

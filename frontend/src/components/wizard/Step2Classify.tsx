@@ -7,9 +7,11 @@ import LoadingSpinner from '../shared/LoadingSpinner'
 import StatusBanner from '../shared/StatusBanner'
 import { getTemplate } from '../../api/client'
 import { IS_TEMPLATE_FIELDS, BS_TEMPLATE_FIELDS } from '../../mocks/mockData'
+import { formatFieldValue } from '../../utils/formatters'
+import { BOLD_FIELDS, ITALIC_FIELDS, isIndented } from '../../utils/templateStyling'
+import { getFailingFieldNames } from '../../utils/finalizeRows'
 import { useCorrections } from '../../hooks/useCorrections'
-import { buildSourceRows, buildTemplateRows } from '../../utils/classifyRows'
-import type { Layer2Result, TemplateResponse, TemplateSection } from '../../types'
+import type { Correction, Layer2Result, TemplateResponse, TemplateSection } from '../../types'
 import {
   ArrowLeft,
   CheckCircle2,
@@ -21,6 +23,82 @@ import {
 } from 'lucide-react'
 
 type StatusMessage = { type: 'success' | 'error' | 'info'; message: string } | null
+
+function formatSourceValue(value: number): string {
+  if (value === 0) return '—'
+  const abs = Math.abs(value)
+  const formatted = abs.toLocaleString('en-US', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })
+  return value < 0 ? `(${formatted})` : formatted
+}
+
+function buildSourceRows(layer1Results: Record<string, { lineItems: Record<string, number> }>) {
+  type Row = React.ComponentProps<typeof DataTable>['rows'][number]
+  const rows: Row[] = []
+  for (const [sheetName, result] of Object.entries(layer1Results)) {
+    if (!result) continue
+    rows.push({ label: sheetName, value: null, isStatementHeader: true })
+    for (const [label, value] of Object.entries(result.lineItems)) {
+      rows.push({ label, value: formatSourceValue(value) })
+    }
+  }
+  return rows
+}
+
+function buildTemplateRows(
+  sections: TemplateSection[],
+  statementLabel: string,
+  layer2: Layer2Result | undefined,
+  corrections: Correction[],
+  selectedCell: string | null,
+  pendingValues: Record<string, number | null> | null,
+) {
+  type Row = React.ComponentProps<typeof DataTable>['rows'][number]
+  const rows: Row[] = []
+  const failingFields = getFailingFieldNames(layer2)
+
+  rows.push({ label: statementLabel, value: null, isStatementHeader: true })
+
+  for (const section of sections) {
+    if (section.header) {
+      rows.push({ label: section.header, value: null, isHeader: true })
+    }
+    for (const field of section.fields) {
+      const correction = corrections.find((c) => c.fieldName === field)
+      const isPending = pendingValues !== null
+      // Use pending values for live preview (overrides corrections too)
+      const rawValue = isPending
+        ? (pendingValues[field] ?? null)
+        : correction
+        ? correction.correctedValue
+        : layer2
+        ? (layer2.values[field] ?? null)
+        : null
+
+      const isFlagged = layer2?.flaggedFields.includes(field) ?? false
+      const hasValidationFail = failingFields.has(field)
+      // Highlight the actively-edited field in amber when pending
+      const isBeingEdited = isPending && field === selectedCell
+
+      rows.push({
+        label: field,
+        value: rawValue !== null ? formatFieldValue(field, rawValue) : null,
+        isFlagged,
+        hasValidationFail,
+        isClickable: true,
+        isEdited: isBeingEdited ? false : !!correction,
+        isPending: isBeingEdited,
+        isBold: BOLD_FIELDS.has(field),
+        isIndented: isIndented(field),
+        isItalic: ITALIC_FIELDS.has(field),
+      })
+    }
+  }
+
+  return rows
+}
 
 function buildFallbackSections(): { is: TemplateSection[]; bs: TemplateSection[] } {
   return {
