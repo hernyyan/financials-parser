@@ -4,16 +4,20 @@ POST /companies              — Create a new company.
 POST /companies/{id}/reprocess-corrections
                              — Developer tool: resets and reruns the AI pipeline for a company.
 """
+import json
 import re
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 
+from app.config import DATA_DIR
 from app.db.database import get_db
 from app.models.schemas import CompanyCreate, CompanyResponse, ReprocessResponse, ReprocessCorrectionResult
 from app.utils.text_utils import markdown_body_word_count
 
 router = APIRouter()
+
+CHANGELOG_PATH = DATA_DIR / "company_context_changelog.jsonl"
 
 
 def _normalize_company_name(name: str) -> str:
@@ -114,11 +118,23 @@ def reprocess_corrections(company_id: int, db: Session = Depends(get_db)):
         {"ctx": f"# {company_name} — Classification Context\n\n", "id": company_id},
     )
 
-    # Delete this company's changelog entries from the DB table
-    db.execute(
-        text("DELETE FROM correction_changelog WHERE company_id = :company_id"),
-        {"company_id": company_id},
-    )
+    # Filter this company's entries out of the changelog
+    if CHANGELOG_PATH.exists():
+        remaining_lines = []
+        with CHANGELOG_PATH.open("r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    entry = json.loads(line)
+                    if entry.get("company_id") != company_id:
+                        remaining_lines.append(line)
+                except json.JSONDecodeError:
+                    remaining_lines.append(line)
+        with CHANGELOG_PATH.open("w", encoding="utf-8") as f:
+            for line in remaining_lines:
+                f.write(line + "\n")
 
     # Reset all corrections for this company to unprocessed
     db.execute(
