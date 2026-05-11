@@ -10,6 +10,7 @@ import { runLayer1, saveLayer1Template, saveStatementTabConfig } from '../api/cl
 import type { Layer1Result, Layer1Template, Layer1TemplateRow, TemplateCheckResult, StatusMessage, StatementType } from '../types'
 import { ALL_STATEMENT_TYPES, createStmtRecord } from '../utils/statementMeta'
 import { toLayer1Result } from '../utils/layer1Utils'
+import { getErrorMessage } from '../utils/errorUtils'
 
 export type ExtractionStatus = 'idle' | 'running' | 'done' | 'error'
 
@@ -147,7 +148,7 @@ export function useExcelExtraction({
         }
       }
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Extraction failed.'
+      const msg = getErrorMessage(err, 'Extraction failed.')
       setExtractionStatus('error')
       setExtractionError(msg)
       setStatus({ type: 'error', message: msg })

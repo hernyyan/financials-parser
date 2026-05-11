@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Save, Loader2 } from 'lucide-react'
 import { adminUpdateCompanyContext } from '../../api/client'
+import { getErrorMessage } from '../../utils/errorUtils'
 
 interface Props {
   companyId: number
@@ -22,7 +23,7 @@ export default function CompanyContextEditor({ companyId, content, onSaved }: Pr
       setSavedMsg(`Saved — ${res.word_count} words`)
       setTimeout(() => setSavedMsg(null), 3000)
     } catch (err) {
-      setSavedMsg(`Error: ${err instanceof Error ? err.message : 'Save failed'}`)
+      setSavedMsg(`Error: ${getErrorMessage(err, 'Save failed')}`)
     } finally {
       setSaving(false)
     }

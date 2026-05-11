@@ -15,6 +15,7 @@
 import { useEffect, useState } from 'react'
 import type { Layer1Template, Layer1TemplateRow, WaterfallStep } from '../types'
 import { getLayer1Template, saveLayer1Template } from '../api/client'
+import { getErrorMessage } from '../utils/errorUtils'
 
 export type NewItemAction =
   | { kind: 'add'; type: Layer1TemplateRow['type'] }
@@ -51,7 +52,7 @@ export function useTemplateDeltaReview({
         setLoading(false)
       })
       .catch(err => {
-        setError(err instanceof Error ? err.message : 'Failed to load template.')
+        setError(getErrorMessage(err, 'Failed to load template.'))
         setLoading(false)
       })
   }, [companyId, statementType])
@@ -101,7 +102,7 @@ export function useTemplateDeltaReview({
       await saveLayer1Template(companyId, statementType, template)
       onSaved()
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to save template.')
+      setError(getErrorMessage(err, 'Failed to save template.'))
     } finally {
       setSaving(false)
     }

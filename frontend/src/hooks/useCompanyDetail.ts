@@ -17,6 +17,7 @@ import {
   adminRenameCompany,
 } from '../api/client'
 import type { AdminCompanyContext, CompanyPeriodData, AdminCorrection } from '../api/client'
+import { getErrorMessage } from '../utils/errorUtils'
 
 interface UseCompanyDetailOptions {
   companyId: number
@@ -71,7 +72,7 @@ export function useCompanyDetail({ companyId }: UseCompanyDetailOptions) {
       setContext((prev) => (prev ? { ...prev, name: res.new_name } : prev))
       setRenaming(false)
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Rename failed')
+      alert(getErrorMessage(err, 'Rename failed'))
     } finally {
       setRenameSaving(false)
     }

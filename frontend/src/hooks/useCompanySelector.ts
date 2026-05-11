@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { getCompanies, createCompany } from '../api/client'
 import type { Company } from '../types'
+import { getErrorMessage } from '../utils/errorUtils'
 
 interface UseCompanySelectorOptions {
   /** Called when a company is selected (existing or newly created). */
@@ -98,7 +99,7 @@ export function useCompanySelector({
       setComboOpen(false)
       onSelect(newCompany)
     } catch (err) {
-      onError(err instanceof Error ? err.message : 'Failed to create company.')
+      onError(getErrorMessage(err, 'Failed to create company.'))
     } finally {
       setCreatingCompany(false)
     }

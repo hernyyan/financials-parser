@@ -10,6 +10,7 @@ import { runLayer1Pdf } from '../api/client'
 import type { Layer1Result, StatusMessage, StatementType } from '../types'
 import { ALL_STATEMENT_TYPES } from '../utils/statementMeta'
 import { toLayer1Result } from '../utils/layer1Utils'
+import { getErrorMessage } from '../utils/errorUtils'
 
 export interface PdfExtractionDeps {
   sessionId: string | null
@@ -66,7 +67,7 @@ export function usePdfExtraction({
         } catch (err) {
           setStatus({
             type: 'error',
-            message: `Extraction failed for ${type}: ${err instanceof Error ? err.message : 'Unknown error'}`,
+            message: `Extraction failed for ${type}: ${getErrorMessage(err, 'Unknown error')}`,
           })
         } finally {
           setPdfExtracting((prev) => ({ ...prev, [type]: false }))

@@ -3,6 +3,7 @@ import { Loader2, CheckCircle2, XCircle } from 'lucide-react'
 import type { StatementType } from '../../types'
 import { STATEMENT_LABELS } from '../../utils/statementMeta'
 import { adminWriteRule, type WriteRuleResult } from '../../api/client'
+import { getErrorMessage } from '../../utils/errorUtils'
 
 interface Props {
   companyId: number
@@ -31,7 +32,7 @@ export default function RuleWriter({ companyId, selectedField, onRuleApplied }: 
       setResult(res)
       if (res.updated_markdown) onRuleApplied(res.updated_markdown)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed')
+      setError(getErrorMessage(err, 'Failed'))
     } finally {
       setProcessing(false)
     }

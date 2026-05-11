@@ -8,6 +8,7 @@
  */
 import { useCallback, useEffect, useState } from 'react'
 import { adminGetAlerts, adminUpdateAlertStatus } from '../api/client'
+import { getErrorMessage } from '../utils/errorUtils'
 
 export type AlertStatus = 'open' | 'resolved' | 'fixed' | 'all'
 
@@ -39,7 +40,7 @@ export function useAlertsList() {
       await adminUpdateAlertStatus(fileIndex, newStatus)
       loadAlerts()
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Failed to update alert')
+      alert(getErrorMessage(err, 'Failed to update alert'))
     } finally {
       setUpdating(null)
     }

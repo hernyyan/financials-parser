@@ -12,6 +12,7 @@
 import { useState } from 'react'
 import { checkExistingReview, continuePreviousReview } from '../api/client'
 import type { Layer1Result, Layer2Result, Correction, StatusMessage, DuplicateCheck, PendingExtraction } from '../types'
+import { getErrorMessage } from '../utils/errorUtils'
 
 interface UseDuplicateResolutionDeps {
   companyId: number | null
@@ -95,7 +96,7 @@ export function useDuplicateResolution({
     } catch (err) {
       setStatus({
         type: 'error',
-        message: err instanceof Error ? err.message : 'Failed to load previous review.',
+        message: getErrorMessage(err, 'Failed to load previous review.'),
       })
     }
   }

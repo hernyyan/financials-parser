@@ -8,6 +8,7 @@
 import { useState } from 'react'
 import type { Layer1Template, Layer1TemplateRow, WaterfallStep, StatementType } from '../../types'
 import { saveLayer1Template } from '../../api/client'
+import { getErrorMessage } from '../../utils/errorUtils'
 import { STATEMENT_LABELS } from '../../utils/statementMeta'
 import TemplateTreeEditor from './TemplateTreeEditor'
 import { Loader2, CheckCircle2 } from 'lucide-react'
@@ -45,7 +46,7 @@ export default function TemplateReview({ structured, statementType, companyId, o
       await saveLayer1Template(companyId, statementType, template)
       onSaved()
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to save template.')
+      setError(getErrorMessage(err, 'Failed to save template.'))
     } finally {
       setSaving(false)
     }
