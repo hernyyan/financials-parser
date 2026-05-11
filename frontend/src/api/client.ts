@@ -105,7 +105,6 @@ export async function runLayer1Pdf(
 // POST /layer2/run
 // layer1_data is just the lineItems dict (not the full Layer1Result)
 export async function runLayer2(request: Layer2Request): Promise<Layer2Result> {
-  console.log(`[runLayer2] sending ${request.statement_type} request, layer1_data keys:`, Object.keys(request.layer1_data).length)
   const res = await fetch(`${API_BASE}/layer2/run`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -117,11 +116,7 @@ export async function runLayer2(request: Layer2Request): Promise<Layer2Result> {
       use_company_context: request.use_company_context ?? false,
     }),
   })
-  console.log(`[runLayer2] ${request.statement_type} HTTP response: status=${res.status} ok=${res.ok} content-length=${res.headers.get('content-length')}`)
-  const result = await handleResponse<Layer2Result>(res)
-  console.log(`[runLayer2] ${request.statement_type} parsed result: statementType=${result?.statementType} values keys=${Object.keys(result?.values ?? {}).length} flaggedFields=${result?.flaggedFields?.length} fieldValidations keys=${Object.keys(result?.fieldValidations ?? {}).length}`)
-  console.log(`[runLayer2] ${request.statement_type} full result:`, result)
-  return result
+  return handleResponse<Layer2Result>(res)
 }
 
 // POST /corrections
