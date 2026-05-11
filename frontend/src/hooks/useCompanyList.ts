@@ -15,7 +15,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { adminGetCompanies, adminCreateCompany, adminDeleteCompany, AdminCompany } from '../api/client'
 import { useTableSort } from './useTableSort'
-import { compareValues } from '../utils/sortUtils'
 
 export type CompanySortField = 'name' | 'context_word_count' | 'total_corrections'
 
@@ -93,7 +92,9 @@ export function useCompanyList() {
         av = a[sortField]
         bv = b[sortField]
       }
-      return compareValues(av, bv, sortDir)
+      if (av < bv) return sortDir === 'asc' ? -1 : 1
+      if (av > bv) return sortDir === 'asc' ? 1 : -1
+      return 0
     })
 
   return {

@@ -12,7 +12,6 @@
 import { useEffect, useState } from 'react'
 import { adminGetGeneralFixes } from '../api/client'
 import { useTableSort } from './useTableSort'
-import { compareValues } from '../utils/sortUtils'
 
 export type SortField = 'timestamp' | 'period' | 'statement_type' | 'field_name' | 'company'
 
@@ -46,7 +45,9 @@ export function useGeneralFixesList() {
     .sort((a, b) => {
       const av = (a[sortField] ?? '').toLowerCase()
       const bv = (b[sortField] ?? '').toLowerCase()
-      return compareValues(av, bv, sortDir)
+      if (av < bv) return sortDir === 'asc' ? -1 : 1
+      if (av > bv) return sortDir === 'asc' ? 1 : -1
+      return 0
     })
 
   const columns = entries.length > 0 ? Object.keys(entries[0]) : []
