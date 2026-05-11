@@ -4,21 +4,16 @@ POST /companies              — Create a new company.
 POST /companies/{id}/reprocess-corrections
                              — Developer tool: resets and reruns the AI pipeline for a company.
 """
-import re
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 
 from app.db.database import get_db
 from app.models.schemas import CompanyCreate, CompanyResponse, ReprocessResponse, ReprocessCorrectionResult
+from app.services.company_service import create_company as _create_company
 from app.utils.text_utils import markdown_body_word_count
 
 router = APIRouter()
-
-
-def _normalize_company_name(name: str) -> str:
-    """Strip to lowercase alphanumeric for fuzzy duplicate detection."""
-    return re.sub(r'[^a-z0-9]', '', name.lower())
 
 
 @router.get("/companies", response_model=list[CompanyResponse])
@@ -33,36 +28,7 @@ def list_companies(db: Session = Depends(get_db)):
 @router.post("/companies", response_model=CompanyResponse, status_code=201)
 def create_company(request: CompanyCreate, db: Session = Depends(get_db)):
     """Create a new company record."""
-    name = request.name.strip()
-    if not name:
-        raise HTTPException(status_code=400, detail="Company name cannot be empty.")
-
-    # Check for exact duplicate
-    existing = db.execute(
-        text("SELECT id FROM companies WHERE name = :name"),
-        {"name": name},
-    ).fetchone()
-    if existing:
-        raise HTTPException(status_code=409, detail=f"Company '{name}' already exists.")
-
-    # Check for normalized (fuzzy) duplicate
-    normalized_new = _normalize_company_name(name)
-    all_rows = db.execute(text("SELECT id, name FROM companies")).fetchall()
-    for row in all_rows:
-        if _normalize_company_name(row[1]) == normalized_new:
-            raise HTTPException(
-                status_code=409,
-                detail=f"A similar company already exists: '{row[1]}'. "
-                       f"If this is a different company, contact an admin.",
-            )
-
-    result = db.execute(
-        text("INSERT INTO companies (name, context) VALUES (:name, :ctx) RETURNING id"),
-        {"name": name, "ctx": f"# {name} — Classification Context\n\n"},
-    )
-    new_id = result.fetchone()[0]
-    db.commit()
-
+    new_id, name = _create_company(request.name, db)
     return CompanyResponse(id=new_id, name=name)
 
 

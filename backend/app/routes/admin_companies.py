@@ -19,7 +19,7 @@ from sqlalchemy import text
 from app.config import COMPANY_DATASETS_DIR
 from app.db.database import get_db
 from app.models.schemas import AdminRenameCompanyRequest
-from app.routes.companies import _normalize_company_name
+from app.services.company_service import create_company as _create_company
 from app.utils.text_utils import markdown_body_word_count
 
 router = APIRouter(prefix="/admin")
@@ -201,33 +201,7 @@ def admin_create_company(
     db: Session = Depends(get_db),
 ):
     """Create a new company."""
-    name = request.name.strip()
-    if not name:
-        raise HTTPException(status_code=422, detail="Name cannot be empty.")
-
-    existing_exact = db.execute(
-        text("SELECT id FROM companies WHERE LOWER(name) = LOWER(:name)"),
-        {"name": name},
-    ).fetchone()
-    if existing_exact:
-        raise HTTPException(status_code=409, detail=f"Company '{name}' already exists.")
-
-    name_normalized = _normalize_company_name(name)
-    all_names = db.execute(text("SELECT id, name FROM companies")).fetchall()
-    for existing_id, existing_name in all_names:
-        if _normalize_company_name(existing_name) == name_normalized:
-            raise HTTPException(
-                status_code=409,
-                detail=f"A similar company already exists: '{existing_name}'.",
-            )
-
-    result = db.execute(
-        text("INSERT INTO companies (name, context) VALUES (:name, :ctx) RETURNING id"),
-        {"name": name, "ctx": f"# {name} — Classification Context\n\n"},
-    )
-    new_id = result.fetchone()[0]
-    db.commit()
-
+    new_id, name = _create_company(request.name, db)
     return {"id": new_id, "name": name}
 
 
