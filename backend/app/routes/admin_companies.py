@@ -8,15 +8,17 @@ PUT    /admin/companies/{company_id}/rename   — Rename a company everywhere
 POST   /admin/companies                       — Create a new company
 DELETE /admin/companies/{company_id}          — Delete a company and all its data
 """
+import shutil
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 
+from app.config import COMPANY_DATASETS_DIR
 from app.db.database import get_db
 from app.models.schemas import AdminRenameCompanyRequest
-from app.services.company_service import create_company as _create_company, get_company_or_404, rename_company, delete_company as _delete_company
+from app.services.company_service import create_company as _create_company, get_company_or_404, rename_company
 from app.utils.json_utils import deserialize_dict
 from app.utils.text_utils import markdown_body_word_count
 
@@ -161,5 +163,19 @@ def admin_create_company(
 def admin_delete_company(company_id: int, db: Session = Depends(get_db)):
     """Delete a company and all its associated data (corrections, datasets)."""
     _, company_name, _ = get_company_or_404(company_id, db)
-    _delete_company(company_id, company_name, db)
+
+    db.execute(
+        text("DELETE FROM company_specific_corrections WHERE company_id = :id"),
+        {"id": company_id},
+    )
+    db.execute(
+        text("DELETE FROM companies WHERE id = :id"),
+        {"id": company_id},
+    )
+    db.commit()
+
+    datasets_dir = COMPANY_DATASETS_DIR / company_name
+    if datasets_dir.exists():
+        shutil.rmtree(datasets_dir)
+
     return {"success": True, "deleted_company": company_name}

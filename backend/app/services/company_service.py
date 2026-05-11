@@ -78,40 +78,6 @@ def rename_company(
     db.commit()
 
 
-def delete_company(company_id: int, company_name: str, db: Session) -> None:
-    """
-    Delete a company and all its associated data atomically.
-
-    Filesystem deletion is attempted first (before the DB commit) so that if
-    rmtree fails the DB transaction can be rolled back — avoiding a state where
-    the company row is gone but the data directory survives.
-
-    Raises HTTPException 500 if the filesystem delete fails.
-    Commits the DB transaction on success.
-    """
-    import shutil
-
-    datasets_dir: Path = COMPANY_DATASETS_DIR / company_name
-    if datasets_dir.exists():
-        try:
-            shutil.rmtree(datasets_dir)
-        except OSError as exc:
-            raise HTTPException(
-                status_code=500,
-                detail=f"Could not delete company data directory: {exc}",
-            )
-
-    db.execute(
-        text("DELETE FROM company_specific_corrections WHERE company_id = :id"),
-        {"id": company_id},
-    )
-    db.execute(
-        text("DELETE FROM companies WHERE id = :id"),
-        {"id": company_id},
-    )
-    db.commit()
-
-
 def normalize_company_name(name: str) -> str:
     """Strip to lowercase alphanumeric for fuzzy duplicate detection."""
     return re.sub(r'[^a-z0-9]', '', name.lower())
