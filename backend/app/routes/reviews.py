@@ -2,7 +2,9 @@
 GET  /reviews/check-existing      — Check if finalized data exists for a company+period.
 POST /reviews/continue-previous   — Create a new session pre-populated from the latest finalized review.
 """
-from fastapi import APIRouter, Depends, Query
+import logging
+
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from app.db.database import get_db
@@ -10,6 +12,7 @@ from app.models.schemas import ContinuePreviousRequest
 from app.services.company_service import get_company_or_404
 from app.services.review_service import check_existing_finalized, continue_from_previous
 
+logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
@@ -31,4 +34,14 @@ def continue_previous_review(
 ):
     """Create a new review session pre-populated with the latest finalized data."""
     _, company_name, _ = get_company_or_404(request.company_id, db)
-    return continue_from_previous(company_name, request.reporting_period, db)
+    try:
+        result = continue_from_previous(company_name, request.reporting_period, db)
+        db.commit()
+    except HTTPException:
+        db.rollback()
+        raise
+    except Exception as exc:
+        db.rollback()
+        logger.warning("Failed to continue review for %s / %s: %s", company_name, request.reporting_period, exc)
+        raise HTTPException(status_code=500, detail=f"Failed to continue review: {exc}")
+    return result
