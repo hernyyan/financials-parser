@@ -29,33 +29,19 @@ def admin_changelog(
     db: Session = Depends(get_db),
 ):
     """Return entries from correction_changelog table, newest first."""
-    if company_id is not None:
-        rows = db.execute(
-            text("""
-                SELECT id, timestamp, company_id, company_name, correction_id,
-                       field_name, statement_type, layer_a_instruction,
-                       layer_a_referenced_fields, layer_b_action, layer_b_detail,
-                       markdown_section_affected, source
-                FROM correction_changelog
-                WHERE company_id = :cid
-                ORDER BY id DESC
-                LIMIT :limit
-            """),
-            {"cid": company_id, "limit": limit},
-        ).fetchall()
-    else:
-        rows = db.execute(
-            text("""
-                SELECT id, timestamp, company_id, company_name, correction_id,
-                       field_name, statement_type, layer_a_instruction,
-                       layer_a_referenced_fields, layer_b_action, layer_b_detail,
-                       markdown_section_affected, source
-                FROM correction_changelog
-                ORDER BY id DESC
-                LIMIT :limit
-            """),
-            {"limit": limit},
-        ).fetchall()
+    rows = db.execute(
+        text("""
+            SELECT id, timestamp, company_id, company_name, correction_id,
+                   field_name, statement_type, layer_a_instruction,
+                   layer_a_referenced_fields, layer_b_action, layer_b_detail,
+                   markdown_section_affected, source
+            FROM correction_changelog
+            WHERE (:cid IS NULL OR company_id = :cid)
+            ORDER BY id DESC
+            LIMIT :limit
+        """),
+        {"cid": company_id, "limit": limit},
+    ).fetchall()
 
     entries = []
     for r in rows:
@@ -87,26 +73,17 @@ def admin_alerts(
     """Return all alerts. Runs duplicate company scan on each call to detect new duplicates."""
     scan_duplicate_companies(db)
 
-    if status_filter and status_filter != "all":
-        rows = db.execute(
-            text("""
-                SELECT id, timestamp, type, company_id, company_name,
-                       word_count, message, status
-                FROM context_alerts
-                WHERE status = :status
-                ORDER BY id DESC
-            """),
-            {"status": status_filter},
-        ).fetchall()
-    else:
-        rows = db.execute(
-            text("""
-                SELECT id, timestamp, type, company_id, company_name,
-                       word_count, message, status
-                FROM context_alerts
-                ORDER BY id DESC
-            """),
-        ).fetchall()
+    status = None if not status_filter or status_filter == "all" else status_filter
+    rows = db.execute(
+        text("""
+            SELECT id, timestamp, type, company_id, company_name,
+                   word_count, message, status
+            FROM context_alerts
+            WHERE (:status IS NULL OR status = :status)
+            ORDER BY id DESC
+        """),
+        {"status": status},
+    ).fetchall()
 
     alerts = []
     for r in rows:

@@ -2,7 +2,6 @@
 GET  /companies/{company_id}/layer1-templates/{statement_type}  — fetch stored template
 POST /companies/{company_id}/layer1-templates/{statement_type}  — upsert template
 """
-import json
 import logging
 from typing import Optional
 
@@ -12,6 +11,7 @@ from sqlalchemy import text
 
 from app.db.database import get_db
 from app.models.schemas import Layer1TemplateResponse
+from app.services.layer1_service import get_layer1_service
 from app.utils.json_utils import deserialize_dict
 from app.utils.statement_meta import STATEMENT_KEYS_SET
 
@@ -64,26 +64,5 @@ def upsert_layer1_template(
     if statement_type not in _VALID_TYPES:
         raise HTTPException(status_code=400, detail=f"Invalid statement_type: {statement_type}")
 
-    template_json = json.dumps(payload)
-
-    # Try UPDATE first
-    result = db.execute(
-        text(
-            "UPDATE layer1_templates SET template = :tmpl, updated_at = CURRENT_TIMESTAMP "
-            "WHERE company_id = :cid AND statement_type = :st"
-        ),
-        {"tmpl": template_json, "cid": company_id, "st": statement_type},
-    )
-
-    if result.rowcount == 0:
-        # No existing row — INSERT
-        db.execute(
-            text(
-                "INSERT INTO layer1_templates (company_id, statement_type, template) "
-                "VALUES (:cid, :st, :tmpl)"
-            ),
-            {"cid": company_id, "st": statement_type, "tmpl": template_json},
-        )
-
-    db.commit()
+    get_layer1_service().save_template(company_id, statement_type, payload, db)
     return {"success": True}
