@@ -100,9 +100,7 @@ class Layer2Service:
             "sourceLabels": parsed_response.source_labels,
         }
 
-        # Extract source-reported values for calculated fields from reasoning text.
-        # Logs a warning when the pattern is present but the regex can't extract a
-        # number — signals Claude response format has drifted.
+        # Extract source-reported values for calculated fields from reasoning text
         reasoning = split.get('reasoning', {})
         for _field in CALCULATED_FIELDS:
             if _field in reasoning:
@@ -113,11 +111,7 @@ class Layer2Service:
                         try:
                             split['values'][_field + '_source_reported'] = float(_m.group(1).replace(',', ''))
                         except ValueError:
-                            print(f"WARNING: source_reported_value regex matched for '{_field}' "
-                                  f"but value could not be parsed as float: {_m.group(1)!r}")
-                    else:
-                        print(f"WARNING: 'source_reported_value' found in reasoning for '{_field}' "
-                              f"but regex could not extract a number. Claude format may have changed.")
+                            pass
 
         # Run Python recalculation — overwrite calculated fields, preserve ai_matched
         recalc_fn = _RECALC_FN.get(normalized)
