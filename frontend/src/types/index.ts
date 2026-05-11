@@ -21,6 +21,7 @@ export interface WizardState {
   sheetNames: string[]
   workbookUrl: string | null
   layer1Results: Record<string, Layer1Result>
+  step1Approved: boolean
   useCompanyContext: boolean
 
   // Step 1 — PDF
@@ -31,6 +32,7 @@ export interface WizardState {
   // Step 2
   layer2Results: Record<string, Layer2Result>
   corrections: Correction[]
+  step2Approved: boolean
 
   // Current state
   currentStep: 1 | 2 | 3

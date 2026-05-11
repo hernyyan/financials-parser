@@ -44,12 +44,14 @@ const defaultState: WizardState = {
   sheetNames: [],
   workbookUrl: null,
   layer1Results: {},
+  step1Approved: false,
   useCompanyContext: true,
   pdfPageCount: 0,
   pdfUrl: null,
   pdfPageAssignments: {},
   layer2Results: {},
   corrections: [],
+  step2Approved: false,
   currentStep: 1,
   activeSheetTab: '',
   selectedCell: null,
@@ -108,7 +110,7 @@ export function WizardProvider({ children }: { children: ReactNode }) {
   }
 
   function approveStep1() {
-    setState((s) => ({ ...s, currentStep: 2 }))
+    setState((s) => ({ ...s, step1Approved: true, currentStep: 2 }))
   }
 
   function setLayer2Results(results: Record<string, Layer2Result>) {
@@ -137,6 +139,7 @@ export function WizardProvider({ children }: { children: ReactNode }) {
   function approveStep2() {
     setState((s) => ({
       ...s,
+      step2Approved: true,
       currentStep: 3,
       sidePanelOpen: false,
       selectedCell: null,
@@ -147,9 +150,11 @@ export function WizardProvider({ children }: { children: ReactNode }) {
     setState((s) => ({
       ...s,
       currentStep: 1,
+      step1Approved: false,
       layer1Results: {},
       layer2Results: {},
       corrections: [],
+      step2Approved: false,
       sidePanelOpen: false,
       selectedCell: null,
       uploadFileType: null,
@@ -163,7 +168,11 @@ export function WizardProvider({ children }: { children: ReactNode }) {
   }
 
   function backToStep2() {
-    setState((s) => ({ ...s, currentStep: 2 }))
+    setState((s) => ({
+      ...s,
+      currentStep: 2,
+      step2Approved: false,
+    }))
   }
 
   function setActiveSheetTab(tab: string) {
@@ -222,6 +231,7 @@ export function WizardProvider({ children }: { children: ReactNode }) {
       sheetNames: ['Income Statement', 'Balance Sheet'],
       workbookUrl: null,
       layer1Results: {},
+      step1Approved: true,
       useCompanyContext: true,
       pdfPageCount: 0,
       pdfUrl: null,
@@ -231,6 +241,7 @@ export function WizardProvider({ children }: { children: ReactNode }) {
         balance_sheet: MOCK_LAYER2_BALANCE_SHEET,
       },
       corrections: [],
+      step2Approved: false,
       currentStep: 2,
       activeSheetTab: 'Income Statement',
       selectedCell: null,
