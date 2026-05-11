@@ -20,16 +20,26 @@ from sqlalchemy.orm import Session
 from sqlalchemy import text as sa_text
 from app.services.claude_service import ClaudeService, get_claude_service
 from app.services.layer2_response_parser import parse_layer2_response
-from app.services.recalculate_service import RECALC_FN, CALCULATED_FIELDS
+from app.services.recalculate_service import (
+    recalculate_income_statement,
+    recalculate_balance_sheet,
+    recalculate_cash_flow_statement,
+    CALCULATED_FIELDS,
+)
 
-# Built from RECALC_FN so adding a new statement type requires one edit only.
-# prompt_key follows the convention "layer2_{stmt_key}".
 STATEMENT_CONFIG = {
-    stmt_key: {
-        "prompt_key": f"layer2_{stmt_key}",
-        "recalc_fn": fn,
-    }
-    for stmt_key, fn in RECALC_FN.items()
+    "income_statement": {
+        "prompt_key": "layer2_income_statement",
+        "recalc_fn": recalculate_income_statement,
+    },
+    "balance_sheet": {
+        "prompt_key": "layer2_balance_sheet",
+        "recalc_fn": recalculate_balance_sheet,
+    },
+    "cash_flow_statement": {
+        "prompt_key": "layer2_cash_flow_statement",
+        "recalc_fn": recalculate_cash_flow_statement,
+    },
 }
 
 

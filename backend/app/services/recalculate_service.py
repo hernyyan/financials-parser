@@ -298,14 +298,3 @@ def _match_status(python_result: float, ai_val: Optional[float]) -> str:
     if abs(python_result - ai_val) <= TOLERANCE:
         return 'match'
     return 'discrepancy'
-
-
-# Dispatch table: statement_type key → recalculation function.
-# Import this instead of the three individual functions to avoid
-# re-defining the mapping in every caller.
-from typing import Callable  # noqa: E402 — kept near what it types
-RECALC_FN: Dict[str, Callable] = {
-    'income_statement': recalculate_income_statement,
-    'balance_sheet': recalculate_balance_sheet,
-    'cash_flow_statement': recalculate_cash_flow_statement,
-}
