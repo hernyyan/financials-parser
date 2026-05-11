@@ -24,6 +24,26 @@ STATEMENT_KEYS: list[str] = [k for k, _ in STATEMENT_TYPES]
 STATEMENT_KEYS_SET: frozenset[str] = frozenset(STATEMENT_KEYS)
 
 
+def validate_statement_type(raw: str) -> str:
+    """
+    Normalise and validate a statement type string.
+
+    Raises ValueError with a consistent message if not recognised.
+    Returns the canonical snake_case key.
+
+    Use this wherever a statement type arrives from user input or an API
+    parameter. Routes that need an HTTP error should catch ValueError and
+    re-raise as HTTPException.
+    """
+    normalized = normalize_statement_type(raw)
+    if normalized not in STATEMENT_KEYS_SET:
+        raise ValueError(
+            f"Unknown statement_type '{raw}'. "
+            f"Expected one of: {', '.join(STATEMENT_KEYS)}."
+        )
+    return normalized
+
+
 def normalize_statement_type(raw: str) -> str:
     """
     Normalise a free-form statement type string to its canonical snake_case key.

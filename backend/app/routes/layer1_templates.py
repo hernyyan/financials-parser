@@ -10,13 +10,11 @@ from sqlalchemy.orm import Session
 from app.db.database import get_db
 from app.models.schemas import Layer1TemplateResponse
 from app.services.layer1_service import get_layer1_service
-from app.utils.statement_meta import STATEMENT_KEYS_SET
+from app.utils.statement_meta import validate_statement_type
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
-
-_VALID_TYPES = STATEMENT_KEYS_SET
 
 
 @router.get("/companies/{company_id}/layer1-templates/{statement_type}", response_model=Layer1TemplateResponse)
@@ -25,8 +23,10 @@ def get_layer1_template(
     statement_type: str,
     db: Session = Depends(get_db),
 ):
-    if statement_type not in _VALID_TYPES:
-        raise HTTPException(status_code=400, detail=f"Invalid statement_type: {statement_type}")
+    try:
+        statement_type = validate_statement_type(statement_type)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
     row = get_layer1_service().get_template(company_id, statement_type, db)
     if not row:
@@ -49,8 +49,10 @@ def upsert_layer1_template(
     payload: dict,
     db: Session = Depends(get_db),
 ):
-    if statement_type not in _VALID_TYPES:
-        raise HTTPException(status_code=400, detail=f"Invalid statement_type: {statement_type}")
+    try:
+        statement_type = validate_statement_type(statement_type)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
     get_layer1_service().save_template(company_id, statement_type, payload, db)
     return {"success": True}

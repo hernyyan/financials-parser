@@ -29,11 +29,10 @@ from app.services.layer1_extractor import (
     extract_rows_with_metadata,
     rows_to_csv_with_metadata,
 )
-from app.utils.statement_meta import STATEMENT_KEYS_SET, normalize_statement_type
+from app.utils.statement_meta import validate_statement_type
 
 logger = logging.getLogger(__name__)
 
-_VALID_TYPES = STATEMENT_KEYS_SET
 
 
 @dataclass
@@ -75,12 +74,7 @@ class Layer1Service:
             }
         """
         model = os.getenv("LAYER1_MODEL", "claude-sonnet-4-6")
-        normalized = normalize_statement_type(sheet_type)
-        if normalized not in _VALID_TYPES:
-            raise ValueError(
-                f"Unknown sheet_type '{sheet_type}'. "
-                "Expected 'income_statement', 'balance_sheet', or 'cash_flow_statement'."
-            )
+        normalized = validate_statement_type(sheet_type)
 
         # Step A: extract header rows for AI column identification
         header_text = self._extract_headers(filepath, sheet_name)

@@ -27,7 +27,7 @@ from sqlalchemy.orm import Session
 from app.config import PROMPTS_DIR
 from app.db.review_store import merge_layer1_data
 from app.services.claude_service import ClaudeService
-from app.utils.statement_meta import STATEMENT_KEYS_SET, normalize_statement_type
+from app.utils.statement_meta import validate_statement_type
 
 logger = logging.getLogger(__name__)
 
@@ -53,12 +53,10 @@ class Layer1PdfService:
         Returns a dict with keys:
           lineItems, sourceScaling, columnIdentified, sheetName
         """
-        normalized = normalize_statement_type(statement_type)
-        if normalized not in STATEMENT_KEYS_SET:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Unknown statement type: {statement_type}",
-            )
+        try:
+            normalized = validate_statement_type(statement_type)
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
 
         pdf_base64 = self._slice_and_encode(pdf_path, pages)
         prompt_text = self._load_prompt(normalized, reporting_period)
