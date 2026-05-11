@@ -174,18 +174,21 @@ def list_reviews(
     return {"total": total, "reviews": reviews}
 
 
-def export_review(session_id: str, db: Session) -> tuple[bytes, str]:
+def _load_review_for_export(
+    session_id: str, db: Session
+) -> tuple[str, str, dict, list, bytes]:
     """
-    Build a CSV export for a finalized review.
+    Shared core for both export entry points.
 
-    Returns (csv_bytes, filename).
+    Queries the review row, deserializes JSON columns, and builds the CSV.
+    Returns (company_name, reporting_period, final_output, corrections, csv_content).
     Raises HTTPException 404 if the session doesn't exist.
     """
     row = db.execute(
-        text("""
-            SELECT company_name, reporting_period, final_output
-            FROM reviews WHERE session_id = :sid
-        """),
+        text(
+            "SELECT company_name, reporting_period, final_output, corrections "
+            "FROM reviews WHERE session_id = :sid"
+        ),
         {"sid": session_id},
     ).fetchone()
 
@@ -195,14 +198,26 @@ def export_review(session_id: str, db: Session) -> tuple[bytes, str]:
             detail=f"Session '{session_id}' not found or not yet finalized.",
         )
 
-    final_output = deserialize_dict(row[2])
-    csv_content = get_template_service().build_export_csv(final_output)
+    final_output: dict = deserialize_dict(row[2])
+    corrections: list = deserialize_list(row[3])
+    csv_content: bytes = get_template_service().build_export_csv(final_output)
 
-    safe_company = re.sub(r"[^\w\s-]", "", row[0]).strip().replace(" ", "_")
-    safe_period = re.sub(r"[^\w\s-]", "", row[1]).strip().replace(" ", "_")
-    filename = f"{safe_company}_{safe_period}.csv"
+    return row[0], row[1], final_output, corrections, csv_content
 
-    return csv_content, filename
+
+def export_review(session_id: str, db: Session) -> tuple[bytes, str]:
+    """
+    Build a CSV export for a finalized review.
+
+    Returns (csv_bytes, filename).
+    Raises HTTPException 404 if the session doesn't exist.
+    """
+    company_name, period, _, _, csv_content = _load_review_for_export(session_id, db)
+
+    safe_company = re.sub(r"[^\w\s-]", "", company_name).strip().replace(" ", "_")
+    safe_period = re.sub(r"[^\w\s-]", "", period).strip().replace(" ", "_")
+
+    return csv_content, f"{safe_company}_{safe_period}.csv"
 
 
 def delete_review(session_id: str, db: Session) -> None:
@@ -232,24 +247,7 @@ def get_export_data(session_id: str, db: Session) -> dict[str, Any]:
 
     Raises HTTPException 404 if not found.
     """
-    row = db.execute(
-        text(
-            "SELECT company_name, reporting_period, final_output, corrections "
-            "FROM reviews WHERE session_id = :sid"
-        ),
-        {"sid": session_id},
-    ).fetchone()
-
-    if not row:
-        raise HTTPException(
-            status_code=404,
-            detail=f"Session '{session_id}' not found or not yet finalized.",
-        )
-
-    final_output: dict = deserialize_dict(row[2])
-    corrections: list = deserialize_list(row[3])
-
-    csv_content = get_template_service().build_export_csv(final_output)
+    _, _, final_output, corrections, csv_content = _load_review_for_export(session_id, db)
 
     flat_values: dict = {}
     for stmt_values in final_output.values():
