@@ -23,7 +23,6 @@ export type CompanySortField = 'name' | 'context_word_count' | 'total_correction
 export function useCompanyList() {
   const [companies, setCompanies] = useState<AdminCompany[]>([])
   const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
   const [search, setSearch] = useState('')
   const [adding, setAdding] = useState(false)
   const [addText, setAddText] = useState('')
@@ -36,7 +35,7 @@ export function useCompanyList() {
   useEffect(() => {
     adminGetCompanies()
       .then(setCompanies)
-      .catch((err) => setError(getErrorMessage(err, 'Failed to load companies.')))
+      .catch(console.error)
       .finally(() => setLoading(false))
   }, [])
 
@@ -101,7 +100,6 @@ export function useCompanyList() {
   return {
     companies,
     loading,
-    error,
     search,
     setSearch,
     adding,

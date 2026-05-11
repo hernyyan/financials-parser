@@ -13,7 +13,6 @@
  */
 import { useEffect, useState } from 'react'
 import { adminGetReviews, adminDeleteReview, AdminReview } from '../api/client'
-import { getErrorMessage } from '../utils/errorUtils'
 import { useTableSort } from './useTableSort'
 import { periodToSortKey } from '../utils/periodUtils'
 import { compareValues } from '../utils/sortUtils'
@@ -31,11 +30,9 @@ export function useReviewsList() {
   const { sortField, sortDir, handleSort } = useTableSort<SortField>('created_at', 'desc', ['created_at'])
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null)
   const [deleting, setDeleting] = useState<string | null>(null)
-  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     setLoading(true)
-    setError(null)
     adminGetReviews({
       status: statusFilter || undefined,
       company: companyFilter || undefined,
@@ -43,8 +40,7 @@ export function useReviewsList() {
     }).then((data) => {
       setReviews(data.reviews)
       setTotal(data.total)
-    }).catch((err) => setError(getErrorMessage(err, 'Failed to load reviews.')))
-      .finally(() => setLoading(false))
+    }).catch(console.error).finally(() => setLoading(false))
   }, [statusFilter, companyFilter])
 
   async function handleDelete(sessionId: string) {
@@ -93,7 +89,6 @@ export function useReviewsList() {
     displayed,
     total,
     loading,
-    error,
     statusFilter,
     setStatusFilter,
     companyFilter,

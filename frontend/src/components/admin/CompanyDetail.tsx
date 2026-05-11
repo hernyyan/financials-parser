@@ -26,7 +26,6 @@ export default function CompanyDetail({ companyId, onBack }: Props) {
     periods,
     corrections,
     loading,
-    error,
     renaming,
     renameText,
     setRenameText,
@@ -50,12 +49,6 @@ export default function CompanyDetail({ companyId, onBack }: Props) {
       <div className="flex items-center justify-center h-full">
         <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
       </div>
-    )
-  }
-
-  if (error) {
-    return (
-      <div className="flex items-center justify-center h-full text-red-500 text-sm">{error}</div>
     )
   }
 
