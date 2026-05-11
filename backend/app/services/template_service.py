@@ -3,6 +3,7 @@ Template service — loads and parses the firm's standardized output template.
 Provides the canonical field ordering used to render template tables in the UI.
 """
 import csv
+import io
 import re
 from collections import OrderedDict
 from dataclasses import dataclass
@@ -10,7 +11,7 @@ from pathlib import Path
 from typing import Any, Dict, FrozenSet, List, Optional
 
 from app.config import TEMPLATES_DIR
-from app.utils.statement_meta import STATEMENT_LABELS_SET
+from app.utils.statement_meta import STATEMENT_LABELS_SET, STATEMENT_TYPES
 
 STATEMENT_MARKERS = STATEMENT_LABELS_SET  # alias kept so template parsing code is unchanged
 
@@ -147,6 +148,42 @@ class TemplateService:
 
     def get_field_order(self, statement_type: str) -> List[str]:
         return self.template.get(statement_type, {}).get("allFields", [])
+
+    def build_export_csv(self, final_output: dict) -> str:
+        """
+        Build a CSV string from final_output, ordered by the canonical template
+        sequence with blank rows inserted as configured in blank_row_before_fields.
+
+        final_output: maps stmt_label ("Income Statement", …) → {field: value}
+        Returns: CSV as a string ready for download or display.
+        """
+        output = io.StringIO()
+        writer = csv.writer(output)
+
+        for stmt_key, stmt_label in STATEMENT_TYPES:
+            stmt_values: dict = final_output.get(stmt_label, {})
+            if not stmt_values:
+                continue
+
+            if stmt_label in self.blank_row_before_fields:
+                writer.writerow(["", ""])
+            writer.writerow([stmt_label, ""])
+
+            sections = self.template.get(stmt_key, {}).get("sections", [])
+            for section in sections:
+                header = section.get("header")
+                if header:
+                    if header in self.blank_row_before_fields:
+                        writer.writerow(["", ""])
+                    writer.writerow([header, ""])
+                for field in section.get("fields", []):
+                    if field in self.blank_row_before_fields:
+                        writer.writerow(["", ""])
+                    value = stmt_values.get(field)
+                    value_str = f"{value:.2f}" if value is not None else ""
+                    writer.writerow([field, value_str])
+
+        return output.getvalue()
 
 
 # ─── Global singleton ─────────────────────────────────────────────────────────

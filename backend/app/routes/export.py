@@ -2,9 +2,6 @@
 GET /export/{session_id}/csv — Generate a CSV export of the finalized output.
 Returns the CSV as a string in JSON (frontend renders it as a table).
 """
-import csv
-import io
-
 from fastapi import APIRouter, HTTPException, Depends
 from sqlalchemy.orm import Session
 from sqlalchemy import text
@@ -13,7 +10,6 @@ from app.models.schemas import ExportResponse
 from app.db.database import get_db
 from app.services.template_service import get_template_service
 from app.utils.json_utils import deserialize_dict, deserialize_list
-from app.utils.statement_meta import STATEMENT_TYPES
 
 router = APIRouter()
 
@@ -44,42 +40,15 @@ def get_export(session_id: str, db: Session = Depends(get_db)):
     corrected_fields = {c.get("fieldName", "") for c in corrections}
 
     template_svc = get_template_service()
-
-    blank_row_before = template_svc.blank_row_before_fields
-
-    output = io.StringIO()
-    writer = csv.writer(output)
+    csv_content = template_svc.build_export_csv(final_output)
 
     flat_values: dict = {}
-
-    for stmt_key, stmt_label in STATEMENT_TYPES:
-        stmt_values: dict = final_output.get(stmt_label, {})
-        if not stmt_values:
-            continue
-
-        flat_values.update(stmt_values)
-
-        if stmt_label in blank_row_before:
-            writer.writerow(["", ""])
-        writer.writerow([stmt_label, ""])
-
-        sections = template_svc.template.get(stmt_key, {}).get("sections", [])
-
-        for section in sections:
-            header = section.get("header")
-            if header:
-                if header in blank_row_before:
-                    writer.writerow(["", ""])
-                writer.writerow([header, ""])
-            for field in section.get("fields", []):
-                if field in blank_row_before:
-                    writer.writerow(["", ""])
-                value = stmt_values.get(field)
-                value_str = f"{value:.2f}" if value is not None else ""
-                writer.writerow([field, value_str])
+    for stmt_values in final_output.values():
+        if isinstance(stmt_values, dict):
+            flat_values.update(stmt_values)
 
     return ExportResponse(
         session_id=session_id,
-        csv_content=output.getvalue(),
+        csv_content=csv_content,
         final_values=flat_values,
     )
