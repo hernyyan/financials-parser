@@ -7,16 +7,12 @@
  */
 import { useState } from 'react'
 import { runLayer1, saveLayer1Template, checkExistingReview } from '../api/client'
-import type { Layer1Result, Layer1Template, Layer1TemplateRow, TemplateCheckResult, StatusMessage, DuplicateCheck, PendingExtraction } from '../types'
-import { ALL_STATEMENT_TYPES } from '../utils/statementMeta'
+import type { Layer1Result, Layer1Template, Layer1TemplateRow, TemplateCheckResult, StatusMessage, DuplicateCheck, PendingExtraction, StatementType } from '../types'
+import { ALL_STATEMENT_TYPES, createStmtRecord } from '../utils/statementMeta'
 
 export type ExtractionStatus = 'idle' | 'running' | 'done' | 'error'
 
-export type Assignments = {
-  income_statement: string
-  balance_sheet: string
-  cash_flow_statement: string
-}
+export type Assignments = Record<StatementType, string>
 
 export type TemplateReviewState = {
   mode: 'new' | 'delta'
@@ -36,11 +32,7 @@ export interface ExcelExtractionDeps {
   setPendingExtraction: (v: PendingExtraction) => void
 }
 
-const EMPTY_ASSIGNMENTS: Assignments = {
-  income_statement: '',
-  balance_sheet: '',
-  cash_flow_statement: '',
-}
+const EMPTY_ASSIGNMENTS: Assignments = createStmtRecord('')
 
 export function useExcelExtraction({
   sessionId,

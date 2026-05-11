@@ -21,7 +21,8 @@ import {
   appendToCompanyDataset,
 } from '../../api/client'
 import { API_BASE } from '../../api/client'
-import type { Company, CompanyContextStatus, StatusMessage } from '../../types'
+import type { Company, CompanyContextStatus, StatusMessage, StatementType } from '../../types'
+import { ALL_STATEMENT_TYPES, STATEMENT_LABELS } from '../../utils/statementMeta'
 import { useFileUpload } from '../../hooks/useFileUpload'
 import {
   Upload,
@@ -218,20 +219,12 @@ export default function Step1Upload() {
     setActiveSheetTab(tab)
   }
 
-  const showL1Results =
-    extractionStatus === 'done' &&
-    (
-      layer1Results['income_statement'] ||
-      layer1Results['balance_sheet'] ||
-      layer1Results['cash_flow_statement']
-    )
+  const hasAnyL1Results = ALL_STATEMENT_TYPES.some((t) => layer1Results[t])
+
+  const showL1Results = extractionStatus === 'done' && hasAnyL1Results
 
   const canApprove = !!(
-    (
-      layer1Results['income_statement'] ||
-      layer1Results['balance_sheet'] ||
-      layer1Results['cash_flow_statement']
-    ) &&
+    hasAnyL1Results &&
     extractionStatus !== 'running' &&
     !Object.values(pdfExtracting).some(Boolean)
   )
@@ -243,10 +236,7 @@ export default function Step1Upload() {
     return false
   })
 
-  const anyAssigned =
-    assignments.income_statement !== '' ||
-    assignments.balance_sheet !== '' ||
-    assignments.cash_flow_statement !== ''
+  const anyAssigned = ALL_STATEMENT_TYPES.some((t) => assignments[t as StatementType] !== '')
 
   const canRunExtraction =
     hasUpload &&
@@ -424,14 +414,10 @@ export default function Step1Upload() {
                 </div>
               ) : showL1Results ? (
                 <div className="flex-1 overflow-auto p-4 space-y-6">
-                  {layer1Results['income_statement'] && (
-                    <Layer1ResultsTable result={layer1Results['income_statement']} label="Income Statement" />
-                  )}
-                  {layer1Results['balance_sheet'] && (
-                    <Layer1ResultsTable result={layer1Results['balance_sheet']} label="Balance Sheet" />
-                  )}
-                  {layer1Results['cash_flow_statement'] && (
-                    <Layer1ResultsTable result={layer1Results['cash_flow_statement']} label="Cash Flow Statement" />
+                  {ALL_STATEMENT_TYPES.map((t) =>
+                    layer1Results[t] && (
+                      <Layer1ResultsTable key={t} result={layer1Results[t]} label={STATEMENT_LABELS[t]} />
+                    )
                   )}
                 </div>
               ) : (
