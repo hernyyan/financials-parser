@@ -1,57 +1,9 @@
-import { useState } from 'react'
 import { CompanyPeriodData } from './AdminApiClient'
-import { getTemplate } from '../../api/client'
-import { useEffect } from 'react'
 import { BOLD_FIELDS, ITALIC_FIELDS, isIndented } from '../../utils/templateStyling'
-import type { TemplateResponse } from '../../types'
+import { useCompanyDataTable, DataView } from '../../hooks/useCompanyDataTable'
 
 interface Props {
   periods: CompanyPeriodData[]
-}
-
-type View = 'l1' | 'l2'
-
-const MONTH_NAMES = ['January','February','March','April','May','June','July','August','September','October','November','December']
-const MONTH_SHORT  = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
-
-function parseReportingPeriod(period: string): { year: number; month: number; key: string } | null {
-  const months: Record<string, number> = {
-    january: 1, february: 2, march: 3, april: 4, may: 5, june: 6,
-    july: 7, august: 8, september: 9, october: 10, november: 11, december: 12,
-    jan: 1, feb: 2, mar: 3, apr: 4, jun: 6, jul: 7, aug: 8,
-    sep: 9, oct: 10, nov: 11, dec: 12,
-  }
-  const parts = period.trim().split(/[\s\-_]+/)
-  if (parts.length < 2) return null
-  let month: number | undefined
-  let year: number | undefined
-  for (const part of parts) {
-    const asNum = parseInt(part)
-    if (!isNaN(asNum) && asNum > 1900) { year = asNum; continue }
-    const m = months[part.toLowerCase()]
-    if (m) { month = m; continue }
-  }
-  if (!month || !year) return null
-  return { year, month, key: `${year}-${String(month).padStart(2, '0')}` }
-}
-
-function generateMonthRange(
-  start: { year: number; month: number },
-  end: { year: number; month: number },
-): { year: number; month: number; key: string; label: string; shortLabel: string }[] {
-  const result = []
-  let y = start.year, m = start.month
-  while (y < end.year || (y === end.year && m <= end.month)) {
-    result.push({
-      year: y, month: m,
-      key: `${y}-${String(m).padStart(2, '0')}`,
-      label: `${MONTH_NAMES[m - 1]} ${y}`,
-      shortLabel: `${MONTH_SHORT[m - 1]} ${y}`,
-    })
-    m++
-    if (m > 12) { m = 1; y++ }
-  }
-  return result
 }
 
 function formatVal(v: unknown): string {
@@ -66,94 +18,20 @@ function formatVal(v: unknown): string {
 }
 
 export default function CompanyDataTable({ periods }: Props) {
-  const [view, setView] = useState<View>('l2')
-  const [template, setTemplate] = useState<TemplateResponse | null>(null)
-
-  useEffect(() => {
-    getTemplate().then(setTemplate).catch(console.error)
-  }, [])
+  const { view, setView, columns, labels, getCellValue, hasPeriod } = useCompanyDataTable({ periods })
 
   if (periods.length === 0) {
     return <p className="text-[12px] text-muted-foreground p-4">No finalized data for this company.</p>
   }
 
-  // Build a map from period key → period data
-  const periodByKey = new Map<string, CompanyPeriodData>()
-  let minParsed: { year: number; month: number } | null = null
-  let maxParsed: { year: number; month: number } | null = null
-
-  for (const p of periods) {
-    const parsed = parseReportingPeriod(p.reporting_period)
-    if (!parsed) {
-      console.warn('CompanyDataTable: failed to parse period:', p.reporting_period)
-      continue
-    }
-    periodByKey.set(parsed.key, p)
-    if (!minParsed || parsed.key < `${minParsed.year}-${String(minParsed.month).padStart(2, '0')}`) minParsed = parsed
-    if (!maxParsed || parsed.key > `${maxParsed.year}-${String(maxParsed.month).padStart(2, '0')}`) maxParsed = parsed
-  }
-
-  if (!minParsed || !maxParsed) {
+  if (columns.length === 0) {
     return <p className="text-[12px] text-muted-foreground p-4">No parseable period data.</p>
-  }
-
-  const columns = generateMonthRange(minParsed, maxParsed)
-
-  // Collect row labels
-  let labels: string[] = []
-  if (view === 'l2' && template) {
-    // Use template field order for L2
-    for (const stmt of ['income_statement', 'balance_sheet', 'cash_flow_statement'] as const) {
-      for (const section of template[stmt]?.sections ?? []) {
-        for (const field of section.fields) {
-          if (!labels.includes(field)) labels.push(field)
-        }
-      }
-    }
-  } else {
-    // L1: collect all unique lineItem keys across all periods
-    // layer1_data is keyed by tab name: { tabName: { lineItems: {...}, ... }, ... }
-    const allKeys = new Set<string>()
-    for (const p of periods) {
-      const data = p.layer1_data
-      if (!data) continue
-      for (const tabKey of Object.keys(data as object)) {
-        const tab = (data as Record<string, unknown>)[tabKey] as Record<string, unknown> | undefined
-        const lineItems = tab?.lineItems as Record<string, unknown> | undefined
-        if (lineItems) Object.keys(lineItems).forEach((k) => allKeys.add(k))
-      }
-    }
-    labels = Array.from(allKeys)
-  }
-
-  function getCellValue(colKey: string, label: string): unknown {
-    const p = periodByKey.get(colKey)
-    if (!p) return null
-    const data = view === 'l1' ? p.layer1_data : p.layer2_data
-    if (!data) return null
-    if (view === 'l1') {
-      // layer1_data is stored as { tabName: { lineItems: {...}, ... }, ... }
-      const d = data as Record<string, unknown>
-      for (const tabKey of Object.keys(d)) {
-        const tab = d[tabKey] as Record<string, unknown> | undefined
-        const lineItems = tab?.lineItems as Record<string, unknown> | undefined
-        if (lineItems && label in lineItems) return lineItems[label]
-      }
-      return null
-    }
-    const is = (data as Record<string, unknown>).income_statement as Record<string, unknown> | undefined
-    const bs = (data as Record<string, unknown>).balance_sheet as Record<string, unknown> | undefined
-    const cfs = (data as Record<string, unknown>).cash_flow_statement as Record<string, unknown> | undefined
-    const isVals = is?.values as Record<string, unknown> | undefined
-    const bsVals = bs?.values as Record<string, unknown> | undefined
-    const cfsVals = cfs?.values as Record<string, unknown> | undefined
-    return isVals?.[label] ?? bsVals?.[label] ?? cfsVals?.[label] ?? null
   }
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
       <div className="flex items-center gap-2 px-4 py-2 border-b border-border bg-gray-50 shrink-0">
-        {(['l2', 'l1'] as View[]).map((v) => (
+        {(['l2', 'l1'] as DataView[]).map((v) => (
           <button
             key={v}
             onClick={() => setView(v)}
@@ -171,18 +49,15 @@ export default function CompanyDataTable({ periods }: Props) {
           <thead>
             <tr className="bg-gray-50 border-b border-border sticky top-0">
               <th className="text-left px-3 py-2 text-muted-foreground min-w-[220px]" style={{ fontWeight: 500 }}>Field</th>
-              {columns.map((col) => {
-                const hasData = periodByKey.has(col.key)
-                return (
-                  <th
-                    key={col.key}
-                    className={`text-right px-3 py-2 whitespace-nowrap font-mono min-w-[100px] ${hasData ? 'text-muted-foreground' : 'text-gray-300'}`}
-                    style={{ fontWeight: 500 }}
-                  >
-                    {col.shortLabel}
-                  </th>
-                )
-              })}
+              {columns.map((col) => (
+                <th
+                  key={col.key}
+                  className={`text-right px-3 py-2 whitespace-nowrap font-mono min-w-[100px] ${hasPeriod(col.key) ? 'text-muted-foreground' : 'text-gray-300'}`}
+                  style={{ fontWeight: 500 }}
+                >
+                  {col.shortLabel}
+                </th>
+              ))}
             </tr>
           </thead>
           <tbody>
@@ -199,12 +74,11 @@ export default function CompanyDataTable({ periods }: Props) {
                 {columns.map((col) => {
                   const val = getCellValue(col.key, label)
                   const display = formatVal(val)
-                  const isGap = !periodByKey.has(col.key)
                   return (
                     <td
                       key={col.key}
                       className={`px-3 py-1.5 text-right font-mono ${
-                        isGap ? 'text-gray-200' :
+                        !hasPeriod(col.key) ? 'text-gray-200' :
                         display === '—' ? 'text-muted-foreground' :
                         typeof val === 'number' && val < 0 ? 'text-red-600' : ''
                       }`}
