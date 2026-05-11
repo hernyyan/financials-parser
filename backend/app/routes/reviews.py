@@ -93,7 +93,7 @@ def continue_previous_review(
 
     return {
         "session_id": new_session_id,
-        "company_name": company_name,
+        "company_name": company[0],
         "reporting_period": request.reporting_period,
         "layer1_data": deserialize_dict(source[1]),
         "layer2_data": deserialize_dict(source[2]),
