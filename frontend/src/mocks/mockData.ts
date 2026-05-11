@@ -256,3 +256,112 @@ export const MOCK_LAYER2_BALANCE_SHEET: Layer2Result = {
     'Total Current Assets': ['Check BS-2 - Total Current Assets components'],
   },
 }
+
+// Income Statement template fields in order (matching loader_template.csv)
+export const IS_TEMPLATE_FIELDS = [
+  'Gross Revenue',
+  'Net Revenue',
+  'Total Revenue',
+  'COGS',
+  'COGS - Depreciation & Amortization',
+  'Gross Profit',
+  'Gross Profit Margin %',
+  'Sales & Marketing Expenses',
+  'Administrative Expenses',
+  'Compensation & Benefits Expense',
+  'Research & Development',
+  'Rent Expense',
+  'Management Fee Expense',
+  'Other Operating Expenses',
+  'Total Operating Expenses',
+  'Net Operating Income',
+  'Depreciation & Amortization',
+  'Loss/(Gain) on Assets, Debt, FX',
+  'Non-Operating Expenses',
+  'Non-Operating Expenses - Depreciation & Amortization',
+  'Interest Expense/(Income)',
+  'Other Income',
+  'Other Expenses',
+  'Total Expense/(Income)',
+  'Income (Loss) Before Taxes',
+  'Taxes',
+  'Net Income (Loss)',
+  'EBIT',
+  'EBITDA',
+  'EBITDA Adjustments',
+  'Adjusted EBITDA',
+  'Covenant EBITDA',
+  'EBITDA Margin %',
+  'Adjusted EBITDA Margin %',
+  'Covenant EBITDA Margin %',
+]
+
+// Balance Sheet template fields in order
+export const BS_TEMPLATE_FIELDS = [
+  'Cash & Cash Equivalents',
+  'Short Term Investments',
+  'Accounts Receivable',
+  'Inventory',
+  'Prepaid Expenses',
+  'Other Current Assets',
+  'Total Current Assets',
+  'Property, Plant & Equipment',
+  'Accumulated Depreciation',
+  'Total Fixed Assets',
+  'Other Non-Current Assets',
+  'Goodwill & Intangibles',
+  'Total Non-Current Assets',
+  'Total Assets',
+  'Accounts Payable',
+  'Short Term Loans',
+  'Short Term Capitalized Leases',
+  'Short Term Mortgages',
+  'Short Term Debt',
+  'Accrued Liabilities',
+  'Other Current Liabilities',
+  'Total Current Liabilities',
+  'Long Term Loans',
+  'Long Term Capitalized Leases',
+  'Long Term Mortgages',
+  'Long Term Debt',
+  'Deferred Liabilities',
+  'Other Non-Current Liabilities',
+  'Total Non-Current Liabilities',
+  'Total Liabilities',
+  'Preferred Stock',
+  'Common Stock',
+  'Paid in Capital',
+  'Other Comprehensive Income',
+  'Retained Earnings',
+  'Minority Interest',
+  'Total Equity',
+  'Total Liabilities and Equity',
+  'Check',
+]
+
+// Helper: format a financial number
+export function formatCurrency(value: number | null | undefined): string {
+  if (value === null || value === undefined) return '—'
+  if (Math.abs(value) >= 1000000) {
+    return `$${(value / 1000000).toFixed(2)}M`
+  }
+  return new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency: 'USD',
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(value)
+}
+
+export function formatPercent(value: number | null | undefined): string {
+  if (value === null || value === undefined) return '—'
+  return `${value.toFixed(2)}%`
+}
+
+export function formatValue(fieldName: string, value: number | null | undefined): string {
+  if (value === null || value === undefined) return '—'
+  if (fieldName.includes('%') || fieldName.includes('Margin')) {
+    return formatPercent(value)
+  }
+  return formatCurrency(value)
+}

@@ -19,7 +19,7 @@
  */
 import { useEffect, useMemo, useState } from 'react'
 import { getTemplate } from '../api/client'
-import { IS_TEMPLATE_FIELDS, BS_TEMPLATE_FIELDS } from '../utils/templateFields'
+import { IS_TEMPLATE_FIELDS, BS_TEMPLATE_FIELDS } from '../mocks/mockData'
 import { buildSourceRows } from '../utils/classifyRows'
 import type { DataTableRow } from '../components/shared/DataTable'
 import type {
