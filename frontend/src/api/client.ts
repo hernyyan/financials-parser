@@ -39,6 +39,11 @@ export async function putJson<T>(url: string, body: unknown): Promise<T> {
   return handleResponse<T>(res)
 }
 
+export async function getJson<T>(url: string): Promise<T> {
+  const res = await fetch(url)
+  return handleResponse<T>(res)
+}
+
 export async function handleResponse<T>(res: Response): Promise<T> {
   if (!res.ok) {
     let message = `API error ${res.status}`
@@ -137,8 +142,7 @@ export async function saveCorrection(payload: CorrectionRequest): Promise<void> 
 
 // GET /template
 export async function getTemplate(): Promise<TemplateResponse> {
-  const res = await fetch(`${API_BASE}/template`)
-  return handleResponse<TemplateResponse>(res)
+  return getJson<TemplateResponse>(`${API_BASE}/template`)
 }
 
 // POST /finalize
@@ -148,8 +152,7 @@ export async function finalizeOutput(data: FinalizeRequest): Promise<FinalizeRes
 
 // GET /export/{session_id}/csv
 export async function getExport(sessionId: string): Promise<ExportResponse> {
-  const res = await fetch(`${API_BASE}/export/${encodeURIComponent(sessionId)}/csv`)
-  return handleResponse<ExportResponse>(res)
+  return getJson<ExportResponse>(`${API_BASE}/export/${encodeURIComponent(sessionId)}/csv`)
 }
 
 // Build a full PDF URL from a relative path returned by the backend
@@ -159,8 +162,7 @@ export function buildPdfUrl(relativePath: string): string {
 
 // GET /companies
 export async function getCompanies(): Promise<Company[]> {
-  const res = await fetch(`${API_BASE}/companies`)
-  return handleResponse<Company[]>(res)
+  return getJson<Company[]>(`${API_BASE}/companies`)
 }
 
 // POST /companies
@@ -177,16 +179,13 @@ export async function processCorrections(
 
 // GET /companies/{id}/context-status
 export async function getCompanyContextStatus(companyId: number): Promise<CompanyContextStatus> {
-  const res = await fetch(`${API_BASE}/companies/${companyId}/context-status`)
-  return handleResponse<CompanyContextStatus>(res)
+  return getJson<CompanyContextStatus>(`${API_BASE}/companies/${companyId}/context-status`)
 }
 
 // GET /reviews/check-existing
 export async function checkExistingReview(companyId: number, reportingPeriod: string): Promise<ExistingReviewCheck> {
   const params = new URLSearchParams({ company_id: String(companyId), reporting_period: reportingPeriod })
-  const res = await fetch(`${API_BASE}/reviews/check-existing?${params}`)
-  if (!res.ok) throw new Error('Failed to check existing review')
-  return res.json()
+  return getJson<ExistingReviewCheck>(`${API_BASE}/reviews/check-existing?${params}`)
 }
 
 // POST /reviews/continue-previous
