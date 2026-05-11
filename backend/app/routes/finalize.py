@@ -1,11 +1,12 @@
 """
 POST /finalize — Merge corrections with Layer 2 values and save to the DB.
 """
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
 from app.models.schemas import FinalizeRequest, FinalizeResponse
 from app.db.database import get_db
+from app.db.transaction import db_transaction
 from app.services.template_service import get_template_service
 from app.services.finalize_service import get_finalize_service
 
@@ -20,7 +21,7 @@ def finalize_output(request: FinalizeRequest, db: Session = Depends(get_db)):
     """
     final_output = get_template_service().assemble_final_output(request.finalValues)
 
-    try:
+    with db_transaction(db, "Failed to finalize"):
         finalized_at = get_finalize_service().persist(
             session_id=request.sessionId,
             company_name=request.companyName,
@@ -29,13 +30,6 @@ def finalize_output(request: FinalizeRequest, db: Session = Depends(get_db)):
             corrections=[c.model_dump() for c in request.corrections],
             db=db,
         )
-        db.commit()
-    except HTTPException:
-        db.rollback()
-        raise
-    except Exception as e:
-        db.rollback()
-        raise HTTPException(status_code=500, detail=str(e))
 
     return FinalizeResponse(
         success=True,

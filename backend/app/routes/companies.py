@@ -4,17 +4,15 @@ POST /companies              — Create a new company.
 POST /companies/{id}/reprocess-corrections
                              — Developer tool: resets and reruns the AI pipeline for a company.
 """
-import logging
-
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.db.database import get_db
+from app.db.transaction import db_transaction
 from app.models.schemas import CompanyCreate, CompanyResponse, ReprocessResponse, ReprocessCorrectionResult
 from app.services.company_service import create_company as _create_company, get_company_or_404, list_companies as _list_companies
 from app.utils.text_utils import markdown_body_word_count, count_context_rules
 
-logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
@@ -27,16 +25,8 @@ def list_companies(db: Session = Depends(get_db)):
 @router.post("/companies", response_model=CompanyResponse, status_code=201)
 def create_company(request: CompanyCreate, db: Session = Depends(get_db)):
     """Create a new company record."""
-    try:
+    with db_transaction(db, "Failed to create company"):
         new_id, name = _create_company(request.name, db)
-        db.commit()
-    except HTTPException:
-        db.rollback()
-        raise
-    except Exception as exc:
-        db.rollback()
-        logger.warning("Failed to create company '%s': %s", request.name, exc)
-        raise HTTPException(status_code=500, detail=f"Failed to create company: {exc}")
     return CompanyResponse(id=new_id, name=name)
 
 
