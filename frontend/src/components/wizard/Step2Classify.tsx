@@ -1,17 +1,26 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useWizardState } from '../../hooks/useWizardState'
 import { useClassification } from '../../hooks/useClassification'
-import { useStep2Classify } from '../../hooks/useStep2Classify'
-import { useCorrections } from '../../hooks/useCorrections'
-import { buildTemplateRows } from '../../utils/classifyRows'
 import DataTable from '../shared/DataTable'
 import SidePanel from '../shared/SidePanel'
 import LoadingSpinner from '../shared/LoadingSpinner'
 import StatusBanner from '../shared/StatusBanner'
+import { getTemplate } from '../../api/client'
+import { IS_TEMPLATE_FIELDS, BS_TEMPLATE_FIELDS } from '../../mocks/mockData'
+import { useCorrections } from '../../hooks/useCorrections'
+import { buildSourceRows, buildTemplateRows } from '../../utils/classifyRows'
+import type { Layer2Result, TemplateResponse, TemplateSection } from '../../types'
 import ClassifyActionBar from './ClassifyActionBar'
 import ClassifyLoadingView from './ClassifyLoadingView'
 
 type StatusMessage = { type: 'success' | 'error' | 'info'; message: string } | null
+
+function buildFallbackSections(): { is: TemplateSection[]; bs: TemplateSection[] } {
+  return {
+    is: [{ header: null, fields: IS_TEMPLATE_FIELDS }],
+    bs: [{ header: null, fields: BS_TEMPLATE_FIELDS }],
+  }
+}
 
 export default function Step2Classify() {
   const {
@@ -34,27 +43,16 @@ export default function Step2Classify() {
     setSidePanelOpen,
   } = useWizardState()
 
+  const [template, setTemplate] = useState<TemplateResponse | null>(null)
   const [status, setStatus] = useState<StatusMessage>(null)
+  const [approvingStep2, setApprovingStep2] = useState(false)
 
-  const {
-    selectedCellType,
-    isLayer2,
-    bsLayer2,
-    cfsLayer2,
-    hasBothResults,
-    activeLayer2,
-    existingCorrection,
-    isSections,
-    bsSections,
-    cfsSections,
-    sourceIsRows,
-    sourceBsRows,
-    sourceCfsRows,
-    relevantSourceLabels,
-    passCount,
-    failCount,
-    flaggedCount,
-  } = useStep2Classify({ selectedCell, layer1Results, layer2Results, corrections })
+  const isLayer2 = layer2Results['income_statement']
+  const bsLayer2 = layer2Results['balance_sheet']
+  const cfsLayer2 = layer2Results['cash_flow_statement']
+
+  const hasBothResults =
+    !!isLayer2 && !!bsLayer2 && (!layer1Results['cash_flow_statement'] || !!cfsLayer2)
 
   const {
     stmtStatus,
@@ -79,6 +77,46 @@ export default function Step2Classify() {
   const allSettled = Object.values(stmtStatus).every((s) => s !== 'loading')
   const hasAnyError = Object.values(stmtStatus).some((s) => s === 'error')
 
+  useEffect(() => {
+    getTemplate().then(setTemplate).catch(() => {})
+  }, [])
+
+  // Escape key: close side panel
+  useEffect(() => {
+    function handleKeyDown(e: KeyboardEvent) {
+      if (e.key === 'Escape' && sidePanelOpen) {
+        setSidePanelOpen(false)
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [sidePanelOpen, setSidePanelOpen])
+
+  useEffect(() => {
+    if (hasBothResults) {
+      markAllDone()
+      return
+    }
+    runClassification()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  const isAllFields = template?.income_statement.allFields ?? IS_TEMPLATE_FIELDS
+  const cfsAllFields = template?.cash_flow_statement?.allFields ?? []
+
+  // Stable field→statement map — computed once per template load, not per cell click.
+  // Last-write wins on collision: IS overrides BS/CFS, CFS overrides BS.
+  const fieldStatementMap = useMemo<Record<string, 'income_statement' | 'balance_sheet' | 'cash_flow_statement'>>(() => {
+    const map: Record<string, 'income_statement' | 'balance_sheet' | 'cash_flow_statement'> = {}
+    for (const f of (template?.balance_sheet.allFields ?? BS_TEMPLATE_FIELDS)) map[f] = 'balance_sheet'
+    for (const f of (template?.cash_flow_statement?.allFields ?? [])) map[f] = 'cash_flow_statement'
+    for (const f of isAllFields) map[f] = 'income_statement'
+    return map
+  }, [template])
+
+  const selectedCellType: 'income_statement' | 'balance_sheet' | 'cash_flow_statement' | null =
+    selectedCell ? (fieldStatementMap[selectedCell] ?? 'balance_sheet') : null
+
   const {
     pendingValues,
     clearPending,
@@ -99,29 +137,51 @@ export default function Step2Classify() {
     onStatus: setStatus,
   })
 
-  // Escape key: close side panel
-  useEffect(() => {
-    function handleKeyDown(e: KeyboardEvent) {
-      if (e.key === 'Escape' && sidePanelOpen) setSidePanelOpen(false)
-    }
-    window.addEventListener('keydown', handleKeyDown)
-    return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [sidePanelOpen, setSidePanelOpen])
+  const activeLayer2: Layer2Result | null = selectedCellType
+    ? (layer2Results[selectedCellType] ?? null)
+    : null
 
-  useEffect(() => {
-    if (hasBothResults) { markAllDone(); return }
-    runClassification()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  const { is: fallbackIs, bs: fallbackBs } = buildFallbackSections()
+  const isSections = template?.income_statement.sections ?? fallbackIs
+  const bsSections = template?.balance_sheet.sections ?? fallbackBs
 
   const isPending = selectedCellType === 'income_statement' ? pendingValues : null
   const bsPending = selectedCellType === 'balance_sheet' ? pendingValues : null
   const cfsPending = selectedCellType === 'cash_flow_statement' ? pendingValues : null
-  const isTemplateRows = buildTemplateRows(isSections, 'Income Statement', isLayer2 ?? undefined, corrections, selectedCell, isPending)
-  const bsTemplateRows = buildTemplateRows(bsSections, 'Balance Sheet', bsLayer2 ?? undefined, corrections, selectedCell, bsPending)
+  const isTemplateRows = buildTemplateRows(isSections, 'Income Statement', isLayer2, corrections, selectedCell, isPending)
+  const bsTemplateRows = buildTemplateRows(bsSections, 'Balance Sheet', bsLayer2, corrections, selectedCell, bsPending)
+  const cfsSections = template?.cash_flow_statement?.sections ?? []
   const cfsTemplateRows = cfsSections.length > 0
-    ? buildTemplateRows(cfsSections, 'Cash Flow Statement', cfsLayer2 ?? undefined, corrections, selectedCell, cfsPending)
+    ? buildTemplateRows(cfsSections, 'Cash Flow Statement', cfsLayer2, corrections, selectedCell, cfsPending)
     : []
+
+  const isData = layer1Results['income_statement']
+  const bsData = layer1Results['balance_sheet']
+  const cfsData = layer1Results['cash_flow_statement']
+  const sourceIsRows = isData ? buildSourceRows({ [isData.sourceSheet]: isData }) : []
+  const sourceBsRows = bsData ? buildSourceRows({ [bsData.sourceSheet]: bsData }) : []
+  const sourceCfsRows = cfsData ? buildSourceRows({ [cfsData.sourceSheet]: cfsData }) : []
+
+  const existingCorrection = selectedCell
+    ? corrections.find((c) => c.fieldName === selectedCell)
+    : undefined
+
+  // Compute which source line item labels map to the selected template field
+  const relevantSourceLabels: Set<string> = (() => {
+    if (!selectedCell || !activeLayer2) return new Set()
+    const labels = activeLayer2.sourceLabels?.[selectedCell]
+    if (labels && labels.length > 0) return new Set(labels)
+    return new Set()
+  })()
+
+  const allValidation = { ...(isLayer2?.validation ?? {}), ...(bsLayer2?.validation ?? {}) }
+  const passCount = Object.values(allValidation).filter((v) => v.status === 'PASS').length
+  const failCount = Object.values(allValidation).filter((v) => v.status === 'FAIL').length
+  const flaggedCount = [
+    ...(isLayer2?.flaggedFields ?? []),
+    ...(bsLayer2?.flaggedFields ?? []),
+    ...(cfsLayer2?.flaggedFields ?? []),
+  ].length
 
   async function handleApproveStep2() {
     approveStep2()
@@ -148,7 +208,7 @@ export default function Step2Classify() {
         hasAnyResults={hasAnyResults}
         isClassifying={isClassifying}
         hasAnyError={hasAnyError}
-        approvingStep2={false}
+        approvingStep2={approvingStep2}
         passCount={passCount}
         failCount={failCount}
         flaggedCount={flaggedCount}
