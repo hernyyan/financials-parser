@@ -8,14 +8,17 @@ import { getFailingFieldNames, buildFinalizeRows } from '../../utils/finalizeRow
 import type { FinalizeRow } from '../../utils/finalizeRows'
 import { formatDollar } from '../../utils/formatters'
 import FinalizeTable from './FinalizeTable'
-import FinalizeActionBar from './FinalizeActionBar'
 import type { TemplateResponse, TemplateSection } from '../../types'
 import {
+  ArrowLeft,
   CheckCircle2,
+  Download,
+  RotateCcw,
   Edit3,
   Flag,
   Scale,
   XCircle,
+  Loader2,
 } from 'lucide-react'
 
 type StatusMessage = { type: 'success' | 'error' | 'info'; message: string } | null
@@ -151,15 +154,65 @@ export default function Step3Finalize() {
   return (
     <div className="flex flex-col h-full">
       {/* Toolbar */}
-      <FinalizeActionBar
-        finalized={finalized}
-        saving={saving}
-        exporting={exporting}
-        onBack={backToStep2}
-        onFinalize={handleFinalize}
-        onExportCsv={handleExportCsv}
-        onReset={resetWizard}
-      />
+      <div className="flex items-center gap-3 px-4 py-2.5 border-b border-border bg-gray-50/80 shrink-0">
+        <button
+          onClick={backToStep2}
+          disabled={finalized}
+          className="flex items-center gap-1.5 text-[13px] text-muted-foreground hover:text-foreground transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+        >
+          <ArrowLeft className="w-3.5 h-3.5" />
+          Back to Review
+        </button>
+
+        <div className="flex-1" />
+
+        {!finalized ? (
+          <button
+            onClick={handleFinalize}
+            disabled={saving}
+            className="flex items-center gap-2 bg-emerald-600 text-white px-4 py-1.5 rounded-lg text-[13px] hover:bg-emerald-700 transition-colors disabled:opacity-50"
+            style={{ fontWeight: 500 }}
+          >
+            {saving ? (
+              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+            ) : (
+              <Download className="w-3.5 h-3.5" />
+            )}
+            {saving ? 'Saving...' : 'Finalize & Save'}
+          </button>
+        ) : (
+          <>
+            <span
+              className="flex items-center gap-1.5 text-[13px] text-emerald-600 bg-emerald-50 px-3 py-1.5 rounded-lg"
+              style={{ fontWeight: 500 }}
+            >
+              <CheckCircle2 className="w-3.5 h-3.5" />
+              Finalized
+            </span>
+            <button
+              onClick={handleExportCsv}
+              disabled={exporting}
+              className="flex items-center gap-2 px-4 py-1.5 rounded-lg border border-border text-[13px] hover:bg-gray-50 transition-colors disabled:opacity-50"
+              style={{ fontWeight: 500 }}
+            >
+              {exporting ? (
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              ) : (
+                <Download className="w-3.5 h-3.5" />
+              )}
+              {exporting ? 'Exporting...' : 'Download CSV'}
+            </button>
+            <button
+              onClick={resetWizard}
+              className="flex items-center gap-2 bg-primary text-white px-4 py-1.5 rounded-lg text-[13px] hover:bg-primary/90 transition-colors"
+              style={{ fontWeight: 500 }}
+            >
+              <RotateCcw className="w-3.5 h-3.5" />
+              Start New Review
+            </button>
+          </>
+        )}
+      </div>
 
       <div className="flex-1 overflow-auto px-4 py-3">
         {/* Error banner */}
