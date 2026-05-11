@@ -1,108 +1,33 @@
-import { useEffect, useState } from 'react'
 import { Loader2, Download, Trash2 } from 'lucide-react'
-import { adminGetReviews, adminExportReviewUrl, adminDeleteReview, AdminReview } from './AdminApiClient'
+import { adminExportReviewUrl } from './AdminApiClient'
+import { useReviewsList, SortField, CorrectionsFilter } from '../../hooks/useReviewsList'
 
-const STATUS_OPTIONS = ['', 'finalized', 'step2_complete', 'step1_complete', 'new']
-type SortField = 'company_name' | 'reporting_period' | 'status' | 'corrections_count' | 'created_at'
-type CorrectionsFilter = 'all' | 'has' | 'none'
+const STATUS_OPTIONS = ['finalized', 'step2_complete', 'step1_complete', 'new']
 
-const MONTH_ORDER: Record<string, number> = {
-  january: 0, february: 1, march: 2, april: 3, may: 4, june: 5,
-  july: 6, august: 7, september: 8, october: 9, november: 10, december: 11,
-}
-
-function parsePeriod(period: string | null): number {
-  if (!period) return -Infinity
-  const parts = period.trim().split(/\s+/)
-  if (parts.length === 2) {
-    const month = MONTH_ORDER[parts[0].toLowerCase()]
-    const year = parseInt(parts[1])
-    if (!isNaN(month) && !isNaN(year)) return year * 12 + month
-  }
-  return -Infinity
+function SortIndicator({ field, sortField, sortDir }: { field: SortField; sortField: SortField; sortDir: 'asc' | 'desc' }) {
+  if (sortField !== field) return <span className="opacity-20 ml-0.5">▲</span>
+  return <span className="text-blue-600 ml-0.5">{sortDir === 'asc' ? '▲' : '▼'}</span>
 }
 
 export default function ReviewsList() {
-  const [reviews, setReviews] = useState<AdminReview[]>([])
-  const [total, setTotal] = useState(0)
-  const [loading, setLoading] = useState(true)
-  const [statusFilter, setStatusFilter] = useState('')
-  const [companyFilter, setCompanyFilter] = useState('')
-  const [correctionsFilter, setCorrectionsFilter] = useState<CorrectionsFilter>('all')
-  const [sortField, setSortField] = useState<SortField>('created_at')
-  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc')
-  const [confirmDelete, setConfirmDelete] = useState<string | null>(null)
-  const [deleting, setDeleting] = useState<string | null>(null)
-
-  useEffect(() => {
-    setLoading(true)
-    adminGetReviews({
-      status: statusFilter || undefined,
-      company: companyFilter || undefined,
-      limit: 200,
-    }).then((data) => {
-      setReviews(data.reviews)
-      setTotal(data.total)
-    }).catch(console.error).finally(() => setLoading(false))
-  }, [statusFilter, companyFilter])
-
-  async function handleDelete(sessionId: string) {
-    if (confirmDelete !== sessionId) {
-      setConfirmDelete(sessionId)
-      return
-    }
-    setDeleting(sessionId)
-    try {
-      await adminDeleteReview(sessionId)
-      setReviews((prev) => prev.filter((r) => r.session_id !== sessionId))
-      setTotal((prev) => prev - 1)
-    } catch (err) {
-      console.error(err)
-    } finally {
-      setDeleting(null)
-      setConfirmDelete(null)
-    }
-  }
-
-  function handleSort(field: SortField) {
-    if (sortField === field) {
-      setSortDir((d) => d === 'asc' ? 'desc' : 'asc')
-    } else {
-      setSortField(field)
-      setSortDir(field === 'created_at' ? 'desc' : 'asc')
-    }
-  }
-
-  function SortIndicator({ field }: { field: SortField }) {
-    if (sortField !== field) return <span className="opacity-20 ml-0.5">▲</span>
-    return <span className="text-blue-600 ml-0.5">{sortDir === 'asc' ? '▲' : '▼'}</span>
-  }
-
-  const displayed = reviews
-    .filter((r) => {
-      if (correctionsFilter === 'has') return r.corrections_count > 0
-      if (correctionsFilter === 'none') return r.corrections_count === 0
-      return true
-    })
-    .sort((a, b) => {
-      let av: string | number, bv: string | number
-      if (sortField === 'reporting_period') {
-        av = parsePeriod(a.reporting_period)
-        bv = parsePeriod(b.reporting_period)
-      } else if (sortField === 'corrections_count') {
-        av = a.corrections_count
-        bv = b.corrections_count
-      } else if (sortField === 'created_at') {
-        av = a.created_at ?? ''
-        bv = b.created_at ?? ''
-      } else {
-        av = (a[sortField] ?? '').toString().toLowerCase()
-        bv = (b[sortField] ?? '').toString().toLowerCase()
-      }
-      if (av < bv) return sortDir === 'asc' ? -1 : 1
-      if (av > bv) return sortDir === 'asc' ? 1 : -1
-      return 0
-    })
+  const {
+    displayed,
+    total,
+    loading,
+    statusFilter,
+    setStatusFilter,
+    companyFilter,
+    setCompanyFilter,
+    correctionsFilter,
+    setCorrectionsFilter,
+    sortField,
+    sortDir,
+    handleSort,
+    confirmDelete,
+    setConfirmDelete,
+    deleting,
+    handleDelete,
+  } = useReviewsList()
 
   const thClass = 'text-left px-3 py-2 text-muted-foreground cursor-pointer select-none hover:text-foreground whitespace-nowrap'
 
@@ -126,7 +51,7 @@ export default function ReviewsList() {
           onChange={(e) => setStatusFilter(e.target.value)}
         >
           <option value="">All statuses</option>
-          {STATUS_OPTIONS.slice(1).map((s) => (
+          {STATUS_OPTIONS.map((s) => (
             <option key={s} value={s}>{s}</option>
           ))}
         </select>
@@ -151,20 +76,20 @@ export default function ReviewsList() {
             <thead>
               <tr className="bg-gray-50 border-b border-border">
                 <th className={thClass} style={{ fontWeight: 500 }} onClick={() => handleSort('company_name')}>
-                  Company <SortIndicator field="company_name" />
+                  Company <SortIndicator field="company_name" sortField={sortField} sortDir={sortDir} />
                 </th>
                 <th className={thClass} style={{ fontWeight: 500 }} onClick={() => handleSort('reporting_period')}>
-                  Period <SortIndicator field="reporting_period" />
+                  Period <SortIndicator field="reporting_period" sortField={sortField} sortDir={sortDir} />
                 </th>
                 <th className="text-left px-3 py-2 text-muted-foreground font-mono whitespace-nowrap" style={{ fontWeight: 500 }}>Session</th>
                 <th className={`${thClass} text-center`} style={{ fontWeight: 500 }} onClick={() => handleSort('status')}>
-                  Status <SortIndicator field="status" />
+                  Status <SortIndicator field="status" sortField={sortField} sortDir={sortDir} />
                 </th>
                 <th className={`${thClass} text-right`} style={{ fontWeight: 500 }} onClick={() => handleSort('corrections_count')}>
-                  Corrections <SortIndicator field="corrections_count" />
+                  Corrections <SortIndicator field="corrections_count" sortField={sortField} sortDir={sortDir} />
                 </th>
                 <th className={`${thClass} text-right`} style={{ fontWeight: 500 }} onClick={() => handleSort('created_at')}>
-                  Created <SortIndicator field="created_at" />
+                  Created <SortIndicator field="created_at" sortField={sortField} sortDir={sortDir} />
                 </th>
                 <th className="text-right px-3 py-2 text-muted-foreground whitespace-nowrap" style={{ fontWeight: 500 }}>Finalized</th>
                 <th className="px-3 py-2" />
