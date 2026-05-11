@@ -27,11 +27,3 @@ export const STATEMENT_ABBREVS: Record<StatementType, string> = {
   balance_sheet: 'BS',
   cash_flow_statement: 'CFS',
 }
-
-/**
- * Create a Record keyed by all three StatementTypes, each mapped to `value`.
- * Use instead of hardcoding `{ income_statement: x, balance_sheet: x, cash_flow_statement: x }`.
- */
-export function createStmtRecord<T>(value: T): Record<StatementType, T> {
-  return Object.fromEntries(ALL_STATEMENT_TYPES.map((s) => [s, value])) as Record<StatementType, T>
-}

@@ -5,7 +5,7 @@
  *   - parseReportingPeriod  (financial "Month Year" → {year, month, key})
  *   - generateMonthRange    (start/end → ordered column descriptors)
  *   - periodByKey Map construction + min/max period detection
- *   - template load (via useTemplate)
+ *   - template load (useEffect + state)
  *   - label collection from template field order (L2) or L1 line item keys
  *   - getCellValue multi-path lookup (L1 tabs vs L2 statement values)
  *   - hasPeriod helper for gap styling
@@ -13,10 +13,10 @@
  * Returns everything needed to render the view toggle, column headers,
  * row labels, and cell values.
  */
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
+import { getTemplate } from '../api/client'
 import type { CompanyPeriodData } from '../components/admin/AdminApiClient'
-import { useTemplate } from './useTemplate'
-import { ALL_STATEMENT_TYPES } from '../utils/statementMeta'
+import type { TemplateResponse } from '../types'
 
 // ── Private constants + pure helpers ─────────────────────────────────────────
 
@@ -73,7 +73,11 @@ export type DataView = 'l1' | 'l2'
 
 export function useCompanyDataTable({ periods }: { periods: CompanyPeriodData[] }) {
   const [view, setView] = useState<DataView>('l2')
-  const { template } = useTemplate()
+  const [template, setTemplate] = useState<TemplateResponse | null>(null)
+
+  useEffect(() => {
+    getTemplate().then(setTemplate).catch(console.error)
+  }, [])
 
   // Build periodByKey + detect time range
   const periodByKey = new Map<string, CompanyPeriodData>()
@@ -98,7 +102,7 @@ export function useCompanyDataTable({ periods }: { periods: CompanyPeriodData[] 
   // Derive row labels: template field order for L2, union of L1 keys for L1
   let labels: string[] = []
   if (view === 'l2' && template) {
-    for (const stmt of ALL_STATEMENT_TYPES) {
+    for (const stmt of ['income_statement', 'balance_sheet', 'cash_flow_statement'] as const) {
       for (const section of template[stmt]?.sections ?? []) {
         for (const field of section.fields) {
           if (!labels.includes(field)) labels.push(field)

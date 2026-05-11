@@ -12,7 +12,7 @@
 import { useEffect, useState } from 'react'
 import { getLayer1Template, saveLayer1Template } from '../api/client'
 import type { Layer1Template, Layer1TemplateRow, WaterfallStep, StatementType } from '../types'
-import { ALL_STATEMENT_TYPES, createStmtRecord } from '../utils/statementMeta'
+import { ALL_STATEMENT_TYPES } from '../utils/statementMeta'
 
 export type StmtTab = StatementType
 
@@ -32,7 +32,7 @@ export function useLayer1Templates({ companyId }: UseLayer1TemplatesOptions) {
   const [saved, setSaved] = useState<Partial<Record<StmtTab, boolean>>>({})
 
   useEffect(() => {
-    setLoading(createStmtRecord(true))
+    setLoading({ income_statement: true, balance_sheet: true, cash_flow_statement: true })
     ALL_STMTS.forEach((stmt) => {
       getLayer1Template(companyId, stmt)
         .then((tmpl) => {

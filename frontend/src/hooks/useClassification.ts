@@ -1,15 +1,23 @@
 import { useEffect, useRef, useState } from 'react'
 import { runLayer2 } from '../api/client'
 import type { Layer1Result, Layer2Result, StatementType } from '../types'
-import { ALL_STATEMENT_TYPES, STATEMENT_LABELS, createStmtRecord } from '../utils/statementMeta'
+import { ALL_STATEMENT_TYPES, STATEMENT_LABELS } from '../utils/statementMeta'
 
 type RunStatus = 'idle' | 'loading' | 'done' | 'error'
 
 const STMT_TYPES = ALL_STATEMENT_TYPES
 const STMT_LABELS = STATEMENT_LABELS
 
-const INIT_STATUS = createStmtRecord<RunStatus>('idle')
-const INIT_ERROR = createStmtRecord<string | null>(null)
+const INIT_STATUS: Record<StatementType, RunStatus> = {
+  income_statement: 'idle',
+  balance_sheet: 'idle',
+  cash_flow_statement: 'idle',
+}
+const INIT_ERROR: Record<StatementType, string | null> = {
+  income_statement: null,
+  balance_sheet: null,
+  cash_flow_statement: null,
+}
 
 interface UseClassificationDeps {
   sessionId: string | null
@@ -113,7 +121,7 @@ export function useClassification({
 
   /** Mark all statements done without re-running — used when results are already loaded. */
   function markAllDone() {
-    setStmtStatus(createStmtRecord('done'))
+    setStmtStatus({ income_statement: 'done', balance_sheet: 'done', cash_flow_statement: 'done' })
   }
 
   return {
