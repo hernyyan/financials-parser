@@ -4,20 +4,18 @@
  * Hides:
  *   - template + section resolution (delegated to useTemplate)
  *   - saving / exporting / finalized / finalizedAt / status state
- *   - finalValues assembly (assembleValues)
- *   - finalValues assembly (assembleValues)
- *   - correctedFieldNames Set, allFlaggedFields Set
- *   - isFailingFields / bsFailingFields (getFailingFieldNames)
- *   - summary stats (totalPopulated, flaggedRemaining)
- *   - balance sheet check (totalAssets, totalLE, balanceDiff, isBalanced)
- *   - rows derivation (buildFinalizeRows)
+ *   - finalValues assembly (assembleValues) — memoized
+ *   - correctedFieldNames Set, allFlaggedFields Set — memoized
+ *   - summary stats (totalPopulated, flaggedRemaining) — memoized
+ *   - balance sheet check (balanceDiff, isBalanced) — memoized
+ *   - rows derivation (buildFinalizeRows) — memoized; failingFields computed inside
  *   - handleFinalize — persists via finalizeOutput, sets finalized/finalizedAt
  *   - handleExportCsv — calls getExport, triggers browser download
  */
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { finalizeOutput, getExport } from '../api/client'
 import { assembleValues } from '../utils/assembleValues'
-import { getFailingFieldNames, buildFinalizeRows } from '../utils/finalizeRows'
+import { buildFinalizeRows } from '../utils/finalizeRows'
 import { useTemplate } from './useTemplate'
 import type { FinalizeRow } from '../utils/finalizeRows'
 import type { Correction, Layer2Result, StatusMessage } from '../types'
@@ -65,44 +63,61 @@ export function useStep3Finalize({
   const bsLayer2 = layer2Results['balance_sheet'] ?? null
   const cfsLayer2 = layer2Results['cash_flow_statement'] ?? null
 
-  const finalValues = assembleValues(layer2Results, corrections, isSections, cfsSections)
-  const correctedFieldNames = new Set(corrections.map((c) => c.fieldName))
-  const allFlaggedFields = new Set([
-    ...(isLayer2?.flaggedFields ?? []),
-    ...(bsLayer2?.flaggedFields ?? []),
-    ...(cfsLayer2?.flaggedFields ?? []),
-  ])
-  const isFailingFields = getFailingFieldNames(isLayer2 ?? undefined)
-  const bsFailingFields = getFailingFieldNames(bsLayer2 ?? undefined)
+  const finalValues = useMemo(
+    () => assembleValues(layer2Results, corrections, isSections, cfsSections),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [layer2Results, corrections, isSections, cfsSections],
+  )
 
-  const totalPopulated = [
-    ...Object.values(finalValues.income_statement),
-    ...Object.values(finalValues.balance_sheet),
-    ...Object.values(finalValues.cash_flow_statement),
-  ].filter((v) => v !== null).length
+  const correctedFieldNames = useMemo(
+    () => new Set(corrections.map((c) => c.fieldName)),
+    [corrections],
+  )
 
-  const flaggedRemaining = [...allFlaggedFields].filter(
-    (f) => !correctedFieldNames.has(f),
-  ).length
+  const allFlaggedFields = useMemo(
+    () => new Set([
+      ...(isLayer2?.flaggedFields ?? []),
+      ...(bsLayer2?.flaggedFields ?? []),
+      ...(cfsLayer2?.flaggedFields ?? []),
+    ]),
+    [isLayer2, bsLayer2, cfsLayer2],
+  )
 
-  const totalAssets = finalValues.balance_sheet['Total Assets'] ?? 0
-  const totalLE = finalValues.balance_sheet['Total Liabilities and Equity'] ?? 0
-  const balanceDiff = totalAssets - totalLE
-  const isBalanced = Math.abs(balanceDiff) < 0.01
+  const totalPopulated = useMemo(
+    () => [
+      ...Object.values(finalValues.income_statement),
+      ...Object.values(finalValues.balance_sheet),
+      ...Object.values(finalValues.cash_flow_statement),
+    ].filter((v) => v !== null).length,
+    [finalValues],
+  )
 
-  const rows = buildFinalizeRows({
-    isSections,
-    bsSections,
-    cfsSections,
-    finalValues,
-    isLayer2: isLayer2 ?? undefined,
-    bsLayer2: bsLayer2 ?? undefined,
-    cfsLayer2: cfsLayer2 ?? undefined,
-    correctedFieldNames,
-    allFlaggedFields,
-    isFailingFields,
-    bsFailingFields,
-  })
+  const flaggedRemaining = useMemo(
+    () => [...allFlaggedFields].filter((f) => !correctedFieldNames.has(f)).length,
+    [allFlaggedFields, correctedFieldNames],
+  )
+
+  const { balanceDiff, isBalanced } = useMemo(() => {
+    const totalAssets = finalValues.balance_sheet['Total Assets'] ?? 0
+    const totalLE = finalValues.balance_sheet['Total Liabilities and Equity'] ?? 0
+    const diff = totalAssets - totalLE
+    return { balanceDiff: diff, isBalanced: Math.abs(diff) < 0.01 }
+  }, [finalValues])
+
+  const rows = useMemo(
+    () => buildFinalizeRows({
+      isSections,
+      bsSections,
+      cfsSections,
+      finalValues,
+      isLayer2: isLayer2 ?? undefined,
+      bsLayer2: bsLayer2 ?? undefined,
+      cfsLayer2: cfsLayer2 ?? undefined,
+      correctedFieldNames,
+      allFlaggedFields,
+    }),
+    [isSections, bsSections, cfsSections, finalValues, isLayer2, bsLayer2, cfsLayer2, correctedFieldNames, allFlaggedFields],
+  )
 
   async function handleExportCsv() {
     if (!sessionId) return

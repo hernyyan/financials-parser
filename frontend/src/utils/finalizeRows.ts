@@ -88,8 +88,6 @@ interface BuildFinalizeRowsParams {
   cfsLayer2: Layer2Result | undefined
   correctedFieldNames: Set<string>
   allFlaggedFields: Set<string>
-  isFailingFields: Set<string>
-  bsFailingFields: Set<string>
 }
 
 export function buildFinalizeRows({
@@ -102,9 +100,9 @@ export function buildFinalizeRows({
   cfsLayer2,
   correctedFieldNames,
   allFlaggedFields,
-  isFailingFields,
-  bsFailingFields,
 }: BuildFinalizeRowsParams): FinalizeRow[] {
+  const isFailingFields = getFailingFieldNames(isLayer2)
+  const bsFailingFields = getFailingFieldNames(bsLayer2)
   const noValidation = new Set<string>()
   const rows: FinalizeRow[] = [
     { label: STATEMENT_LABELS.income_statement, classifiedValue: null, finalValue: null, isStatementHeader: true },
