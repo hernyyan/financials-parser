@@ -7,6 +7,7 @@ is made inside an `async def` handler, which would block the event loop.
 """
 import logging
 
+import anthropic
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
@@ -16,7 +17,6 @@ from app.db.database import get_db
 from app.db.review_store import merge_layer2_data
 from app.models.schemas import Layer2Request, Layer2Response
 from app.services.layer2_service import get_layer2_service
-from app.utils.claude_errors import claude_api_errors
 
 router = APIRouter()
 
@@ -32,14 +32,27 @@ def run_layer2(request: Layer2Request, db: Session = Depends(get_db)):
     print(f"Layer 2 starting for {request.statement_type}")
     service = get_layer2_service()
     try:
-        with claude_api_errors():
-            result = service.run_classification(
-                statement_type=request.statement_type,
-                layer1_data=request.layer1_data,
-                company_id=request.company_id,
-                use_company_context=request.use_company_context or False,
-                db=db,
-            )
+        result = service.run_classification(
+            statement_type=request.statement_type,
+            layer1_data=request.layer1_data,
+            company_id=request.company_id,
+            use_company_context=request.use_company_context or False,
+            db=db,
+        )
+    except anthropic.AuthenticationError:
+        raise HTTPException(status_code=401, detail="Invalid Anthropic API key.")
+    except anthropic.RateLimitError:
+        raise HTTPException(
+            status_code=429,
+            detail="Anthropic API rate limit reached. Please wait and retry.",
+        )
+    except anthropic.APITimeoutError:
+        raise HTTPException(
+            status_code=504,
+            detail="Layer 2 classification timed out. Please try again.",
+        )
+    except anthropic.APIError as e:
+        raise HTTPException(status_code=502, detail=f"Anthropic API error: {e}")
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e))
     except Exception as e:

@@ -10,6 +10,7 @@ POST /layer1/run — 4-step Layer 1 extraction pipeline.
 import logging
 from pathlib import Path
 
+import anthropic
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
@@ -20,7 +21,6 @@ from app.db.database import get_db
 from app.db.review_store import merge_layer1_data
 from app.models.schemas import Layer1Request, Layer1Response
 from app.services.layer1_service import get_layer1_service
-from app.utils.claude_errors import claude_api_errors
 
 router = APIRouter()
 
@@ -60,16 +60,27 @@ def run_layer1(
     # Run 4-step extraction
     service = get_layer1_service()
     try:
-        with claude_api_errors():
-            result = service.run_extraction(
-                sheet_type=request.sheetType,
-                filepath=filepath,
-                sheet_name=request.sheetName,
-                reporting_period=request.reportingPeriod,
-                shared_tab=request.sharedTab,
-            )
+        result = service.run_extraction(
+            sheet_type=request.sheetType,
+            filepath=filepath,
+            sheet_name=request.sheetName,
+            reporting_period=request.reportingPeriod,
+            shared_tab=request.sharedTab,
+        )
     except FileNotFoundError as e:
         raise HTTPException(status_code=500, detail=str(e))
+    except anthropic.AuthenticationError:
+        raise HTTPException(
+            status_code=500,
+            detail="Invalid Anthropic API key. Check ANTHROPIC_API_KEY in your .env file.",
+        )
+    except anthropic.RateLimitError:
+        raise HTTPException(
+            status_code=429,
+            detail="Rate limit exceeded. Please wait a moment and try again.",
+        )
+    except anthropic.APIError as e:
+        raise HTTPException(status_code=502, detail=f"Claude API error: {e}")
     except ValueError as e:
         raise HTTPException(status_code=500, detail=f"Failed to parse Claude response: {e}")
     except Exception as e:
