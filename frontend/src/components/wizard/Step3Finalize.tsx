@@ -1,15 +1,7 @@
-import { useEffect, useState } from 'react'
 import { useWizardState } from '../../hooks/useWizardState'
-import LoadingSpinner from '../shared/LoadingSpinner'
-import { finalizeOutput, getTemplate, getExport } from '../../api/client'
-import { IS_TEMPLATE_FIELDS, BS_TEMPLATE_FIELDS } from '../../mocks/mockData'
-import { assembleValues } from '../../utils/assembleValues'
-import { getFailingFieldNames, buildFinalizeRows } from '../../utils/finalizeRows'
-import type { FinalizeRow } from '../../utils/finalizeRows'
-import { formatDollar } from '../../utils/formatters'
+import { useStep3Finalize } from '../../hooks/useStep3Finalize'
 import FinalizeTable from './FinalizeTable'
 import FinalizeActionBar from './FinalizeActionBar'
-import type { TemplateResponse, TemplateSection } from '../../types'
 import {
   CheckCircle2,
   Edit3,
@@ -17,8 +9,6 @@ import {
   Scale,
   XCircle,
 } from 'lucide-react'
-
-type StatusMessage = { type: 'success' | 'error' | 'info'; message: string } | null
 
 function formatDateTime(iso: string): string {
   return new Date(iso).toLocaleString('en-US', {
@@ -29,8 +19,6 @@ function formatDateTime(iso: string): string {
     minute: '2-digit',
   })
 }
-
-type TableRow = FinalizeRow
 
 export default function Step3Finalize() {
   const {
@@ -43,110 +31,20 @@ export default function Step3Finalize() {
     resetWizard,
   } = useWizardState()
 
-  const [saving, setSaving] = useState(false)
-  const [exporting, setExporting] = useState(false)
-  const [status, setStatus] = useState<StatusMessage>(null)
-  const [finalized, setFinalized] = useState(false)
-  const [finalizedAt, setFinalizedAt] = useState<string | null>(null)
-  const [template, setTemplate] = useState<TemplateResponse | null>(null)
-
-  const isLayer2 = layer2Results['income_statement']
-  const bsLayer2 = layer2Results['balance_sheet']
-  const cfsLayer2 = layer2Results['cash_flow_statement']
-
-  useEffect(() => {
-    getTemplate().then(setTemplate).catch(() => {})
-  }, [])
-
-  const fallbackIs: TemplateSection[] = [{ header: null, fields: IS_TEMPLATE_FIELDS }]
-  const fallbackBs: TemplateSection[] = [{ header: null, fields: BS_TEMPLATE_FIELDS }]
-  const isSections: TemplateSection[] = template?.income_statement.sections ?? fallbackIs
-  const bsSections: TemplateSection[] = template?.balance_sheet.sections ?? fallbackBs
-  const cfsSections: TemplateSection[] = template?.cash_flow_statement?.sections ?? []
-
-  const finalValues = assembleValues(layer2Results, corrections, isSections, cfsSections)
-  const correctedFieldNames = new Set(corrections.map((c) => c.fieldName))
-  const allFlaggedFields = new Set([
-    ...(isLayer2?.flaggedFields ?? []),
-    ...(bsLayer2?.flaggedFields ?? []),
-    ...(cfsLayer2?.flaggedFields ?? []),
-  ])
-  const isFailingFields = getFailingFieldNames(isLayer2)
-  const bsFailingFields = getFailingFieldNames(bsLayer2)
-
-  // Summary stats
-  const totalPopulated = [
-    ...Object.values(finalValues.income_statement),
-    ...Object.values(finalValues.balance_sheet),
-    ...Object.values(finalValues.cash_flow_statement),
-  ].filter((v) => v !== null).length
-
-  const flaggedRemaining = [...allFlaggedFields].filter(
-    (f) => !correctedFieldNames.has(f),
-  ).length
-
-  // Balance sheet check
-  const totalAssets = finalValues.balance_sheet['Total Assets'] ?? 0
-  const totalLE = finalValues.balance_sheet['Total Liabilities and Equity'] ?? 0
-  const balanceDiff = totalAssets - totalLE
-  const isBalanced = Math.abs(balanceDiff) < 0.01
-
-  const rows = buildFinalizeRows({
-    isSections,
-    bsSections,
-    cfsSections,
-    finalValues,
-    isLayer2,
-    bsLayer2,
-    cfsLayer2,
-    correctedFieldNames,
-    allFlaggedFields,
-    isFailingFields,
-    bsFailingFields,
-  })
-
-  async function handleExportCsv() {
-    if (!sessionId) return
-    setExporting(true)
-    try {
-      const data = await getExport(sessionId)
-      const blob = new Blob([data.csv_content], { type: 'text/csv' })
-      const url = URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = `${companyName}_${reportingPeriod}.csv`.replace(/\s+/g, '_')
-      a.click()
-      URL.revokeObjectURL(url)
-    } catch {
-      setStatus({ type: 'error', message: 'Export failed.' })
-    } finally {
-      setExporting(false)
-    }
-  }
-
-  async function handleFinalize() {
-    setSaving(true)
-    setStatus(null)
-    try {
-      const response = await finalizeOutput({
-        sessionId,
-        companyName,
-        reportingPeriod,
-        finalValues,
-        corrections,
-      })
-      setFinalizedAt(response.finalizedAt)
-      setFinalized(true)
-    } catch (err) {
-      setStatus({
-        type: 'error',
-        message:
-          err instanceof Error ? err.message : 'Failed to save. Please try again.',
-      })
-    } finally {
-      setSaving(false)
-    }
-  }
+  const {
+    saving,
+    exporting,
+    finalized,
+    finalizedAt,
+    status,
+    rows,
+    totalPopulated,
+    flaggedRemaining,
+    isBalanced,
+    balanceDiff,
+    handleFinalize,
+    handleExportCsv,
+  } = useStep3Finalize({ sessionId, companyName, reportingPeriod, layer2Results, corrections })
 
   return (
     <div className="flex flex-col h-full">
