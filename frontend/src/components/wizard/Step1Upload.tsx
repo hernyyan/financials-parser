@@ -7,8 +7,6 @@ import TabSelector from '../shared/TabSelector'
 import ExcelViewer from '../shared/ExcelViewer'
 import PdfPageViewer from '../shared/PdfPageViewer'
 import StatusBanner from '../shared/StatusBanner'
-import DuplicateCheckModal from '../shared/DuplicateCheckModal'
-import ExcelSheetAssignmentPanel from './ExcelSheetAssignmentPanel'
 import TemplateReview from './TemplateReview'
 import TemplateDeltaReview from './TemplateDeltaReview'
 import {
@@ -911,31 +909,139 @@ export default function Step1Upload() {
             )}
           </div>
         ) : (
-          <ExcelSheetAssignmentPanel
-            sheetNames={sheetNames}
-            assignments={assignments}
-            extractionStatus={extractionStatus}
-            extractionError={extractionError}
-            canRunExtraction={canRunExtraction}
-            onAssign={(stmtType, tab) => setAssignments((prev) => ({ ...prev, [stmtType]: tab }))}
-            onRun={handleRunExtraction}
-          />
+          /* Excel assignment panel — single tab per statement */
+          <div className="flex-1 flex flex-col overflow-hidden min-w-[320px] bg-white">
+            <div
+              className="shrink-0 px-[14px] py-2.5 border-b border-gray-200 bg-white"
+              style={{ position: 'sticky', top: 0, zIndex: 10 }}
+            >
+              <p className="text-[11px] text-muted-foreground">
+                Assign one sheet per statement, then run extraction
+              </p>
+            </div>
+
+            <div className="shrink-0 px-[14px] py-2.5 border-b border-border">
+              <button
+                onClick={handleRunExtraction}
+                disabled={!canRunExtraction}
+                className="w-full flex items-center justify-center gap-2 rounded-lg text-[13px] transition-colors disabled:opacity-50"
+                style={{ backgroundColor: '#030213', color: 'white', fontWeight: 500, padding: '8px 0', borderRadius: 8 }}
+              >
+                {extractionStatus === 'running' ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    Running...
+                  </>
+                ) : (
+                  'Run Extraction'
+                )}
+              </button>
+              {extractionError && (
+                <p className="text-[11px] text-red-600 mt-1.5">{extractionError}</p>
+              )}
+            </div>
+
+            <div className="flex-1 overflow-y-auto">
+              {(
+                [
+                  { key: 'income_statement', label: 'Income Statement' },
+                  { key: 'balance_sheet', label: 'Balance Sheet' },
+                  { key: 'cash_flow_statement', label: 'Cash Flow Statement' },
+                ] as const
+              ).map(({ key, label }) => (
+                <div key={key} className="border-b border-gray-200 px-[14px] py-3">
+                  <p
+                    className="text-muted-foreground uppercase mb-2"
+                    style={{ fontSize: 10, fontWeight: 500, letterSpacing: '0.05em' }}
+                  >
+                    {label}
+                  </p>
+                  {sheetNames.length === 0 ? (
+                    <p className="text-[11px] text-muted-foreground italic">
+                      Upload a file to assign a sheet
+                    </p>
+                  ) : (
+                    <div
+                      className="border border-gray-200 rounded-lg overflow-y-auto"
+                      style={{ maxHeight: 130 }}
+                    >
+                      {sheetNames.map((tab) => {
+                        const selected = assignments[key] === tab
+                        return (
+                          <label
+                            key={tab}
+                            className="flex items-center gap-2 cursor-pointer border-b border-gray-100 last:border-b-0"
+                            style={{
+                              padding: '5px 9px',
+                              background: selected ? '#eff6ff' : undefined,
+                              color: selected ? '#1d4ed8' : undefined,
+                            }}
+                          >
+                            <input
+                              type="radio"
+                              name={key}
+                              checked={selected}
+                              onChange={() =>
+                                setAssignments((prev) => ({ ...prev, [key]: tab }))
+                              }
+                              style={{ accentColor: '#185FA5', width: 13, height: 13, flexShrink: 0 }}
+                            />
+                            <span className="truncate text-[12px]">{tab}</span>
+                          </label>
+                        )
+                      })}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
         )}
       </div>
 
       {/* Duplicate check modal */}
       {duplicateCheck?.exists && (
-        <DuplicateCheckModal
-          companyName={companyName}
-          reportingPeriod={reportingPeriod}
-          finalizedAt={duplicateCheck.finalizedAt}
-          onContinue={handleContinuePrevious}
-          onOverwrite={handleOverwrite}
-          onCancel={() => {
-            setDuplicateCheck(null)
-            setPendingExtraction(null)
-          }}
-        />
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+          <div className="bg-white rounded-xl shadow-xl max-w-md w-full mx-4 p-6">
+            <h3 className="text-[15px] mb-2" style={{ fontWeight: 600 }}>
+              Existing Data Found
+            </h3>
+            <p className="text-[13px] text-muted-foreground mb-5">
+              <span style={{ fontWeight: 500 }}>{companyName}</span> — {reportingPeriod} was
+              already loaded and finalized
+              {duplicateCheck.finalizedAt
+                ? ` on ${new Date(duplicateCheck.finalizedAt).toLocaleDateString()}`
+                : ''}
+              .
+            </p>
+            <div className="flex flex-col gap-2">
+              <button
+                onClick={handleContinuePrevious}
+                className="w-full py-2 rounded-lg text-[13px] bg-blue-600 text-white hover:bg-blue-700 transition-colors"
+                style={{ fontWeight: 500 }}
+              >
+                Continue with Previous
+              </button>
+              <button
+                onClick={handleOverwrite}
+                className="w-full py-2 rounded-lg text-[13px] border border-border text-foreground hover:bg-gray-50 transition-colors"
+                style={{ fontWeight: 500 }}
+              >
+                Upload New &amp; Overwrite
+              </button>
+              <button
+                onClick={() => {
+                  setDuplicateCheck(null)
+                  setPendingExtraction(null)
+                }}
+                className="w-full py-2 rounded-lg text-[13px] text-muted-foreground hover:text-foreground transition-colors"
+                style={{ fontWeight: 500 }}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )
