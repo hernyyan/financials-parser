@@ -1,5 +1,3 @@
-import type { StatementType } from '../../types'
-import { STATEMENT_ABBREVS } from '../../utils/statementMeta'
 import { AdminCorrection } from './AdminApiClient'
 
 function formatVal(v: unknown): string {
@@ -40,7 +38,7 @@ export default function CompanyCorrectionsTable({ corrections }: Props) {
           <tr key={c.id} className={i % 2 === 0 ? '' : 'bg-gray-50/50'}>
             <td className="px-3 py-1.5 text-muted-foreground whitespace-nowrap">{c.period || '—'}</td>
             <td className="px-3 py-1.5 text-muted-foreground whitespace-nowrap">
-              {STATEMENT_ABBREVS[c.statement_type as StatementType] ?? c.statement_type}
+              {c.statement_type === 'income_statement' ? 'IS' : 'BS'}
             </td>
             <td className="px-3 py-1.5">{c.field_name}</td>
             <td className="px-3 py-1.5 text-right font-mono text-muted-foreground">{formatVal(c.layer2_value)}</td>

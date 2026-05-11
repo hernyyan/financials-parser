@@ -21,7 +21,7 @@ import type {
 
 export const API_BASE = import.meta.env.VITE_API_URL || '/api'
 
-export async function handleResponse<T>(res: Response): Promise<T> {
+async function handleResponse<T>(res: Response): Promise<T> {
   if (!res.ok) {
     let message = `API error ${res.status}`
     try {
