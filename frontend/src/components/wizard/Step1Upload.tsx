@@ -7,11 +7,11 @@ import TabSelector from '../shared/TabSelector'
 import ExcelViewer from '../shared/ExcelViewer'
 import PdfPageViewer from '../shared/PdfPageViewer'
 import StatusBanner from '../shared/StatusBanner'
+import CompanyCombobox from '../shared/CompanyCombobox'
 import DuplicateCheckModal from '../shared/DuplicateCheckModal'
 import Layer1ResultsTable from '../shared/Layer1ResultsTable'
 import PdfExtractionPanel from './PdfExtractionPanel'
 import ExcelSheetAssignmentPanel from './ExcelSheetAssignmentPanel'
-import UploadToolbar from './UploadToolbar'
 import TemplateReview from './TemplateReview'
 import TemplateDeltaReview from './TemplateDeltaReview'
 import {
@@ -26,6 +26,8 @@ import {
   Upload,
   Loader2,
   FileSpreadsheet,
+  CheckCircle2,
+  ArrowRight,
   X,
 } from 'lucide-react'
 import approveSfx from '../../assets/approve.mp3'
@@ -475,45 +477,131 @@ export default function Step1Upload() {
   return (
     <div className="flex flex-col h-full">
       {/* Toolbar */}
-      <UploadToolbar
-        comboRef={comboRef}
-        comboOpen={comboOpen}
-        comboSearch={comboSearch}
-        companiesLoading={companiesLoading}
-        creatingCompany={creatingCompany}
-        filteredCompanies={filteredCompanies}
-        fuzzyMatches={fuzzyMatches}
-        hasExactMatch={hasExactMatch}
-        setComboOpen={setComboOpen}
-        onSearchChange={handleSearchChange}
-        onSelectCompany={handleSelectCompany}
-        onCreateCompany={handleCreateCompany}
-        reportingPeriod={reportingPeriod}
-        onReportingPeriodChange={setReportingPeriod}
-        fileInputRef={fileInputRef}
-        uploading={uploading}
-        hasUpload={hasUpload}
-        uploadedFileName={uploadedFile?.name ?? null}
-        onFileChange={handleFileChange}
-        onReupload={handleReupload}
-        onClearUpload={handleClearUpload}
-        useCompanyContext={useCompanyContext}
-        contextLoading={contextLoading}
-        contextStatus={contextStatus}
-        onToggleContext={() => setUseCompanyContext(!useCompanyContext)}
-        canApprove={canApprove}
-        onApprove={() => {
-          if (Math.random() < 0.01) {
-            approveAudio.currentTime = 0
-            approveAudio.play()
-          }
-          if (companyName && reportingPeriod && Object.keys(layer1Results).length > 0) {
-            appendToCompanyDataset(sessionId, companyName, reportingPeriod, layer1Results)
-              .catch((err) => console.error('Dataset append failed:', err))
-          }
-          approveStep1()
-        }}
-      />
+      <div className="flex items-center gap-3 px-4 py-2.5 border-b border-border bg-gray-50/80 shrink-0 flex-wrap">
+        {/* Company dropdown */}
+        <CompanyCombobox
+          comboRef={comboRef}
+          comboOpen={comboOpen}
+          comboSearch={comboSearch}
+          companiesLoading={companiesLoading}
+          creatingCompany={creatingCompany}
+          filteredCompanies={filteredCompanies}
+          fuzzyMatches={fuzzyMatches}
+          hasExactMatch={hasExactMatch}
+          setComboOpen={setComboOpen}
+          onSearchChange={handleSearchChange}
+          onSelectCompany={handleSelectCompany}
+          onCreateCompany={handleCreateCompany}
+        />
+
+        {/* Reporting Period */}
+        <input
+          className="bg-white border border-border rounded-lg px-3 py-1.5 text-[13px] w-[280px] hover:border-gray-300 focus:outline-none focus:ring-2 focus:ring-primary/20 disabled:bg-gray-50 disabled:text-muted-foreground"
+          placeholder="Reporting period, e.g. February 2026"
+          value={reportingPeriod}
+          onChange={(e) => setReportingPeriod(e.target.value)}
+        />
+
+        {/* Upload / Re-upload button */}
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept=".xlsx,.xls,.pdf"
+          onChange={handleFileChange}
+          className="hidden"
+        />
+
+        {!hasUpload ? (
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            disabled={uploading}
+            className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-[13px] transition-colors disabled:opacity-50"
+            style={{ backgroundColor: '#030213', color: 'white', fontWeight: 500 }}
+          >
+            {uploading ? (
+              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+            ) : (
+              <Upload className="w-3.5 h-3.5" />
+            )}
+            {uploading ? 'Uploading...' : 'Upload File'}
+          </button>
+        ) : (
+          <div className="flex items-center gap-1.5">
+            <button
+              onClick={handleReupload}
+              className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-[13px] transition-colors bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100"
+              style={{ fontWeight: 500 }}
+            >
+              <FileSpreadsheet className="w-3.5 h-3.5" />
+              {uploadedFile?.name ?? 'Uploaded file'}
+            </button>
+            <button
+              onClick={handleClearUpload}
+              className="p-1 rounded hover:bg-red-50 text-muted-foreground hover:text-red-500 transition-colors"
+              title="Clear upload"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        )}
+
+        {hasUpload && (
+          <div className="flex items-center gap-2.5 px-2.5 py-1 rounded-lg border border-border bg-white">
+            <button
+              onClick={() => setUseCompanyContext(!useCompanyContext)}
+              className={`relative w-8 h-[18px] rounded-full transition-colors ${
+                useCompanyContext ? 'bg-emerald-500' : 'bg-gray-300'
+              }`}
+            >
+              <div
+                className={`absolute top-[2px] w-[14px] h-[14px] rounded-full bg-white shadow-sm transition-transform ${
+                  useCompanyContext ? 'left-[17px]' : 'left-[2px]'
+                }`}
+              />
+            </button>
+            <div className="text-[12px]">
+              <span style={{ fontWeight: 500 }}>Company Context</span>
+              {contextLoading ? (
+                <span className="text-muted-foreground ml-1.5">checking...</span>
+              ) : contextStatus ? (
+                contextStatus.has_rules ? (
+                  <span className="text-emerald-600 ml-1.5" style={{ fontWeight: 500 }}>
+                    {contextStatus.rule_count} rule{contextStatus.rule_count !== 1 ? 's' : ''} ·{' '}
+                    {contextStatus.word_count} words
+                  </span>
+                ) : (
+                  <span className="text-muted-foreground ml-1.5">No rules yet</span>
+                )
+              ) : null}
+            </div>
+          </div>
+        )}
+
+        <div className="flex-1" />
+
+        {/* Approve button */}
+        {canApprove && (
+          <button
+            onClick={() => {
+              if (Math.random() < 0.01) {
+                approveAudio.currentTime = 0
+                approveAudio.play()
+              }
+              if (companyName && reportingPeriod && Object.keys(layer1Results).length > 0) {
+                appendToCompanyDataset(sessionId, companyName, reportingPeriod, layer1Results)
+                  .catch((err) => console.error('Dataset append failed:', err))
+              }
+              approveStep1()
+            }}
+            className="flex items-center gap-2 bg-emerald-600 text-white px-4 py-1.5 rounded-lg text-[13px] hover:bg-emerald-700 transition-colors"
+            style={{ fontWeight: 500 }}
+          >
+            <CheckCircle2 className="w-3.5 h-3.5" />
+            Approve Extraction
+            <ArrowRight className="w-3.5 h-3.5" />
+          </button>
+        )}
+      </div>
 
       {/* Status banner */}
       {status && (
