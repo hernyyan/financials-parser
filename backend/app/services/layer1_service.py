@@ -81,11 +81,15 @@ class Layer1Service:
             "statement_type": normalized if shared_tab else "",
         }
 
+        # prefill="{" forces Sonnet 4.6 to start the JSON object immediately —
+        # otherwise the model echoes the prompt's "### Step 1..." headers as output
+        # and exhausts max_tokens before reaching the structured answer.
         col_response = self.claude.call_claude(
             "layer1_column_identifier",
             col_prompt_vars,
             model,
             max_tokens=1024,
+            prefill="{",
         )
         col_info = self.claude.parse_json_response(col_response)
         column_index: int = int(col_info.get("column_index", 1))
@@ -125,6 +129,7 @@ class Layer1Service:
             },
             model,
             max_tokens=16384,
+            prefill="{",
         )
         structured = self.claude.parse_json_response(struct_response)
 
