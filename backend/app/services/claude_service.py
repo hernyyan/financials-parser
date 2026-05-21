@@ -41,22 +41,21 @@ class ClaudeService:
         """Reload prompts from disk (useful if files changed at runtime)."""
         self._load_prompts(prompts_dir or str(PROMPTS_DIR))
 
-    def call_claude(
-        self,
-        prompt_key: str,
-        variables: Dict[str, str],
-        model: str,
-        max_tokens: int = 8192,
-        prefill: str = "",
-    ) -> str:
+    def call_claude(self, prompt_key: str, variables: Dict[str, str], model: str, max_tokens: int = 8192) -> str:
         """
         Load a prompt template by key, fill in variables, call Claude, return raw response text.
 
-        When `prefill` is set, it is sent as the start of an assistant turn so Claude
-        must continue from there — used to force JSON output (prefill="{") and prevent
-        the model from emitting chain-of-thought before the structured response. The
-        prefill is prepended to the returned text so downstream parsers see the full
-        JSON object.
+        Args:
+            prompt_key: Stem of the prompt .md file (e.g. 'layer1_income_statement').
+            variables: Dict of {placeholder: value} to substitute in the template.
+            model: Claude model ID.
+
+        Returns:
+            Raw response text from Claude.
+
+        Raises:
+            KeyError: If prompt_key is not found in the loaded prompts.
+            anthropic.APIError: On API call failures.
         """
         if prompt_key not in self.prompts:
             # Try loading from disk on-demand
@@ -76,42 +75,29 @@ class ClaudeService:
         for key, value in variables.items():
             filled_prompt = filled_prompt.replace(f"{{{key}}}", str(value))
 
-        messages = [{"role": "user", "content": filled_prompt}]
-        if prefill:
-            messages.append({"role": "assistant", "content": prefill})
-
-        print(f"Calling Claude model={model} max_tokens={max_tokens} prompt_key={prompt_key} prefill={bool(prefill)}")
+        # Call Claude — synchronous (not streaming)
+        print(f"Calling Claude model={model} max_tokens={max_tokens} prompt_key={prompt_key}")
         message = self.client.messages.create(
             model=model,
             max_tokens=max_tokens,
-            messages=messages,
+            messages=[{"role": "user", "content": filled_prompt}],
         )
 
         response_text = message.content[0].text
         print(f"Claude responded: stop_reason={message.stop_reason} length={len(response_text)}")
-        return prefill + response_text
+        return response_text
 
-    def call_claude_raw(
-        self,
-        prompt_text: str,
-        model: str,
-        max_tokens: int = 4096,
-        prefill: str = "",
-    ) -> str:
-        """Call Claude with a raw prompt string (no template file lookup). See call_claude for prefill semantics."""
-        messages = [{"role": "user", "content": prompt_text}]
-        if prefill:
-            messages.append({"role": "assistant", "content": prefill})
-
-        print(f"Calling Claude (raw) model={model} max_tokens={max_tokens} prefill={bool(prefill)}")
+    def call_claude_raw(self, prompt_text: str, model: str, max_tokens: int = 4096) -> str:
+        """Call Claude with a raw prompt string (no template file lookup)."""
+        print(f"Calling Claude (raw) model={model} max_tokens={max_tokens}")
         message = self.client.messages.create(
             model=model,
             max_tokens=max_tokens,
-            messages=messages,
+            messages=[{"role": "user", "content": prompt_text}],
         )
         response_text = message.content[0].text
         print(f"Claude responded: stop_reason={message.stop_reason} length={len(response_text)}")
-        return prefill + response_text
+        return response_text
 
     def parse_json_response(self, response_text: str) -> Any:
         """

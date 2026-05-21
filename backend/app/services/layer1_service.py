@@ -81,14 +81,11 @@ class Layer1Service:
             "statement_type": normalized if shared_tab else "",
         }
 
-        # Sonnet 4.6 does not allow assistant message prefill (API rejects with 400),
-        # so we rely on a prompt that doesn't invite chain-of-thought + enough token
-        # budget that even an unhelpful first paragraph still leaves room for the JSON.
         col_response = self.claude.call_claude(
             "layer1_column_identifier",
             col_prompt_vars,
             model,
-            max_tokens=4096,
+            max_tokens=1024,
         )
         col_info = self.claude.parse_json_response(col_response)
         column_index: int = int(col_info.get("column_index", 1))
