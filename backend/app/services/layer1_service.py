@@ -81,15 +81,14 @@ class Layer1Service:
             "statement_type": normalized if shared_tab else "",
         }
 
-        # prefill="{" forces Sonnet 4.6 to start the JSON object immediately —
-        # otherwise the model echoes the prompt's "### Step 1..." headers as output
-        # and exhausts max_tokens before reaching the structured answer.
+        # Sonnet 4.6 does not allow assistant message prefill (API rejects with 400),
+        # so we rely on a prompt that doesn't invite chain-of-thought + enough token
+        # budget that even an unhelpful first paragraph still leaves room for the JSON.
         col_response = self.claude.call_claude(
             "layer1_column_identifier",
             col_prompt_vars,
             model,
-            max_tokens=1024,
-            prefill="{",
+            max_tokens=4096,
         )
         col_info = self.claude.parse_json_response(col_response)
         column_index: int = int(col_info.get("column_index", 1))
@@ -129,7 +128,6 @@ class Layer1Service:
             },
             model,
             max_tokens=16384,
-            prefill="{",
         )
         structured = self.claude.parse_json_response(struct_response)
 

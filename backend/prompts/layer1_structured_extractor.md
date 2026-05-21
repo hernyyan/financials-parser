@@ -61,7 +61,7 @@ Omit `waterfall` for non-IS statements.
 
 ## Output Format
 
-Return a single JSON object, no markdown fences:
+Respond with a single JSON object and nothing else — no explanation, no markdown fences, no preamble. Begin your response with `{` as the very first character.
 
 ```json
 {
