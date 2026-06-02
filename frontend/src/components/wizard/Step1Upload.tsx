@@ -176,6 +176,7 @@ export default function Step1Upload() {
 
   const [extractionStatus, setExtractionStatus] = useState<ExtractionStatus>('idle')
   const [extractionError, setExtractionError] = useState<string | null>(null)
+  const [extractionElapsed, setExtractionElapsed] = useState(0)
 
   // Resizable divider — left panel width as percentage
   const [leftPct, setLeftPct] = useState(65)
@@ -556,7 +557,7 @@ export default function Step1Upload() {
         .map(([p]) => parseInt(p))
         .sort((a, b) => a - b)
       try {
-        const result = await runLayer1Pdf(sessionId!, pages, type, reportingPeriod)
+        const result = await runLayer1Pdf(sessionId!, pages, type, reportingPeriod, (s) => setExtractionElapsed(s))
         mergeLayer1Result(type, {
           lineItems: result.lineItems,
           sourceScaling: result.sourceScaling,
@@ -602,6 +603,7 @@ export default function Step1Upload() {
   async function runExtractionInner() {
     setExtractionStatus('running')
     setExtractionError(null)
+    setExtractionElapsed(0)
 
     const stmtTypes = ['income_statement', 'balance_sheet', 'cash_flow_statement'] as const
     const results: Record<string, Awaited<ReturnType<typeof runLayer1>>> = {}
@@ -616,7 +618,7 @@ export default function Step1Upload() {
       .map(async (stmtType) => {
         const tab = assignments[stmtType]
         const sharedTab = tabCounts[tab] > 1
-        const result = await runLayer1(sessionId!, tab, stmtType, reportingPeriod, undefined, companyId, sharedTab)
+        const result = await runLayer1(sessionId!, tab, stmtType, reportingPeriod, undefined, companyId, sharedTab, (s) => setExtractionElapsed(s))
         console.log(`[Layer1 debug] ${stmtType} (tab="${tab}"):`, result.extractionDebug, '| lineItems:', Object.keys(result.lineItems).length)
         results[stmtType] = result
         mergeLayer1Result(stmtType, {
@@ -1199,7 +1201,7 @@ export default function Step1Upload() {
                 {extractionStatus === 'running' ? (
                   <>
                     <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                    Running...
+                    Extracting... ({extractionElapsed}s)
                   </>
                 ) : (
                   'Run Extraction'

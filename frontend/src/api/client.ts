@@ -63,7 +63,70 @@ export async function uploadFile(
   return handleResponse<UploadResponse>(res)
 }
 
-// POST /layer1/run
+// ── Async job polling ─────────────────────────────────────────────────────────
+
+const POLL_INTERVAL_MS = 3000
+const POLL_TIMEOUT_MS = 12 * 60 * 1000  // 12 min — beyond worst-case extraction
+
+interface _JobStartResponse { job_id: string }
+interface _JobStatusResponse {
+  job_id: string
+  status: 'pending' | 'running' | 'done' | 'error'
+  result?: Record<string, unknown>
+  error?: string
+}
+
+/**
+ * Poll a job status URL every 3s until status is 'done' or 'error'.
+ * Calls onTick every ~1s with elapsed seconds so callers can update UI.
+ * Internal — not exported.
+ */
+async function _pollJobUntilDone(
+  pollUrl: string,
+  onTick?: (elapsedSeconds: number) => void,
+): Promise<Record<string, unknown>> {
+  const deadline = Date.now() + POLL_TIMEOUT_MS
+  const startTime = Date.now()
+  const tickInterval = onTick
+    ? setInterval(() => onTick(Math.floor((Date.now() - startTime) / 1000)), 1000)
+    : null
+
+  try {
+    while (Date.now() < deadline) {
+      await new Promise<void>((resolve) => setTimeout(resolve, POLL_INTERVAL_MS))
+
+      const res = await fetch(pollUrl)
+
+      if (res.status === 404) {
+        throw new Error('Extraction job not found — it may have expired. Please try again.')
+      }
+      if (!res.ok) {
+        // Transient network error — keep polling rather than failing immediately
+        console.warn(`[layer1 poll] non-OK status ${res.status}, retrying...`)
+        continue
+      }
+
+      const data = (await res.json()) as _JobStatusResponse
+
+      if (data.status === 'done') {
+        if (!data.result) throw new Error('Job completed but returned no result.')
+        return data.result
+      }
+      if (data.status === 'error') {
+        throw new Error(data.error ?? 'Extraction failed with an unknown error.')
+      }
+      // status === 'pending' | 'running' — keep polling
+    }
+
+    throw new Error(
+      `Extraction timed out after ${POLL_TIMEOUT_MS / 60000} minutes. Please try again.`
+    )
+  } finally {
+    if (tickInterval !== null) clearInterval(tickInterval)
+  }
+}
+
+// POST /layer1/run  (async — starts job, polls until done)
 export async function runLayer1(
   sessionId: string,
   sheetName: string,
@@ -72,8 +135,9 @@ export async function runLayer1(
   fieldsFilter?: string[],
   companyId?: number | null,
   sharedTab?: boolean,
+  onElapsedTick?: (seconds: number) => void,
 ): Promise<Layer1Response> {
-  const res = await fetch(`${API_BASE}/layer1/run`, {
+  const startRes = await fetch(`${API_BASE}/layer1/run`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -86,22 +150,33 @@ export async function runLayer1(
       ...(sharedTab ? { sharedTab: true } : {}),
     }),
   })
-  return handleResponse<Layer1Response>(res)
+  const { job_id } = await handleResponse<_JobStartResponse>(startRes)
+  const result = await _pollJobUntilDone(
+    `${API_BASE}/layer1/jobs/${job_id}`,
+    onElapsedTick,
+  )
+  return result as unknown as Layer1Response
 }
 
-// POST /layer1/run-pdf
+// POST /layer1/run-pdf  (async — starts job, polls until done)
 export async function runLayer1Pdf(
   sessionId: string,
   pages: number[],
   statementType: string,
   reportingPeriod: string,
+  onElapsedTick?: (seconds: number) => void,
 ): Promise<Layer1Response> {
-  const res = await fetch(`${API_BASE}/layer1/run-pdf`, {
+  const startRes = await fetch(`${API_BASE}/layer1/run-pdf`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ sessionId, pages, statementType, reportingPeriod }),
   })
-  return handleResponse<Layer1Response>(res)
+  const { job_id } = await handleResponse<_JobStartResponse>(startRes)
+  const result = await _pollJobUntilDone(
+    `${API_BASE}/layer1/jobs/${job_id}`,
+    onElapsedTick,
+  )
+  return result as unknown as Layer1Response
 }
 
 // POST /layer2/run
