@@ -144,7 +144,7 @@ export interface Layer1ExtractionDebug {
   sectionEndRow: number
   stepCRowCount: number
   stepDRowCount: number
-  retried: boolean
+  attempts: number
 }
 
 export interface Layer1Response {

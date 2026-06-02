@@ -259,21 +259,37 @@ export default function Step2Classify() {
     if (layer1Results['balance_sheet'] && bsStatus !== 'done') {
       console.log('[Step2] BS: queuing task — layer1 lineItems keys:', Object.keys(layer1Results['balance_sheet'].lineItems).length)
       setBsStatus('loading')
+
+      const bsRequest = {
+        session_id: sessionId,
+        statement_type: 'balance_sheet' as const,
+        layer1_data: layer1Results['balance_sheet'].lineItems,
+        company_id: companyId,
+        use_company_context: useCompanyContext,
+      }
+
       tasks.push(
-        runLayer2({
-          session_id: sessionId,
-          statement_type: 'balance_sheet',
-          layer1_data: layer1Results['balance_sheet'].lineItems,
-          company_id: companyId,
-          use_company_context: useCompanyContext,
-        })
-          .then((result) => {
-            console.log('[Step2] BS .then() fired — result truthy:', !!result, 'statementType:', result?.statementType)
-            console.log('[Step2] BS response:', result)
+        runLayer2(bsRequest)
+          .then(async (result) => {
+            // Auto-retry if balance sheet Check is materially off
+            const checkValue = result.values['Check'] ?? 0
+            const totalAssets = Math.abs(result.values['Total Assets'] ?? 0)
+            const retryThreshold = Math.max(totalAssets * 0.001, 1000)
+            if (Math.abs(checkValue) > retryThreshold) {
+              console.warn(`[Step2] BS: Check=${checkValue.toFixed(2)} > threshold ${retryThreshold.toFixed(2)} — retrying Layer 2`)
+              try {
+                const retryResult = await runLayer2(bsRequest)
+                const retryCheck = retryResult.values['Check'] ?? 0
+                console.log(`[Step2] BS retry: Check=${retryCheck.toFixed(2)} (original: ${checkValue.toFixed(2)})`)
+                // Use whichever result is closer to balanced
+                result = Math.abs(retryCheck) < Math.abs(checkValue) ? retryResult : result
+              } catch (retryErr) {
+                console.warn('[Step2] BS retry failed — using original result:', retryErr)
+              }
+            }
+            console.log('[Step2] BS .then() fired — statementType:', result?.statementType)
             newResults['balance_sheet'] = result
-            console.log('[Step2] BS: calling setBsStatus(done)')
             setBsStatus('done')
-            console.log('[Step2] BS: setBsStatus(done) called')
           })
           .catch((err) => {
             console.error('[Step2] BS .catch() fired — error:', err)

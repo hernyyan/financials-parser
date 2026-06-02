@@ -91,21 +91,8 @@ class Layer1Service:
         # ── Step A: header extraction ────────────────────────────────────────
         header_text = extract_header_rows(filepath, sheet_name, n_rows=150)
 
-        # ── Step B: AI column identifier ─────────────────────────────────────
-        col_prompt_vars: Dict[str, Any] = {
-            "reporting_period": reporting_period,
-            "header_rows": header_text,
-            "statement_type": normalized if shared_tab else "",
-        }
-
-        col_prompt_vars["retry_hint"] = ""  # empty on first attempt
-        col_info = self.claude.call_claude_with_tool(
-            "layer1_column_identifier",
-            col_prompt_vars,
-            model,
-            tool_def=_COLUMN_IDENTIFIER_TOOL,
-            max_tokens=4096,
-        )
+        # ── Steps B→D: column identification, extraction, hierarchy ─────────────
+        # Retried up to MAX_ATTEMPTS times if lineItems comes back empty.
 
         def _unpack_col_info(info: Dict[str, Any], st: bool) -> tuple:
             col_idx = int(info.get("column_index", 1))
@@ -116,30 +103,27 @@ class Layer1Service:
             s_end = int(info.get("section_end_row", 0)) if st else 0
             return col_idx, scaling, s_skip, col_id, s_start, s_end
 
-        column_index, source_scaling, skip_rows, column_identified, section_start_row, section_end_row = (
-            _unpack_col_info(col_info, shared_tab)
-        )
+        MAX_ATTEMPTS = 3
+        col_prompt_vars: Dict[str, Any] = {
+            "reporting_period": reporting_period,
+            "header_rows": header_text,
+            "statement_type": normalized if shared_tab else "",
+            "retry_hint": "",
+        }
 
-        # ── Step B validation: verify the identified column has numeric data ──
-        _verify_start = section_start_row if section_start_row > 0 else (skip_rows + 1)
-        _verify_end = section_end_row if section_end_row > 0 else None
-        numeric_count = count_numeric_values_in_column(
-            filepath, sheet_name, column_index,
-            start_row=_verify_start, end_row=_verify_end,
-        )
-        if numeric_count < 3:
-            logger.warning(
-                "[Layer1] %s: col %d ('%s') has only %d numeric rows — retrying Step B",
-                normalized, column_index, col_info.get("column_letter", "?"), numeric_count,
-            )
-            col_prompt_vars["retry_hint"] = (
-                f"\n> **RETRY NOTICE:** A previous attempt selected column "
-                f"{column_index} (letter '{col_info.get('column_letter', '?')}') "
-                f"but that column contained only {numeric_count} numeric data rows — "
-                f"it is almost certainly wrong. Re-examine the headers very carefully "
-                f"and select a different column that contains actual financial figures "
-                f"for the period '{reporting_period}'."
-            )
+        col_info: Dict[str, Any] = {}
+        column_index = 1
+        source_scaling = "actual_dollars"
+        skip_rows = 0
+        column_identified = ""
+        section_start_row = 0
+        section_end_row = 0
+        rows: list = []
+        structured: Dict[str, Any] = {}
+        line_items: Dict[str, float] = {}
+
+        for attempt in range(MAX_ATTEMPTS):
+            # Step B: AI column identifier
             col_info = self.claude.call_claude_with_tool(
                 "layer1_column_identifier",
                 col_prompt_vars,
@@ -150,49 +134,89 @@ class Layer1Service:
             column_index, source_scaling, skip_rows, column_identified, section_start_row, section_end_row = (
                 _unpack_col_info(col_info, shared_tab)
             )
+
+            # Step B validation: verify column has numeric data; retry once inline
+            _verify_start = section_start_row if section_start_row > 0 else max(skip_rows + 1, 1)
+            _verify_end = section_end_row if section_end_row > 0 else None
+            numeric_count = count_numeric_values_in_column(
+                filepath, sheet_name, column_index,
+                start_row=_verify_start, end_row=_verify_end,
+            )
+            if numeric_count < 3:
+                logger.warning(
+                    "[Layer1] %s attempt %d: col %d ('%s') has only %d numeric rows — inner retry",
+                    normalized, attempt + 1, column_index, col_info.get("column_letter", "?"), numeric_count,
+                )
+                col_prompt_vars["retry_hint"] = (
+                    f"\n> **COLUMN CHECK:** Column {column_index} "
+                    f"('{col_info.get('column_letter', '?')}') contains only "
+                    f"{numeric_count} numeric values — it is wrong. "
+                    f"Select the column that actually contains financial data for '{reporting_period}'."
+                )
+                col_info = self.claude.call_claude_with_tool(
+                    "layer1_column_identifier",
+                    col_prompt_vars,
+                    model,
+                    tool_def=_COLUMN_IDENTIFIER_TOOL,
+                    max_tokens=4096,
+                )
+                column_index, source_scaling, skip_rows, column_identified, section_start_row, section_end_row = (
+                    _unpack_col_info(col_info, shared_tab)
+                )
+
             logger.info(
-                "[Layer1] %s: retry selected col=%d scaling=%s",
-                normalized, column_index, source_scaling,
+                "[Layer1] %s attempt %d/%d: col=%d scaling=%s section=%s-%s",
+                normalized, attempt + 1, MAX_ATTEMPTS, column_index, source_scaling,
+                section_start_row or "auto", section_end_row or "end",
             )
 
-        logger.info(
-            "[Layer1] %s: col=%d scaling=%s shared=%s section=%s-%s",
-            normalized, column_index, source_scaling, shared_tab,
-            section_start_row or "auto", section_end_row or "end",
-        )
+            # Step C: full row extraction
+            rows = extract_rows_with_metadata(
+                filepath, sheet_name,
+                column_index=column_index,
+                source_scaling=source_scaling,
+                skip_rows=skip_rows,
+                section_start_row=section_start_row,
+                section_end_row=section_end_row,
+            )
+            logger.info("[Layer1] %s attempt %d: Step C → %d rows", normalized, attempt + 1, len(rows))
 
-        # ── Step C: full extraction with metadata ────────────────────────────
-        rows = extract_rows_with_metadata(
-            filepath,
-            sheet_name,
-            column_index=column_index,
-            source_scaling=source_scaling,
-            skip_rows=skip_rows,
-            section_start_row=section_start_row,
-            section_end_row=section_end_row,
-        )
-        rows_csv = rows_to_csv_with_metadata(rows)
-        logger.info("[Layer1] %s: Step C extracted %d rows", normalized, len(rows))
+            if not rows and attempt < MAX_ATTEMPTS - 1:
+                col_prompt_vars["retry_hint"] = (
+                    f"\n> **RETRY {attempt + 2}/{MAX_ATTEMPTS}:** Column {column_index} "
+                    f"('{col_info.get('column_letter', '?')}') produced 0 data rows after full extraction. "
+                    f"It is the wrong column. Choose a different column with actual financial data "
+                    f"for the period '{reporting_period}'."
+                )
+                logger.warning("[Layer1] %s: 0 rows on attempt %d — retrying", normalized, attempt + 1)
+                continue  # retry from Step B
 
-        # ── Step D: AI hierarchy classification ──────────────────────────────
-        struct_response = self.claude.call_claude(
-            "layer1_structured_extractor",
-            {
-                "statement_type": normalized,
-                "reporting_period": reporting_period,
-                "rows_csv": rows_csv,
-            },
-            model,
-            max_tokens=16384,
-        )
-        structured = self.claude.parse_json_response(struct_response)
+            rows_csv = rows_to_csv_with_metadata(rows)
 
-        # Strip margin rows — margins are calculated outside this app
-        if "rows" in structured:
-            structured["rows"] = _strip_margins(structured["rows"])
+            # Step D: AI hierarchy classification
+            struct_response = self.claude.call_claude(
+                "layer1_structured_extractor",
+                {"statement_type": normalized, "reporting_period": reporting_period, "rows_csv": rows_csv},
+                model,
+                max_tokens=16384,
+            )
+            structured = self.claude.parse_json_response(struct_response)
+            if "rows" in structured:
+                structured["rows"] = _strip_margins(structured["rows"])
 
-        # ── Build flat lineItems from structured (backward compat for Layer 2) ─
-        line_items = _flatten_structured(structured.get("rows", []))
+            line_items = _flatten_structured(structured.get("rows", []))
+            logger.info("[Layer1] %s attempt %d: %d lineItems", normalized, attempt + 1, len(line_items))
+
+            if line_items or attempt == MAX_ATTEMPTS - 1:
+                break
+
+            col_prompt_vars["retry_hint"] = (
+                f"\n> **RETRY {attempt + 2}/{MAX_ATTEMPTS}:** Column {column_index} "
+                f"('{col_info.get('column_letter', '?')}') extracted {len(rows)} rows but "
+                f"hierarchy classification produced 0 line items. "
+                f"Either the column or the row interpretation is wrong."
+            )
+            logger.warning("[Layer1] %s: 0 lineItems on attempt %d — retrying", normalized, attempt + 1)
 
         return {
             "lineItems": line_items,
@@ -208,7 +232,7 @@ class Layer1Service:
                 "sectionEndRow": section_end_row,
                 "stepCRowCount": len(rows),
                 "stepDRowCount": len(structured.get("rows", [])),
-                "retried": bool(col_prompt_vars.get("retry_hint")),
+                "attempts": attempt + 1,
             },
         }
 
