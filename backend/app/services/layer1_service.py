@@ -103,7 +103,7 @@ class Layer1Service:
             s_end = int(info.get("section_end_row", 0)) if st else 0
             return col_idx, scaling, s_skip, col_id, s_start, s_end
 
-        MAX_ATTEMPTS = 3
+        MAX_ATTEMPTS = 2
         col_prompt_vars: Dict[str, Any] = {
             "reporting_period": reporting_period,
             "header_rows": header_text,

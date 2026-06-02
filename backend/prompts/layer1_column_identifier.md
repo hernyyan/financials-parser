@@ -15,13 +15,14 @@ You are analyzing the header rows of a financial statement spreadsheet to identi
 
 ## Task
 
-Find the column whose header matches the reporting period **{reporting_period}** exactly (month and year must both match).
+Find the column whose header matches the reporting period **{reporting_period}** by month and year.
 
 **Column selection rules:**
-- Match the exact month and year. If the target is November 2025 (month=11), do NOT select October (month=10) or December (month=12).
+- Match the month and year. If the target is November 2025 (month=11), do NOT select October (month=10) or December (month=12).
 - Common header formats: "November 2025", "Nov-25", "Nov 2025", "11/25", "11/2025", "2025-11", multi-row (year in one row, month in the next).
-- If multiple columns match (e.g., Actuals vs Budget for same period), prefer Actuals or Consolidated.
-- Do NOT select TTM, LTM, PYE, YTD, Budget, Variance, or Prior Year columns.
+- **End-of-month date formats:** Headers like "November 29, 2025", "Nov 29", "Nov 29, 2025", "29-Nov-25", or "11/29/2025" mean the period *ending* that date. Match them by month — "November 29" is a valid match for "November 2025".
+- **When multiple columns cover the same period** (e.g., Actual, Budget, Variance/Delta columns side by side): you MUST select the **Actual** column. Never select Budget, Forecast, Variance, or Delta columns even if they are the only labeled match.
+- Do NOT select TTM, LTM, PYE, YTD, Budget, Forecast, Variance, or Prior Year columns.
 
 **Scaling detection:**
 - Look for unit indicators near the top: "in thousands", "$ in 000s", "(in millions)", etc.
