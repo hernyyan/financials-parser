@@ -162,6 +162,8 @@ def admin_backfill_company_ids(db: Session = Depends(get_db)):
     Also nullifies id=31 (superseded USBid Jan 2026 duplicate — canonical row is id=56).
     Safe to run multiple times — the UPDATE only touches rows where company_id IS NULL.
     """
+    # Exclude id=31 (superseded USBid Jan 2026 duplicate) from the stamp so it
+    # never gets a company_id that would violate the unique index with id=56.
     result = db.execute(text("""
         UPDATE reviews
         SET company_id = (
@@ -171,10 +173,11 @@ def admin_backfill_company_ids(db: Session = Depends(get_db)):
         )
         WHERE company_id IS NULL
           AND company_name != ''
+          AND id != 31
     """))
     matched = result.rowcount
 
-    # Nullify the superseded duplicate so it doesn't violate the unique index
+    # Ensure id=31 stays without a company_id (already excluded above, but be explicit)
     db.execute(text("UPDATE reviews SET company_id = NULL WHERE id = 31"))
 
     db.commit()
