@@ -15,30 +15,19 @@ You are analyzing the header rows of a financial statement spreadsheet to identi
 
 ## Task
 
-Find the single column that contains the **consolidated actual financial data** for **{reporting_period}**.
+Identify the single column that contains the **consolidated actual financial data** for **{reporting_period}**. Use your best judgment — every spreadsheet is different and there are no rigid rules.
 
-Apply this priority ladder in order — eliminate candidates at each step, then pick the best remaining column:
+**General guidance:**
 
-**Step 1 — Match the period (month + year)**
-- Headers like "November 2025", "Nov-25", "Nov 2025", "11/25", "2025-11", or multi-row (year above, month below) all match "November 2025".
-- End-of-month date formats match by month: "November 29, 2025", "Nov 29", "29-Nov-25", "11/29/2025" are all valid matches for "November 2025".
-- Eliminate columns for any other month or year — e.g., if target is Nov 2025, discard Oct 2025, Nov 2024, YTD, TTM, LTM, PYE, and any "Prior Year" column.
+- **Period match:** The column header should correspond to the target month and year. Date formats vary widely — "November 2025", "Nov-25", "11/25", "Nov 29, 2025" (end-of-month), multi-row headers (year in one row, month in another) are all common. Match by month and year regardless of exact format.
 
-**Step 2 — Eliminate non-actual columns**
-- Discard Budget, Forecast, Plan, Variance, Delta, % Change, and Prior Year columns even if their date matches.
-- Keep only Actual, Reported, or unlabeled data columns.
+- **Actual over non-actual:** Prefer columns representing actual reported figures over Budget, Forecast, Plan, Variance, Delta, or Prior Year columns when both exist for the same period.
 
-**Step 3 — Prefer consolidated / total over sub-totals**
-Multiple columns may survive steps 1–2 because the company reports by geography, segment, or business unit alongside a consolidated total. Examples:
-- Geography: Americas / EMEA / APAC / **Total**
-- Segment: Enterprise / SMB / Consumer / **Total**
-- Entity: Subsidiary A / Subsidiary B / **Consolidated**
-- In these cases, select the **Total** or **Consolidated** column (or whichever column label indicates the company-wide aggregate).
-- If no explicit "Total" label exists but one column has values that appear to be the sum of the others, select that column.
+- **Consolidated over breakdowns:** Companies sometimes report separate columns for geographies (Americas, EMEA, APAC), segments (Enterprise, SMB), or entities alongside a consolidated total. Prefer the consolidated or total column.
 
-**Step 4 — If still ambiguous**
-- Prefer the column positioned furthest to the right among equal candidates (totals are commonly placed last).
-- Use the column with the most non-empty numeric rows as a tiebreaker.
+- **What to avoid:** TTM, LTM, PYE, YTD, prior-year comparison, variance, and percentage columns are almost never the right answer.
+
+These are guidelines, not strict rules. Use judgment based on what you see in the headers.
 
 **Scaling detection:**
 - Look for unit indicators near the top: "in thousands", "$ in 000s", "(in millions)", etc.
