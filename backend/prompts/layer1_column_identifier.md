@@ -15,19 +15,9 @@ You are analyzing the header rows of a financial statement spreadsheet to identi
 
 ## Task
 
-Identify the single column that contains the **consolidated actual financial data** for **{reporting_period}**. Use your best judgment — every spreadsheet is different and there are no rigid rules.
+Look at the headers and identify the column that most likely contains the consolidated, actual financial figures for **{reporting_period}**.
 
-**General guidance:**
-
-- **Period match:** The column header should correspond to the target month and year. Date formats vary widely — "November 2025", "Nov-25", "11/25", "Nov 29, 2025" (end-of-month), multi-row headers (year in one row, month in another) are all common. Match by month and year regardless of exact format.
-
-- **Actual over non-actual:** Prefer columns representing actual reported figures over Budget, Forecast, Plan, Variance, Delta, or Prior Year columns when both exist for the same period.
-
-- **Consolidated over breakdowns:** Companies sometimes report separate columns for geographies (Americas, EMEA, APAC), segments (Enterprise, SMB), or entities alongside a consolidated total. Prefer the consolidated or total column.
-
-- **What to avoid:** TTM, LTM, PYE, YTD, prior-year comparison, variance, and percentage columns are almost never the right answer.
-
-These are guidelines, not strict rules. Use judgment based on what you see in the headers.
+Every spreadsheet is laid out differently, so use your judgment. As rough guidance: you're looking for a column whose header corresponds to the right month and year — date formats vary widely and may include end-of-month dates (e.g. "Nov 29" meaning the period ending November), multi-row headers, or abbreviated formats. When there are multiple columns for the same period — such as actual vs. budget, year-over-year comparisons, geographic or segment breakdowns — you generally want the one representing consolidated actuals for the target period. Columns like TTM, LTM, YTD, variance, prior year, budget, or percentage change are usually not what you want.
 
 **Scaling detection:**
 - Look for unit indicators near the top: "in thousands", "$ in 000s", "(in millions)", etc.
