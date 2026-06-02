@@ -12,6 +12,9 @@ interface DataTableRow {
   isPending?: boolean
   isBold?: boolean
   isIndented?: boolean
+  /** Numeric indent depth for structured source data (0 = top-level, 1 = child, etc.).
+   *  Takes precedence over isIndented when set. Each level adds 0.75rem of left padding. */
+  indentLevel?: number
   isItalic?: boolean
 }
 
@@ -137,7 +140,9 @@ export default function DataTable({
                       className={`truncate${row.isItalic ? ' italic' : ''}`}
                       style={{
                         fontWeight: row.isBold ? 600 : 400,
-                        paddingLeft: row.isIndented ? '0.75rem' : undefined,
+                        paddingLeft: row.indentLevel != null
+                          ? `${row.indentLevel * 0.75}rem`
+                          : row.isIndented ? '0.75rem' : undefined,
                         color: '#1a1f35',
                       }}
                     >

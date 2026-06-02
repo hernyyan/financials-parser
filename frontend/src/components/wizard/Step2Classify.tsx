@@ -9,7 +9,7 @@ import { IS_TEMPLATE_FIELDS, BS_TEMPLATE_FIELDS } from '../../mocks/mockData'
 import { formatFieldValue } from '../../utils/formatters'
 import { BOLD_FIELDS, ITALIC_FIELDS, isIndented } from '../../utils/templateStyling'
 import { useCorrections } from '../../hooks/useCorrections'
-import type { Correction, Layer2Result, TemplateResponse, TemplateSection } from '../../types'
+import type { Correction, Layer1Result, Layer1TemplateRow, Layer2Result, TemplateResponse, TemplateSection } from '../../types'
 import {
   ArrowLeft,
   CheckCircle2,
@@ -33,12 +33,32 @@ function formatSourceValue(value: number): string {
   return value < 0 ? `(${formatted})` : formatted
 }
 
-function buildSourceRows(layer1Results: Record<string, { lineItems: Record<string, number> }>) {
-  type Row = React.ComponentProps<typeof DataTable>['rows'][number]
-  const rows: Row[] = []
-  for (const [sheetName, result] of Object.entries(layer1Results)) {
-    if (!result) continue
-    rows.push({ label: sheetName, value: null, isStatementHeader: true })
+/** Recursively flatten a structured rows tree into DataTable rows, preserving hierarchy via indentLevel and bold for sum rows. */
+function flattenStructuredRows(
+  rows: Layer1TemplateRow[],
+  depth: number,
+  out: React.ComponentProps<typeof DataTable>['rows'],
+): void {
+  for (const row of rows) {
+    out.push({
+      label: row.label,
+      value: row.value != null ? formatSourceValue(row.value) : null,
+      isBold: row.type === 'sum',
+      indentLevel: depth,
+    })
+    if (row.children?.length) {
+      flattenStructuredRows(row.children, depth + 1, out)
+    }
+  }
+}
+
+/** Build source data rows for one statement. Uses structured hierarchy when available, falls back to flat lineItems. */
+function buildSourceRows(sheetName: string, result: Layer1Result): React.ComponentProps<typeof DataTable>['rows'] {
+  const rows: React.ComponentProps<typeof DataTable>['rows'] = []
+  rows.push({ label: sheetName, value: null, isStatementHeader: true })
+  if (result.structured?.rows?.length) {
+    flattenStructuredRows(result.structured.rows, 0, rows)
+  } else {
     for (const [label, value] of Object.entries(result.lineItems)) {
       rows.push({ label, value: formatSourceValue(value) })
     }
@@ -368,9 +388,9 @@ export default function Step2Classify() {
   const isData = layer1Results['income_statement']
   const bsData = layer1Results['balance_sheet']
   const cfsData = layer1Results['cash_flow_statement']
-  const sourceIsRows = isData ? buildSourceRows({ [isData.sourceSheet]: isData }) : []
-  const sourceBsRows = bsData ? buildSourceRows({ [bsData.sourceSheet]: bsData }) : []
-  const sourceCfsRows = cfsData ? buildSourceRows({ [cfsData.sourceSheet]: cfsData }) : []
+  const sourceIsRows = isData ? buildSourceRows(isData.sourceSheet, isData) : []
+  const sourceBsRows = bsData ? buildSourceRows(bsData.sourceSheet, bsData) : []
+  const sourceCfsRows = cfsData ? buildSourceRows(cfsData.sourceSheet, cfsData) : []
 
   const existingCorrection = selectedCell
     ? corrections.find((c) => c.fieldName === selectedCell)
