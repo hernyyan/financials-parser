@@ -172,10 +172,14 @@ _MIGRATIONS = [
     "ALTER TABLE reviews ADD COLUMN finalized_at TIMESTAMP;",
     "ALTER TABLE reviews ADD COLUMN company_id INTEGER;",
     "ALTER TABLE companies ADD COLUMN context TEXT DEFAULT '';",
-    # Partial unique index: prevents two finalized rows for the same company+period.
-    # WHERE company_id IS NOT NULL means legacy null rows are excluded and won't violate it.
+    # Drop the old over-broad index (company_id IS NOT NULL only) if it exists,
+    # then recreate scoped to finalized rows only. Both steps are idempotent.
+    "DROP INDEX IF EXISTS idx_reviews_company_period;",
+    # Partial unique index: prevents two *finalized* rows for the same company+period.
+    # In-progress rows (multiple upload attempts) are intentionally excluded.
+    # NULL company_id rows are also excluded so legacy data doesn't violate it.
     # Supported by both SQLite 3.8+ and PostgreSQL.
-    "CREATE UNIQUE INDEX IF NOT EXISTS idx_reviews_company_period ON reviews(company_id, reporting_period) WHERE company_id IS NOT NULL;",
+    "CREATE UNIQUE INDEX IF NOT EXISTS idx_reviews_company_period ON reviews(company_id, reporting_period) WHERE company_id IS NOT NULL AND final_output IS NOT NULL;",
 ]
 
 
