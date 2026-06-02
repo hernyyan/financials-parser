@@ -377,7 +377,7 @@ export default function Step1Upload() {
     setUploading(true)
     setStatus(null)
     try {
-      const response = await uploadFile(file, companyName, reportingPeriod)
+      const response = await uploadFile(file, companyName, reportingPeriod, companyId)
       setUploadedFile(file)
       setSessionId(response.sessionId)
       setUploadFileType(response.fileType)

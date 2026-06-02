@@ -124,8 +124,13 @@ def run_layer1(
             "structured": result.get("structured"),
         }
         db.execute(
-            text("UPDATE reviews SET layer1_data = :data WHERE session_id = :sid"),
-            {"data": json.dumps(existing), "sid": request.sessionId},
+            text("""
+                UPDATE reviews
+                SET layer1_data = :data,
+                    company_id = COALESCE(company_id, :cid)
+                WHERE session_id = :sid
+            """),
+            {"data": json.dumps(existing), "sid": request.sessionId, "cid": request.companyId},
         )
         db.commit()
     except Exception as exc:

@@ -4,6 +4,7 @@ GET  /files/{session_id}/workbook — Serve the original uploaded workbook for c
 GET  /files/{session_id}/pdf      — Serve the uploaded PDF for client-side preview.
 """
 import uuid
+from typing import Optional
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse
@@ -25,6 +26,7 @@ def upload_file(
     file: UploadFile = File(...),
     company_name: str = Form(""),
     reporting_period: str = Form(""),
+    company_id: Optional[int] = Form(None),
     db: Session = Depends(get_db),
 ):
     """
@@ -74,10 +76,10 @@ def upload_file(
         try:
             db.execute(
                 text(
-                    "INSERT INTO reviews (session_id, company_name, reporting_period, status) "
-                    "VALUES (:sid, :cn, :rp, 'in_progress')"
+                    "INSERT INTO reviews (session_id, company_name, reporting_period, status, company_id) "
+                    "VALUES (:sid, :cn, :rp, 'in_progress', :cid)"
                 ),
-                {"sid": session_id, "cn": company_name, "rp": reporting_period},
+                {"sid": session_id, "cn": company_name, "rp": reporting_period, "cid": company_id},
             )
             db.commit()
         except Exception:

@@ -172,6 +172,10 @@ _MIGRATIONS = [
     "ALTER TABLE reviews ADD COLUMN finalized_at TIMESTAMP;",
     "ALTER TABLE reviews ADD COLUMN company_id INTEGER;",
     "ALTER TABLE companies ADD COLUMN context TEXT DEFAULT '';",
+    # Partial unique index: prevents two finalized rows for the same company+period.
+    # WHERE company_id IS NOT NULL means legacy null rows are excluded and won't violate it.
+    # Supported by both SQLite 3.8+ and PostgreSQL.
+    "CREATE UNIQUE INDEX IF NOT EXISTS idx_reviews_company_period ON reviews(company_id, reporting_period) WHERE company_id IS NOT NULL;",
 ]
 
 

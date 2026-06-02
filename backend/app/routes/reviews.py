@@ -21,25 +21,18 @@ def check_existing_review(
     reporting_period: str = Query(...),
     db: Session = Depends(get_db),
 ):
-    """Check if finalized data exists for this company+period."""
-    company = db.execute(
-        text("SELECT name FROM companies WHERE id = :id"),
-        {"id": company_id},
-    ).fetchone()
-    if not company:
-        raise HTTPException(status_code=404, detail="Company not found.")
-
+    """Check if a finalized review exists for this company_id + reporting_period."""
     row = db.execute(
         text("""
             SELECT session_id, finalized_at
             FROM reviews
-            WHERE company_name = :name
+            WHERE company_id = :cid
               AND reporting_period = :period
               AND final_output IS NOT NULL
             ORDER BY finalized_at DESC
             LIMIT 1
         """),
-        {"name": company[0], "period": reporting_period},
+        {"cid": company_id, "period": reporting_period},
     ).fetchone()
 
     if row:
@@ -56,7 +49,7 @@ def continue_previous_review(
     request: ContinuePreviousRequest,
     db: Session = Depends(get_db),
 ):
-    """Create a new review session pre-populated with the latest finalized data."""
+    """Create a new in-progress session pre-populated with the latest finalized data."""
     company = db.execute(
         text("SELECT name FROM companies WHERE id = :id"),
         {"id": request.company_id},
@@ -68,13 +61,13 @@ def continue_previous_review(
         text("""
             SELECT session_id, layer1_data, layer2_data, corrections
             FROM reviews
-            WHERE company_name = :name
+            WHERE company_id = :cid
               AND reporting_period = :period
               AND final_output IS NOT NULL
             ORDER BY finalized_at DESC
             LIMIT 1
         """),
-        {"name": company[0], "period": request.reporting_period},
+        {"cid": request.company_id, "period": request.reporting_period},
     ).fetchone()
 
     if not source:
@@ -84,15 +77,18 @@ def continue_previous_review(
 
     db.execute(
         text("""
-            INSERT INTO reviews (session_id, company_name, reporting_period, status,
-                                 layer1_data, layer2_data, corrections)
-            VALUES (:sid, :name, :period, 'in_progress',
-                    :l1, :l2, :corrections)
+            INSERT INTO reviews
+                (session_id, company_name, reporting_period, status, company_id,
+                 layer1_data, layer2_data, corrections)
+            VALUES
+                (:sid, :name, :period, 'in_progress', :cid,
+                 :l1, :l2, :corrections)
         """),
         {
             "sid": new_session_id,
             "name": company[0],
             "period": request.reporting_period,
+            "cid": request.company_id,
             "l1": source[1],
             "l2": source[2],
             "corrections": source[3],

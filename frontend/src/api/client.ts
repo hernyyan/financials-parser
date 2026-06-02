@@ -48,11 +48,13 @@ export async function uploadFile(
   file: File,
   companyName: string = '',
   reportingPeriod: string = '',
+  companyId?: number | null,
 ): Promise<UploadResponse> {
   const formData = new FormData()
   formData.append('file', file)
   formData.append('company_name', companyName)
   formData.append('reporting_period', reportingPeriod)
+  if (companyId != null) formData.append('company_id', String(companyId))
 
   const res = await fetch(`${API_BASE}/upload`, {
     method: 'POST',

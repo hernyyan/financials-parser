@@ -153,6 +153,47 @@ def admin_export_review(session_id: str, db: Session = Depends(get_db)):
     )
 
 
+@router.post("/backfill-company-ids")
+def admin_backfill_company_ids(db: Session = Depends(get_db)):
+    """
+    One-time data migration: match reviews rows to companies by case-insensitive
+    name, stamping company_id where it is currently NULL.
+
+    Also nullifies id=31 (superseded USBid Jan 2026 duplicate — canonical row is id=56).
+    Safe to run multiple times — the UPDATE only touches rows where company_id IS NULL.
+    """
+    result = db.execute(text("""
+        UPDATE reviews
+        SET company_id = (
+            SELECT id FROM companies
+            WHERE LOWER(TRIM(companies.name)) = LOWER(TRIM(reviews.company_name))
+            LIMIT 1
+        )
+        WHERE company_id IS NULL
+          AND company_name != ''
+    """))
+    matched = result.rowcount
+
+    # Nullify the superseded duplicate so it doesn't violate the unique index
+    db.execute(text("UPDATE reviews SET company_id = NULL WHERE id = 31"))
+
+    db.commit()
+
+    unmatched_finalized = db.execute(text("""
+        SELECT id, company_name, reporting_period
+        FROM reviews
+        WHERE company_id IS NULL AND company_name != '' AND final_output IS NOT NULL
+    """)).fetchall()
+
+    return {
+        "matched_rows": matched,
+        "unmatched_finalized": [
+            {"id": r[0], "company_name": r[1], "period": r[2]}
+            for r in unmatched_finalized
+        ],
+    }
+
+
 @router.delete("/reviews/{session_id}")
 def admin_delete_review(session_id: str, db: Session = Depends(get_db)):
     """Delete a review by session_id."""
