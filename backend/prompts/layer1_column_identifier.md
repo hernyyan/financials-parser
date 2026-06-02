@@ -35,4 +35,6 @@ Find the column whose header matches the reporting period **{reporting_period}**
   - Statement headings to look for: income_statement → "Income Statement", "P&L", "Profit and Loss"; balance_sheet → "Balance Sheet", "Statement of Financial Position"; cash_flow_statement → "Cash Flow Statement", "Statement of Cash Flows"
 - Both values are 1-based absolute sheet row numbers.
 
+{retry_hint}
+
 Call the `identify_column` tool with your findings.

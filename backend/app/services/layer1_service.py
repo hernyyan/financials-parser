@@ -21,6 +21,7 @@ from sqlalchemy import text as sa_text
 
 from app.services.claude_service import ClaudeService, get_claude_service
 from app.services.layer1_extractor import (
+    count_numeric_values_in_column,
     extract_header_rows,
     extract_rows_with_metadata,
     rows_to_csv_with_metadata,
@@ -97,6 +98,7 @@ class Layer1Service:
             "statement_type": normalized if shared_tab else "",
         }
 
+        col_prompt_vars["retry_hint"] = ""  # empty on first attempt
         col_info = self.claude.call_claude_with_tool(
             "layer1_column_identifier",
             col_prompt_vars,
@@ -104,14 +106,54 @@ class Layer1Service:
             tool_def=_COLUMN_IDENTIFIER_TOOL,
             max_tokens=4096,
         )
-        column_index: int = int(col_info.get("column_index", 1))
-        source_scaling: str = str(col_info.get("source_scaling", "actual_dollars"))
-        skip_rows: int = int(col_info.get("skip_rows", 0))
-        column_identified: str = str(col_info.get("period_matched", col_info.get("column_letter", "")))
 
-        # Section bounds only meaningful when shared_tab=True
-        section_start_row: int = int(col_info.get("section_start_row", 0)) if shared_tab else 0
-        section_end_row: int = int(col_info.get("section_end_row", 0)) if shared_tab else 0
+        def _unpack_col_info(info: Dict[str, Any], st: bool) -> tuple:
+            col_idx = int(info.get("column_index", 1))
+            scaling = str(info.get("source_scaling", "actual_dollars"))
+            s_skip = int(info.get("skip_rows", 0))
+            col_id = str(info.get("period_matched", info.get("column_letter", "")))
+            s_start = int(info.get("section_start_row", 0)) if st else 0
+            s_end = int(info.get("section_end_row", 0)) if st else 0
+            return col_idx, scaling, s_skip, col_id, s_start, s_end
+
+        column_index, source_scaling, skip_rows, column_identified, section_start_row, section_end_row = (
+            _unpack_col_info(col_info, shared_tab)
+        )
+
+        # ── Step B validation: verify the identified column has numeric data ──
+        _verify_start = section_start_row if section_start_row > 0 else (skip_rows + 1)
+        _verify_end = section_end_row if section_end_row > 0 else None
+        numeric_count = count_numeric_values_in_column(
+            filepath, sheet_name, column_index,
+            start_row=_verify_start, end_row=_verify_end,
+        )
+        if numeric_count < 3:
+            logger.warning(
+                "[Layer1] %s: col %d ('%s') has only %d numeric rows — retrying Step B",
+                normalized, column_index, col_info.get("column_letter", "?"), numeric_count,
+            )
+            col_prompt_vars["retry_hint"] = (
+                f"\n> **RETRY NOTICE:** A previous attempt selected column "
+                f"{column_index} (letter '{col_info.get('column_letter', '?')}') "
+                f"but that column contained only {numeric_count} numeric data rows — "
+                f"it is almost certainly wrong. Re-examine the headers very carefully "
+                f"and select a different column that contains actual financial figures "
+                f"for the period '{reporting_period}'."
+            )
+            col_info = self.claude.call_claude_with_tool(
+                "layer1_column_identifier",
+                col_prompt_vars,
+                model,
+                tool_def=_COLUMN_IDENTIFIER_TOOL,
+                max_tokens=4096,
+            )
+            column_index, source_scaling, skip_rows, column_identified, section_start_row, section_end_row = (
+                _unpack_col_info(col_info, shared_tab)
+            )
+            logger.info(
+                "[Layer1] %s: retry selected col=%d scaling=%s",
+                normalized, column_index, source_scaling,
+            )
 
         logger.info(
             "[Layer1] %s: col=%d scaling=%s shared=%s section=%s-%s",

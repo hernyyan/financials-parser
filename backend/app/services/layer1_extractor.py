@@ -199,6 +199,45 @@ def rows_to_csv_with_metadata(rows: List[Dict[str, Any]]) -> str:
     return output.getvalue()
 
 
+# ── Step B validation ─────────────────────────────────────────────────────────
+
+def count_numeric_values_in_column(
+    filepath: str,
+    sheet_name: str,
+    column_index: int,
+    start_row: int = 1,
+    end_row: Optional[int] = None,
+) -> int:
+    """
+    Count rows that have a parseable numeric value in *column_index* (1-based).
+    Used to validate the AI's column selection before running the full extraction.
+    """
+    wb = openpyxl.load_workbook(filepath, read_only=True, data_only=True)
+    ws = wb[sheet_name]
+    count = 0
+    for row_num, row in enumerate(
+        ws.iter_rows(min_col=column_index, max_col=column_index, values_only=True),
+        start=1,
+    ):
+        if row_num < start_row:
+            continue
+        if end_row is not None and row_num > end_row:
+            break
+        raw = row[0]
+        if raw is None:
+            continue
+        raw_str = str(raw).strip()
+        if raw_str in ("", "-", "—", "–"):
+            continue
+        try:
+            float(raw_str.replace(",", "").replace("(", "-").replace(")", ""))
+            count += 1
+        except (ValueError, TypeError):
+            pass
+    wb.close()
+    return count
+
+
 # ── internal ──────────────────────────────────────────────────────────────────
 
 def _parse_scale(source_scaling: str) -> float:
