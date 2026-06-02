@@ -99,6 +99,67 @@ class ClaudeService:
         print(f"Claude responded: stop_reason={message.stop_reason} length={len(response_text)}")
         return response_text
 
+    def call_claude_with_tool(
+        self,
+        prompt_key: str,
+        variables: Dict[str, str],
+        model: str,
+        tool_def: Dict[str, Any],
+        max_tokens: int = 4096,
+    ) -> Dict[str, Any]:
+        """
+        Call Claude with forced tool use. Returns tool input dict directly.
+
+        Uses tool_choice={"type": "tool", "name": tool_def["name"]} to guarantee
+        the response is a tool_use block, not prose. No JSON parsing needed.
+
+        Args:
+            prompt_key: Stem of the prompt .md file.
+            variables: Dict of {placeholder: value} to substitute.
+            model: Claude model ID.
+            tool_def: Full Anthropic tool definition dict (name, description, input_schema).
+            max_tokens: Token budget (default 4096).
+
+        Returns:
+            The tool input as a Python dict (already parsed by the SDK).
+
+        Raises:
+            FileNotFoundError: If prompt file not found.
+            RuntimeError: If response does not contain expected tool_use block.
+            anthropic.APIError: On API failures.
+        """
+        if prompt_key not in self.prompts:
+            prompt_path = PROMPTS_DIR / f"{prompt_key}.md"
+            if prompt_path.exists():
+                self.prompts[prompt_key] = prompt_path.read_text(encoding="utf-8")
+            else:
+                raise FileNotFoundError(
+                    f"Prompt '{prompt_key}.md' not found in {PROMPTS_DIR}."
+                )
+
+        filled_prompt = self.prompts[prompt_key]
+        for key, value in variables.items():
+            filled_prompt = filled_prompt.replace(f"{{{key}}}", str(value))
+
+        print(f"Calling Claude (tool use) model={model} max_tokens={max_tokens} prompt_key={prompt_key} tool={tool_def['name']}")
+        message = self.client.messages.create(
+            model=model,
+            max_tokens=max_tokens,
+            tools=[tool_def],
+            tool_choice={"type": "tool", "name": tool_def["name"]},
+            messages=[{"role": "user", "content": filled_prompt}],
+        )
+
+        for block in message.content:
+            if block.type == "tool_use" and block.name == tool_def["name"]:
+                print(f"Claude tool use: stop_reason={message.stop_reason} tool={block.name}")
+                return block.input
+
+        raise RuntimeError(
+            f"Claude response did not contain a '{tool_def['name']}' tool_use block. "
+            f"stop_reason={message.stop_reason} content={message.content}"
+        )
+
     def parse_json_response(self, response_text: str) -> Any:
         """
         Parse JSON from Claude's response text.

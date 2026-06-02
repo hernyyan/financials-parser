@@ -30,6 +30,27 @@ logger = logging.getLogger(__name__)
 
 _VALID_TYPES = {"income_statement", "balance_sheet", "cash_flow_statement"}
 
+_COLUMN_IDENTIFIER_TOOL = {
+    "name": "identify_column",
+    "description": (
+        "Identify the spreadsheet column containing the target reporting period "
+        "and report data scaling and optional section boundaries."
+    ),
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "column_index":      {"type": "integer", "description": "1-based column index (A=1, B=2, ...)"},
+            "column_letter":     {"type": "string",  "description": "Column letter (e.g. 'D')"},
+            "source_scaling":    {"type": "string",  "enum": ["thousands", "millions", "actual_dollars"]},
+            "skip_rows":         {"type": "integer", "description": "Number of header rows to skip before data begins"},
+            "period_matched":    {"type": "string",  "description": "The header text that matched the target period"},
+            "section_start_row": {"type": "integer", "description": "First data row of the section (0 if not applicable)"},
+            "section_end_row":   {"type": "integer", "description": "Last data row of the section (0 if not applicable)"},
+        },
+        "required": ["column_index", "column_letter", "source_scaling", "skip_rows", "period_matched", "section_start_row", "section_end_row"],
+    },
+}
+
 
 class Layer1Service:
     """Orchestrates the 4-step Layer 1 extraction pipeline."""
@@ -70,24 +91,19 @@ class Layer1Service:
         header_text = extract_header_rows(filepath, sheet_name, n_rows=150)
 
         # ── Step B: AI column identifier ─────────────────────────────────────
-        # When multiple statements share the same tab, pass statement_type so
-        # the AI can locate the correct section and return row boundaries.
-        # For a dedicated single-statement tab, skip section detection entirely.
         col_prompt_vars: Dict[str, Any] = {
             "reporting_period": reporting_period,
             "header_rows": header_text,
-            # Pass statement_type only for shared tabs so the AI locates the section.
-            # Pass empty string for dedicated tabs so the AI skips section detection.
             "statement_type": normalized if shared_tab else "",
         }
 
-        col_response = self.claude.call_claude(
+        col_info = self.claude.call_claude_with_tool(
             "layer1_column_identifier",
             col_prompt_vars,
             model,
-            max_tokens=1024,
+            tool_def=_COLUMN_IDENTIFIER_TOOL,
+            max_tokens=4096,
         )
-        col_info = self.claude.parse_json_response(col_response)
         column_index: int = int(col_info.get("column_index", 1))
         source_scaling: str = str(col_info.get("source_scaling", "actual_dollars"))
         skip_rows: int = int(col_info.get("skip_rows", 0))
