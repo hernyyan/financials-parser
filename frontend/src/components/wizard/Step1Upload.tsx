@@ -6,6 +6,7 @@ import PdfPageViewer from '../shared/PdfPageViewer'
 import StatusBanner from '../shared/StatusBanner'
 import TemplateReview from './TemplateReview'
 import TemplateDeltaReview from './TemplateDeltaReview'
+import PreviousReviewPreview from './PreviousReviewPreview'
 import {
   uploadFile,
   runLayer1,
@@ -14,11 +15,11 @@ import {
   createCompany,
   getCompanyContextStatus,
   checkExistingReview,
-  continuePreviousReview,
+  getReviewData,
   saveLayer1Template,
 } from '../../api/client'
 import { API_BASE } from '../../api/client'
-import type { Company, CompanyContextStatus, Layer1Result, Layer1Template, Layer1TemplateRow } from '../../types'
+import type { Company, CompanyContextStatus, Layer1Result, Layer1Template, Layer1TemplateRow, Layer2Result } from '../../types'
 import {
   Upload,
   Search,
@@ -196,6 +197,11 @@ export default function Step1Upload() {
   const [pendingExtraction, setPendingExtraction] = useState<
     { type: 'pdf' } | { type: 'global' } | null
   >(null)
+  const [previewData, setPreviewData] = useState<{
+    layer1Data: Record<string, Layer1Result>
+    layer2Data: Record<string, Layer2Result>
+  } | null>(null)
+  const [previewLoading, setPreviewLoading] = useState(false)
 
   // Template review state — shown between extraction and Step 2
   const [templateReview, setTemplateReview] = useState<{
@@ -693,47 +699,28 @@ export default function Step1Upload() {
     runExtractionInner()
   }
 
-  async function handleContinuePrevious() {
-    if (!companyId) return
-    setDuplicateCheck(null)
+  async function handleViewPrevious() {
+    if (!duplicateCheck?.sessionId) return
+    setPreviewLoading(true)
     try {
-      const data = await continuePreviousReview(companyId, reportingPeriod)
-
-      if (!data.layer1_data || typeof data.layer1_data !== 'object') {
-        console.warn('[handleContinuePrevious] layer1_data missing or malformed', data.layer1_data)
-      }
-      if (data.layer2_data && typeof data.layer2_data !== 'object') {
-        console.warn('[handleContinuePrevious] layer2_data malformed', data.layer2_data)
-      }
-
-      setSessionId(data.session_id)
-      setLayer1Results(data.layer1_data || {})
-      if (data.layer2_data) {
-        setLayer2Results(data.layer2_data)
-      }
-      if (data.corrections && Array.isArray(data.corrections)) {
-        for (const c of data.corrections) {
-          addCorrection({
-            fieldName: c.field_name,
-            originalValue: c.layer2_value ?? 0,
-            correctedValue: c.corrected_value,
-            reasoning: c.analyst_reasoning ?? undefined,
-            tag: c.tag,
-            timestamp: new Date().toISOString(),
-          })
-        }
-      }
-      approveStep1()
+      const data = await getReviewData(duplicateCheck.sessionId)
+      setPreviewData({
+        layer1Data: data.layer1_data,
+        layer2Data: data.layer2_data,
+      })
     } catch (err) {
       setStatus({
         type: 'error',
         message: err instanceof Error ? err.message : 'Failed to load previous review.',
       })
+    } finally {
+      setPreviewLoading(false)
     }
   }
 
   function handleOverwrite() {
     setDuplicateCheck(null)
+    setPreviewData(null)
     if (pendingExtraction?.type === 'pdf') {
       handlePdfRunAllInner()
     } else if (pendingExtraction?.type === 'global') {
@@ -747,6 +734,25 @@ export default function Step1Upload() {
   const displayActiveTab = activeTab || displayTabs[0]
 
   // ── Render ──────────────────────────────────────────────────────────────
+
+  // ── Previous review preview (full-screen, replaces this step) ───────────
+
+  if (previewData) {
+    return (
+      <PreviousReviewPreview
+        layer1Data={previewData.layer1Data}
+        layer2Data={previewData.layer2Data}
+        companyName={companyName}
+        reportingPeriod={reportingPeriod}
+        onOverwrite={handleOverwrite}
+        onClose={() => {
+          setPreviewData(null)
+          setDuplicateCheck(null)
+          setPendingExtraction(null)
+        }}
+      />
+    )
+  }
 
   // ── Template review overlay ─────────────────────────────────────────────
 
@@ -1246,22 +1252,16 @@ export default function Step1Upload() {
               {duplicateCheck.finalizedAt
                 ? ` on ${new Date(duplicateCheck.finalizedAt).toLocaleDateString()}`
                 : ''}
-              .
+              . You can review the previous data before deciding.
             </p>
             <div className="flex flex-col gap-2">
               <button
-                onClick={handleContinuePrevious}
-                className="w-full py-2 rounded-lg text-[13px] bg-blue-600 text-white hover:bg-blue-700 transition-colors"
-                style={{ fontWeight: 500 }}
+                onClick={handleViewPrevious}
+                disabled={previewLoading}
+                className="w-full py-2 rounded-lg text-[13px] text-white transition-colors disabled:opacity-60"
+                style={{ backgroundColor: '#185FA5', fontWeight: 500 }}
               >
-                Continue with Previous
-              </button>
-              <button
-                onClick={handleOverwrite}
-                className="w-full py-2 rounded-lg text-[13px] border border-border text-foreground hover:bg-gray-50 transition-colors"
-                style={{ fontWeight: 500 }}
-              >
-                Upload New &amp; Overwrite
+                {previewLoading ? 'Loading…' : 'View Previous Data'}
               </button>
               <button
                 onClick={() => {

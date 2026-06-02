@@ -44,6 +44,26 @@ def check_existing_review(
     return {"exists": False}
 
 
+@router.get("/reviews/{session_id}/data")
+def get_review_data(session_id: str, db: Session = Depends(get_db)):
+    """Return layer1/layer2 data for a review session (read-only preview, no new row created)."""
+    row = db.execute(
+        text("""
+            SELECT layer1_data, layer2_data, company_name, reporting_period
+            FROM reviews WHERE session_id = :sid
+        """),
+        {"sid": session_id},
+    ).fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="Review not found.")
+    return {
+        "layer1_data": json.loads(row[0]) if isinstance(row[0], str) else (row[0] or {}),
+        "layer2_data": json.loads(row[1]) if isinstance(row[1], str) else (row[1] or {}),
+        "company_name": row[2],
+        "reporting_period": row[3],
+    }
+
+
 @router.post("/reviews/continue-previous")
 def continue_previous_review(
     request: ContinuePreviousRequest,

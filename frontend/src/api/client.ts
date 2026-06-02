@@ -213,6 +213,17 @@ export async function checkExistingReview(companyId: number, reportingPeriod: st
   return res.json()
 }
 
+// GET /reviews/{session_id}/data
+export async function getReviewData(sessionId: string): Promise<{
+  layer1_data: Record<string, import('../types').Layer1Result>
+  layer2_data: Record<string, import('../types').Layer2Result>
+  company_name: string
+  reporting_period: string
+}> {
+  const res = await fetch(`${API_BASE}/reviews/${encodeURIComponent(sessionId)}/data`)
+  return handleResponse(res)
+}
+
 // POST /reviews/continue-previous
 export async function continuePreviousReview(companyId: number, reportingPeriod: string): Promise<ContinuedReview> {
   const res = await fetch(`${API_BASE}/reviews/continue-previous`, {
