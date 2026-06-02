@@ -177,6 +177,19 @@ export async function getCompanies(): Promise<Company[]> {
   return handleResponse<Company[]>(res)
 }
 
+// POST /companies/{id}/tab-preferences
+export async function saveTabPreferences(
+  companyId: number,
+  preferences: Record<string, string>,
+): Promise<void> {
+  const res = await fetch(`${API_BASE}/companies/${companyId}/tab-preferences`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(preferences),
+  })
+  await handleResponse<{ tab_preferences: Record<string, string> }>(res)
+}
+
 // POST /companies
 export async function createCompany(name: string): Promise<Company> {
   const res = await fetch(`${API_BASE}/companies`, {

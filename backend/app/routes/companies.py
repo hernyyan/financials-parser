@@ -29,9 +29,14 @@ def _normalize_company_name(name: str) -> str:
 def list_companies(db: Session = Depends(get_db)):
     """Return all companies ordered alphabetically by name."""
     rows = db.execute(
-        text("SELECT id, name FROM companies ORDER BY name ASC")
+        text("SELECT id, name, tab_preferences FROM companies ORDER BY name ASC")
     ).fetchall()
-    return [CompanyResponse(id=row[0], name=row[1]) for row in rows]
+    result = []
+    for row in rows:
+        raw_prefs = row[2]
+        prefs = json.loads(raw_prefs) if isinstance(raw_prefs, str) else (raw_prefs or None)
+        result.append(CompanyResponse(id=row[0], name=row[1], tab_preferences=prefs))
+    return result
 
 
 @router.post("/companies", response_model=CompanyResponse, status_code=201)
@@ -68,6 +73,37 @@ def create_company(request: CompanyCreate, db: Session = Depends(get_db)):
     db.commit()
 
     return CompanyResponse(id=new_id, name=name)
+
+
+@router.post("/companies/{company_id}/tab-preferences")
+def save_tab_preferences(
+    company_id: int,
+    preferences: dict,
+    db: Session = Depends(get_db),
+):
+    """
+    Merge new tab preferences into the existing saved preferences for this company.
+    Only statement types present in the request are updated — others are left untouched.
+    """
+    row = db.execute(
+        text("SELECT tab_preferences FROM companies WHERE id = :id"),
+        {"id": company_id},
+    ).fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="Company not found.")
+
+    raw = row[0]
+    existing: dict = json.loads(raw) if isinstance(raw, str) else (raw or {})
+
+    # Merge: only overwrite keys present in the incoming request
+    existing.update(preferences)
+
+    db.execute(
+        text("UPDATE companies SET tab_preferences = :prefs WHERE id = :id"),
+        {"prefs": json.dumps(existing), "id": company_id},
+    )
+    db.commit()
+    return {"tab_preferences": existing}
 
 
 @router.get("/companies/{company_id}/context-status")

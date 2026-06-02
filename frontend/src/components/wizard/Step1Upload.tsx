@@ -17,6 +17,7 @@ import {
   checkExistingReview,
   getReviewData,
   saveLayer1Template,
+  saveTabPreferences,
 } from '../../api/client'
 import { API_BASE } from '../../api/client'
 import type { Company, CompanyContextStatus, Layer1Result, Layer1Template, Layer1TemplateRow, Layer2Result } from '../../types'
@@ -401,7 +402,24 @@ export default function Step1Upload() {
         setPdfPageCount(0)
         setPdfUrl(null)
         setPdfPageAssignments({})
-        setAssignments({ income_statement: '', balance_sheet: '', cash_flow_statement: '' })
+
+        // Preselect tabs from saved preferences for this company
+        const blankAssignments = { income_statement: '', balance_sheet: '', cash_flow_statement: '' }
+        const selectedCompany = companies.find(c => c.id === companyId)
+        const prefs = selectedCompany?.tab_preferences
+        if (prefs) {
+          const preselected = { ...blankAssignments }
+          for (const stmtType of Object.keys(blankAssignments) as (keyof typeof blankAssignments)[]) {
+            const savedTab = prefs[stmtType]
+            if (savedTab && response.sheetNames.includes(savedTab)) {
+              preselected[stmtType] = savedTab
+            }
+          }
+          setAssignments(preselected)
+        } else {
+          setAssignments(blankAssignments)
+        }
+
         setExtractionStatus('idle')
         setExtractionError(null)
       }
@@ -957,6 +975,16 @@ export default function Step1Upload() {
               if (Math.random() < 0.01) {
                 approveAudio.currentTime = 0
                 approveAudio.play()
+              }
+              // Save tab preferences for Excel uploads (only assigned tabs, merge not overwrite)
+              if (companyId && uploadFileType === 'excel') {
+                const toSave: Record<string, string> = {}
+                for (const [stmtType, tab] of Object.entries(assignments)) {
+                  if (tab) toSave[stmtType] = tab
+                }
+                if (Object.keys(toSave).length > 0) {
+                  saveTabPreferences(companyId, toSave).catch(() => {})
+                }
               }
               approveStep1()
             }}

@@ -187,6 +187,7 @@ class CompanyCreate(BaseModel):
 class CompanyResponse(BaseModel):
     id: int
     name: str
+    tab_preferences: Optional[Dict] = None
 
 
 # ─── Correction Processing ────────────────────────────────────────────────────

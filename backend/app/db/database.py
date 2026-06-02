@@ -174,6 +174,7 @@ _MIGRATIONS = [
     "ALTER TABLE companies ADD COLUMN context TEXT DEFAULT '';",
     # Drop the old over-broad index (company_id IS NOT NULL only) if it exists,
     # then recreate scoped to finalized rows only. Both steps are idempotent.
+    "ALTER TABLE companies ADD COLUMN tab_preferences TEXT DEFAULT NULL;",
     "DROP INDEX IF EXISTS idx_reviews_company_period;",
     # Partial unique index: prevents two *finalized* rows for the same company+period.
     # In-progress rows (multiple upload attempts) are intentionally excluded.

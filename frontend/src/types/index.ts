@@ -249,6 +249,7 @@ export interface ContinuedReview {
 export interface Company {
   id: number
   name: string
+  tab_preferences?: Record<string, string> | null
 }
 
 // Correction processing types
