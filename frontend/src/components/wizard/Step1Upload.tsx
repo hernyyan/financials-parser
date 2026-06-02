@@ -599,6 +599,7 @@ export default function Step1Upload() {
         const tab = assignments[stmtType]
         const sharedTab = tabCounts[tab] > 1
         const result = await runLayer1(sessionId!, tab, stmtType, reportingPeriod, undefined, companyId, sharedTab)
+        console.log(`[Layer1 debug] ${stmtType} (tab="${tab}"):`, result.extractionDebug, '| lineItems:', Object.keys(result.lineItems).length)
         results[stmtType] = result
         mergeLayer1Result(stmtType, {
           lineItems: result.lineItems,

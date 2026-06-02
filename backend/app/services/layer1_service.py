@@ -172,6 +172,7 @@ class Layer1Service:
             section_end_row=section_end_row,
         )
         rows_csv = rows_to_csv_with_metadata(rows)
+        logger.info("[Layer1] %s: Step C extracted %d rows", normalized, len(rows))
 
         # ── Step D: AI hierarchy classification ──────────────────────────────
         struct_response = self.claude.call_claude(
@@ -198,6 +199,17 @@ class Layer1Service:
             "structured": structured,
             "sourceScaling": source_scaling,
             "columnIdentified": column_identified,
+            "extractionDebug": {
+                "columnIndex": column_index,
+                "columnLetter": col_info.get("column_letter"),
+                "periodMatched": col_info.get("period_matched"),
+                "skipRows": skip_rows,
+                "sectionStartRow": section_start_row,
+                "sectionEndRow": section_end_row,
+                "stepCRowCount": len(rows),
+                "stepDRowCount": len(structured.get("rows", [])),
+                "retried": bool(col_prompt_vars.get("retry_hint")),
+            },
         }
 
     # ── Public: template helpers ─────────────────────────────────────────────

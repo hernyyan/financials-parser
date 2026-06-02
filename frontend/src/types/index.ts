@@ -135,6 +135,18 @@ export interface Layer1Request {
   companyId?: number | null
 }
 
+export interface Layer1ExtractionDebug {
+  columnIndex: number
+  columnLetter: string | null
+  periodMatched: string | null
+  skipRows: number
+  sectionStartRow: number
+  sectionEndRow: number
+  stepCRowCount: number
+  stepDRowCount: number
+  retried: boolean
+}
+
 export interface Layer1Response {
   lineItems: Record<string, number>
   sourceScaling: string
@@ -142,6 +154,7 @@ export interface Layer1Response {
   sheetName: string
   structured?: Layer1Template
   templateCheck?: TemplateCheckResult
+  extractionDebug?: Layer1ExtractionDebug
 }
 
 export interface Layer2Request {

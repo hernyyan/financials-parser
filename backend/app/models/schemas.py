@@ -53,6 +53,7 @@ class Layer1Response(BaseModel):
     columnIdentified: str
     structured: Optional[Dict] = None
     templateCheck: Optional[Dict] = None
+    extractionDebug: Optional[Dict] = None
 
 
 # ─── Layer 2 ──────────────────────────────────────────────────────────────────

@@ -144,4 +144,5 @@ def run_layer1(
         columnIdentified=result["columnIdentified"],
         structured=result.get("structured"),
         templateCheck=template_check,
+        extractionDebug=result.get("extractionDebug"),
     )
