@@ -22,7 +22,6 @@ from sqlalchemy import text as sa_text
 from app.services.claude_service import ClaudeService, get_claude_service
 from app.services.layer1_extractor import (
     count_numeric_values_in_column,
-    find_best_data_column,
     extract_header_rows,
     extract_rows_with_metadata,
     rows_to_csv_with_metadata,
@@ -172,32 +171,6 @@ class Layer1Service:
             section_start_row=section_start_row,
             section_end_row=section_end_row,
         )
-
-        # ── Step C fallback: if AI column produced 0 rows, scan all columns ──
-        if not rows:
-            fallback_col = find_best_data_column(
-                filepath,
-                sheet_name,
-                min_col=2,
-                skip_header_rows=max(skip_rows, section_start_row - 1 if section_start_row > 0 else 0, 10),
-                end_row=section_end_row if section_end_row > 0 else None,
-            )
-            logger.warning(
-                "[Layer1] %s: col %d produced 0 rows — falling back to brute-force col %d",
-                normalized, column_index, fallback_col,
-            )
-            column_index = fallback_col
-            column_identified = f"fallback:col{fallback_col}"
-            rows = extract_rows_with_metadata(
-                filepath,
-                sheet_name,
-                column_index=column_index,
-                source_scaling=source_scaling,
-                skip_rows=skip_rows,
-                section_start_row=section_start_row,
-                section_end_row=section_end_row,
-            )
-
         rows_csv = rows_to_csv_with_metadata(rows)
 
         # ── Step D: AI hierarchy classification ──────────────────────────────

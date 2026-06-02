@@ -238,60 +238,6 @@ def count_numeric_values_in_column(
     return count
 
 
-def find_best_data_column(
-    filepath: str,
-    sheet_name: str,
-    min_col: int = 2,
-    skip_header_rows: int = 10,
-    end_row: Optional[int] = None,
-) -> int:
-    """
-    Brute-force fallback: scan every column from min_col onward and return
-    the 1-based index of the column with the most parseable numeric values
-    (ignoring the first skip_header_rows rows to avoid counting year headers).
-
-    Used when AI column identification returns a column with no data.
-    """
-    wb = openpyxl.load_workbook(filepath, read_only=True, data_only=True)
-    ws = wb[sheet_name]
-
-    max_col = ws.max_column or 1
-    counts: dict[int, int] = {}
-
-    for col_idx in range(min_col, max_col + 1):
-        count = 0
-        for row_num, row in enumerate(
-            ws.iter_rows(
-                min_row=skip_header_rows + 1,
-                min_col=col_idx,
-                max_col=col_idx,
-                values_only=True,
-            ),
-            start=skip_header_rows + 1,
-        ):
-            if end_row is not None and row_num > end_row:
-                break
-            raw = row[0]
-            if raw is None:
-                continue
-            raw_str = str(raw).strip()
-            if raw_str in ("", "-", "—", "–"):
-                continue
-            try:
-                float(raw_str.replace(",", "").replace("(", "-").replace(")", ""))
-                count += 1
-            except (ValueError, TypeError):
-                pass
-        counts[col_idx] = count
-
-    wb.close()
-
-    if not counts:
-        return min_col
-
-    return max(counts, key=lambda c: counts[c])
-
-
 # ── internal ──────────────────────────────────────────────────────────────────
 
 def _parse_scale(source_scaling: str) -> float:
