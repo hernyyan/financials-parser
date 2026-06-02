@@ -1,112 +1,89 @@
 """
-In-memory job store for async Layer 1 extraction jobs.
+DB-backed job store for async Layer 1 extraction jobs.
 
-Each job is keyed by a UUID and transitions through:
-  pending → running → done | error
+Jobs are persisted in the extraction_jobs table so they survive container
+restarts. Each operation opens and closes its own DB session — safe to call
+from background threads.
 
-A background daemon thread purges jobs older than JOB_TTL_SECONDS to prevent
-memory growth over time.
-
-Design note: This is an in-memory singleton appropriate for a single-replica
-Azure Container App. If the app ever scales to multiple replicas, replace with
-a Redis or database-backed store.
+Also exports extraction_semaphore: a Semaphore(1) that limits concurrent
+extractions to one at a time, preventing OOM kills from simultaneous
+Claude API calls + file processing.
 """
+import json
 import logging
 import threading
-import time
 import uuid
-from typing import Any, Dict, Literal, Optional
+from typing import Any, Dict, Optional
+
+from sqlalchemy import text
+
+from app.db.database import SessionLocal
 
 logger = logging.getLogger(__name__)
 
-JOB_TTL_SECONDS = 600   # 10 minutes — beyond worst-case extraction time
-CLEANUP_INTERVAL = 120  # purge sweep every 2 minutes
-
-JobStatus = Literal["pending", "running", "done", "error"]
-
-
-class Job:
-    __slots__ = ("job_id", "status", "result", "error", "created_at")
-
-    def __init__(self, job_id: str) -> None:
-        self.job_id: str = job_id
-        self.status: JobStatus = "pending"
-        self.result: Optional[Dict[str, Any]] = None
-        self.error: Optional[str] = None
-        self.created_at: float = time.monotonic()
-
-    def to_dict(self) -> Dict[str, Any]:
-        return {
-            "job_id": self.job_id,
-            "status": self.status,
-            "result": self.result,
-            "error": self.error,
-        }
+# One extraction at a time — prevents the 3 concurrent statement-type
+# threads from OOM-killing the container.
+extraction_semaphore = threading.Semaphore(1)
 
 
 class JobStore:
-    def __init__(self) -> None:
-        self._jobs: Dict[str, Job] = {}
-        self._lock = threading.Lock()
-        self._start_cleanup_daemon()
-
     def create_job(self) -> str:
-        """Create a new pending job and return its job_id."""
+        """Insert a new pending job row and return its job_id."""
         job_id = str(uuid.uuid4())
-        with self._lock:
-            self._jobs[job_id] = Job(job_id)
+        db = SessionLocal()
+        try:
+            db.execute(
+                text("INSERT INTO extraction_jobs (job_id, status) VALUES (:id, 'pending')"),
+                {"id": job_id},
+            )
+            db.commit()
+        except Exception:
+            db.rollback()
+            raise
+        finally:
+            db.close()
         return job_id
 
     def set_running(self, job_id: str) -> None:
-        with self._lock:
-            job = self._jobs.get(job_id)
-            if job:
-                job.status = "running"
+        self._update(job_id, {"status": "running"})
 
     def set_done(self, job_id: str, result: Dict[str, Any]) -> None:
-        with self._lock:
-            job = self._jobs.get(job_id)
-            if job:
-                job.status = "done"
-                job.result = result
+        self._update(job_id, {"status": "done", "result": json.dumps(result)})
 
     def set_error(self, job_id: str, error: str) -> None:
-        with self._lock:
-            job = self._jobs.get(job_id)
-            if job:
-                job.status = "error"
-                job.error = error
+        self._update(job_id, {"status": "error", "error": error})
 
     def get(self, job_id: str) -> Optional[Dict[str, Any]]:
-        """Return job state dict, or None if not found / already purged."""
-        with self._lock:
-            job = self._jobs.get(job_id)
-            return job.to_dict() if job else None
+        db = SessionLocal()
+        try:
+            row = db.execute(
+                text("SELECT status, result, error FROM extraction_jobs WHERE job_id = :id"),
+                {"id": job_id},
+            ).fetchone()
+            if not row:
+                return None
+            result = json.loads(row[1]) if row[1] else None
+            return {"job_id": job_id, "status": row[0], "result": result, "error": row[2]}
+        finally:
+            db.close()
 
-    def _purge_expired(self) -> None:
-        cutoff = time.monotonic() - JOB_TTL_SECONDS
-        with self._lock:
-            expired = [k for k, v in self._jobs.items() if v.created_at < cutoff]
-            for k in expired:
-                del self._jobs[k]
-        if expired:
-            logger.debug("JobStore: purged %d expired jobs", len(expired))
-
-    def _start_cleanup_daemon(self) -> None:
-        def _loop() -> None:
-            while True:
-                time.sleep(CLEANUP_INTERVAL)
-                try:
-                    self._purge_expired()
-                except Exception:
-                    logger.exception("JobStore cleanup error")
-
-        threading.Thread(
-            target=_loop,
-            daemon=True,
-            name="job-store-cleanup",
-        ).start()
+    def _update(self, job_id: str, fields: Dict[str, Any]) -> None:
+        """Generic UPDATE — builds SET clause from the provided fields dict."""
+        set_clause = ", ".join(f"{k} = :{k}" for k in fields)
+        params = {**fields, "id": job_id}
+        db = SessionLocal()
+        try:
+            db.execute(
+                text(f"UPDATE extraction_jobs SET {set_clause} WHERE job_id = :id"),
+                params,
+            )
+            db.commit()
+        except Exception:
+            db.rollback()
+            logger.exception("JobStore: failed to update job %s with %s", job_id, fields)
+        finally:
+            db.close()
 
 
-# Module-level singleton — imported directly by route modules.
+# Module-level singleton imported by route modules.
 job_store = JobStore()

@@ -105,6 +105,16 @@ CREATE TABLE IF NOT EXISTS layer1_templates (
 );
 """
 
+_SQLITE_CREATE_EXTRACTION_JOBS = """
+CREATE TABLE IF NOT EXISTS extraction_jobs (
+    job_id TEXT PRIMARY KEY,
+    status TEXT NOT NULL DEFAULT 'pending',
+    result TEXT,
+    error TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+"""
+
 
 # ── PostgreSQL CREATE TABLE statements ────────────────────────────────────────
 
@@ -165,6 +175,16 @@ CREATE TABLE IF NOT EXISTS layer1_templates (
 );
 """
 
+_PG_CREATE_EXTRACTION_JOBS = """
+CREATE TABLE IF NOT EXISTS extraction_jobs (
+    job_id TEXT PRIMARY KEY,
+    status TEXT NOT NULL DEFAULT 'pending',
+    result TEXT,
+    error TEXT,
+    created_at TIMESTAMP DEFAULT NOW()
+);
+"""
+
 # ── Idempotent migrations for pre-existing databases ─────────────────────────
 
 _MIGRATIONS = [
@@ -209,6 +229,7 @@ def init_db() -> None:
             _SQLITE_CREATE_COMPANIES,
             _SQLITE_CREATE_CORRECTIONS,
             _SQLITE_CREATE_LAYER1_TEMPLATES,
+            _SQLITE_CREATE_EXTRACTION_JOBS,
         ]
     else:
         ddl_statements = [
@@ -216,6 +237,7 @@ def init_db() -> None:
             _PG_CREATE_COMPANIES,
             _PG_CREATE_CORRECTIONS,
             _PG_CREATE_LAYER1_TEMPLATES,
+            _PG_CREATE_EXTRACTION_JOBS,
         ]
 
     # Each CREATE TABLE runs in its own transaction so a failed migration
