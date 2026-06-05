@@ -17,6 +17,7 @@ import type {
   SourceLayoutRow,
   LayoutDiffChange,
   Layer1TemplateRow,
+  StepCRow,
 } from '../../types'
 import {
   saveLayer1Template,
@@ -24,7 +25,6 @@ import {
   applyTemplateChanges,
   runLayer1Deterministic,
 } from '../../api/client'
-import type { StepCRow } from './TemplateEditor'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 

@@ -351,10 +351,10 @@ export default function Step1Upload() {
 
   const canConfigureTemplate =
     hasUpload &&
-    !!assignments.income_statement &&
+    anyAssigned &&
     !!sessionId &&
-    !!companyId &&
     reportingPeriod.trim() !== '' &&
+    companyName.trim() !== '' &&
     extractionStatus !== 'running' &&
     !configuringTemplate
 
@@ -687,13 +687,11 @@ export default function Step1Upload() {
           }
 
           if (!check || !check.has_template) {
-            // First upload for this company — show new template editor
+            // First upload — open tabbed editor with AI's pre-filled IS template
+            const aiTemplate = structuredToTemplate(isResult.structured, 'income_statement')
             setEditorState({
-              mode: 'new',
-              statementType: 'income_statement',
-              sheetName: isTab,
-              stepCRows,
-              existingTemplate: null,
+              mode: 'configure',
+              statements: [{ statementType: 'income_statement', sheetName: isTab, stepCRows, existingTemplate: aiTemplate }],
             })
             return
           }
@@ -715,9 +713,9 @@ export default function Step1Upload() {
               statementType: 'income_statement',
               sheetName: isTab,
               stepCRows,
-              existingTemplate,
+              existingTemplate: existingTemplate!,
               diff: layoutCheck.changes,
-              oldLayout: undefined, // fetched from DB via the diff endpoint context
+              oldLayout: [],
             })
             return
           } catch (layoutErr) {
@@ -735,32 +733,88 @@ export default function Step1Upload() {
   }
 
   async function handleConfigureTemplate() {
-    if (!sessionId || !companyId) return
-    const isTab = assignments.income_statement
-    if (!isTab) return
-
+    if (!sessionId) return
     setConfiguringTemplate(true)
+    setExtractionElapsed(0)
+
+    const tabCounts: Record<string, number> = {}
+    Object.values(assignments).forEach(t => { if (t) tabCounts[t] = (tabCounts[t] ?? 0) + 1 })
+
+    const assignedStatements = (
+      ['income_statement', 'balance_sheet', 'cash_flow_statement'] as const
+    ).filter(st => !!assignments[st])
+
+    const tickHandle = setInterval(() => setExtractionElapsed(s => s + 1), 1000)
+
     try {
-      const tabCounts: Record<string, number> = {}
-      Object.values(assignments).forEach(t => { if (t) tabCounts[t] = (tabCounts[t] ?? 0) + 1 })
-      const sharedTab = tabCounts[isTab] > 1
+      const statementConfigs = await Promise.all(
+        assignedStatements.map(async stmtType => {
+          const sheetName = assignments[stmtType]
+          const shared = tabCounts[sheetName] > 1
 
-      const [sourceResult, existingTemplate] = await Promise.all([
-        extractSourceRows(sessionId, isTab, 'income_statement', reportingPeriod, sharedTab),
-        getLayer1Template(companyId, 'income_statement'),
-      ])
+          // Load existing template (may be null for first-time companies)
+          const existingTemplate = companyId
+            ? await getLayer1Template(companyId, stmtType).catch(() => null)
+            : null
 
-      setEditorState({
-        mode: 'new',
-        statementType: 'income_statement',
-        sheetName: isTab,
-        stepCRows: sourceResult.rows,
-        existingTemplate,
-      })
+          if (existingTemplate) {
+            // Has template — only need source rows (Steps A+B+C)
+            const sourceResult = await extractSourceRows(sessionId!, sheetName, stmtType, reportingPeriod, shared)
+            return { statementType: stmtType, sheetName, stepCRows: sourceResult.rows, existingTemplate }
+          } else {
+            // No template — run full extraction so AI pre-fills the right panel
+            const result = await runLayer1(sessionId!, sheetName, stmtType, reportingPeriod, undefined, companyId, shared)
+            // Build stepCRows from structured output (source_row stamped by _stamp_source_rows)
+            const stepCRows = flattenStructuredRows(result.structured?.rows ?? [])
+            // Convert AI structured output to a v2 template so the editor right panel is pre-filled
+            const aiTemplate = structuredToTemplate(result.structured, stmtType)
+            return { statementType: stmtType, sheetName, stepCRows, existingTemplate: aiTemplate }
+          }
+        })
+      )
+
+      setEditorState({ mode: 'configure', statements: statementConfigs })
     } catch (e: any) {
-      setStatus({ type: 'error', message: `Failed to load source rows: ${e.message}` })
+      setStatus({ type: 'error', message: `Failed to load template data: ${e.message}` })
     } finally {
+      clearInterval(tickHandle)
       setConfiguringTemplate(false)
+    }
+  }
+
+  // Flatten structured rows to {row_index, label, value} sorted by row_index
+  function flattenStructuredRows(rows: Layer1TemplateRow[]): Array<{ row_index: number; label: string; value: number | null }> {
+    const out: Array<{ row_index: number; label: string; value: number | null }> = []
+    function walk(rs: Layer1TemplateRow[]) {
+      rs.forEach(r => {
+        if (r.source_row) out.push({ row_index: r.source_row, label: r.label, value: r.value ?? null })
+        walk(r.children ?? [])
+      })
+    }
+    walk(rows)
+    return out.sort((a, b) => a.row_index - b.row_index)
+  }
+
+  // Convert AI structured output (schema v1) to a schema v2 Layer1Template for pre-filling
+  function structuredToTemplate(structured: any, stmtType: string): Layer1Template {
+    function convertRows(rows: Layer1TemplateRow[]): Layer1TemplateRow[] {
+      const flat: Layer1TemplateRow[] = []
+      function walk(rs: Layer1TemplateRow[]) {
+        rs.forEach(r => {
+          if ((r.children ?? []).length > 0) {
+            walk(r.children ?? [])
+            flat.push({ ...r, operator: '=', children: [] })
+          } else {
+            flat.push({ ...r, operator: r.type === 'sum' ? '=' : '+', children: [] })
+          }
+        })
+      }
+      walk(rows)
+      return flat
+    }
+    return {
+      meta: { statement_type: stmtType, created_at: new Date().toISOString(), schema_version: 2 } as any,
+      rows: convertRows(structured?.rows ?? []),
     }
   }
 
@@ -1243,23 +1297,21 @@ export default function Step1Upload() {
                   'Run Extraction'
                 )}
               </button>
-              {canConfigureTemplate && (
-                <button
-                  onClick={handleConfigureTemplate}
-                  disabled={configuringTemplate}
-                  className="w-full flex items-center justify-center gap-2 rounded-lg text-[13px] border transition-colors disabled:opacity-50 hover:bg-slate-50"
-                  style={{ borderColor: '#e2e8f0', color: '#475569', fontWeight: 500, padding: '6px 0', borderRadius: 8 }}
-                >
-                  {configuringTemplate ? (
-                    <>
-                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                      Loading...
-                    </>
-                  ) : (
-                    'Configure Template'
-                  )}
-                </button>
-              )}
+              <button
+                onClick={handleConfigureTemplate}
+                disabled={!canConfigureTemplate}
+                className="w-full flex items-center justify-center gap-2 rounded-lg text-[13px] border transition-colors disabled:opacity-50 hover:bg-slate-50"
+                style={{ borderColor: '#e2e8f0', color: '#475569', fontWeight: 500, padding: '6px 0', borderRadius: 8 }}
+              >
+                {configuringTemplate ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    Configuring... ({extractionElapsed}s)
+                  </>
+                ) : (
+                  'Configure Template'
+                )}
+              </button>
               {extractionError && (
                 <p className="text-[11px] text-red-600">{extractionError}</p>
               )}

@@ -34,25 +34,42 @@ export interface WizardState {
   selectedCell: string | null
   sidePanelOpen: boolean
 
-  // Template editor / reconciliation state (set after extraction, cleared on save/cancel)
+  // Template editor / reconciliation state (cleared on save/cancel)
   editorState: TemplateEditorState | null
 }
 
-export type TemplateEditorMode = 'new' | 'reconcile'
+export interface StepCRow {
+  row_index: number
+  label: string
+  value: number | null
+}
 
-export interface TemplateEditorState {
-  mode: TemplateEditorMode
+// One statement's worth of data for the template editor
+export interface TemplateStatementConfig {
   statementType: string
   sheetName: string
-  // Full Step C rows (label + value + row_index) for the source panel
-  stepCRows: Array<{ row_index: number; label: string; value: number | null }>
-  // Existing template (null for mode='new')
+  stepCRows: StepCRow[]
   existingTemplate: Layer1Template | null
-  // Diff result (only for mode='reconcile')
-  diff?: LayoutDiffChange[]
-  // Old layout rows (only for mode='reconcile', labels only)
-  oldLayout?: SourceLayoutRow[]
 }
+
+// Configure mode: tabbed editor for all assigned statements
+export interface TemplateConfigureState {
+  mode: 'configure'
+  statements: TemplateStatementConfig[]
+}
+
+// Reconcile mode: 3-panel layout diff review (single statement)
+export interface TemplateReconcileState {
+  mode: 'reconcile'
+  statementType: string
+  sheetName: string
+  stepCRows: Array<{ row_index: number; label: string; value: number | null }>
+  existingTemplate: Layer1Template
+  diff: LayoutDiffChange[]
+  oldLayout: SourceLayoutRow[]
+}
+
+export type TemplateEditorState = TemplateConfigureState | TemplateReconcileState
 
 export interface Layer1TemplateRow {
   id: number

@@ -8,26 +8,24 @@ import LayoutReconciliation from './LayoutReconciliation'
 export default function WizardShell() {
   const { currentStep, editorState, setEditorState, mergeLayer1Result, approveStep1, sessionId, companyId, reportingPeriod } = useWizardState()
 
-  // Template editor overlays (full-screen, rendered above step content)
   if (editorState && currentStep === 1) {
-    if (editorState.mode === 'new' || (editorState.mode === 'reconcile' && !editorState.diff)) {
+    if (editorState.mode === 'configure') {
       return (
         <TemplateEditor
-          stepCRows={editorState.stepCRows}
-          existingTemplate={editorState.existingTemplate}
-          statementType={editorState.statementType}
+          statements={editorState.statements}
           companyId={companyId!}
           sessionId={sessionId!}
           reportingPeriod={reportingPeriod}
-          sheetName={editorState.sheetName}
-          onSaved={(result) => {
-            mergeLayer1Result(editorState.statementType, {
-              lineItems: result.lineItems,
-              sourceScaling: result.sourceScaling,
-              columnIdentified: result.columnIdentified,
-              sourceSheet: editorState.sheetName,
-              structured: result.structured,
-              templateCheck: result.templateCheck,
+          onSaved={(results) => {
+            Object.entries(results).forEach(([stmtType, result]) => {
+              mergeLayer1Result(stmtType, {
+                lineItems: result.lineItems,
+                sourceScaling: result.sourceScaling,
+                columnIdentified: result.columnIdentified,
+                sourceSheet: editorState.statements.find(s => s.statementType === stmtType)?.sheetName ?? '',
+                structured: result.structured,
+                templateCheck: result.templateCheck,
+              })
             })
             setEditorState(null)
             approveStep1()
@@ -37,13 +35,13 @@ export default function WizardShell() {
       )
     }
 
-    if (editorState.mode === 'reconcile' && editorState.diff) {
+    if (editorState.mode === 'reconcile') {
       return (
         <LayoutReconciliation
-          oldLayout={editorState.oldLayout ?? []}
+          oldLayout={editorState.oldLayout}
           newStepCRows={editorState.stepCRows}
           diff={editorState.diff}
-          existingTemplate={editorState.existingTemplate!}
+          existingTemplate={editorState.existingTemplate}
           statementType={editorState.statementType}
           companyId={companyId!}
           sessionId={sessionId!}
