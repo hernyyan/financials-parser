@@ -64,11 +64,13 @@ def _run_extraction_worker(
         try:
             service = get_layer1_service()
 
-            # ── Extraction (the slow part: 2-5 Claude API calls) ─────────────────
+            # ── Fetch per-company label column override (separate session to avoid
+            #    aborting the main transaction if the column doesn't exist yet)
             label_col_override = None
             if company_id:
+                _lc_db = SessionLocal()
                 try:
-                    row = db.execute(
+                    row = _lc_db.execute(
                         text("SELECT label_col_override FROM companies WHERE id = :cid"),
                         {"cid": company_id},
                     ).fetchone()
@@ -76,6 +78,8 @@ def _run_extraction_worker(
                         label_col_override = int(row[0])
                 except Exception:
                     pass
+                finally:
+                    _lc_db.close()
 
             try:
                 result = service.run_extraction(
