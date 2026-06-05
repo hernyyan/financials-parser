@@ -40,6 +40,16 @@ class Layer1Request(BaseModel):
     sharedTab: bool = False  # True when multiple statement types share the same sheet
 
 
+class Layer1DeterministicRequest(BaseModel):
+    sessionId: str
+    sheetName: str
+    sheetType: str
+    reportingPeriod: str
+    companyId: int
+    template: Dict                # schema_version 2 template JSON
+    sharedTab: bool = False
+
+
 class RecalculateRequest(BaseModel):
     statement_type: str
     values: Dict[str, Optional[float]]

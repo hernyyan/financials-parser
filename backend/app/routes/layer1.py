@@ -1,6 +1,7 @@
 """
-POST /layer1/run          — enqueue async extraction job, returns { job_id } immediately (HTTP 202)
-GET  /layer1/jobs/{job_id} — poll job status: pending | running | done | error
+POST /layer1/run                  — enqueue async extraction job, returns { job_id } immediately (HTTP 202)
+POST /layer1/run-deterministic    — same async pattern but skips Step D using stored template
+GET  /layer1/jobs/{job_id}        — poll job status: pending | running | done | error
 
 The extraction pipeline (2-5 Claude API calls, up to 8 minutes on complex sheets) runs
 in a background daemon thread, decoupling job submission from completion and eliminating
@@ -22,7 +23,7 @@ from sqlalchemy import text
 
 from app.config import UPLOADS_DIR
 from app.db.database import SessionLocal
-from app.models.schemas import Layer1Request, Layer1Response
+from app.models.schemas import Layer1Request, Layer1DeterministicRequest, Layer1Response
 from app.services.layer1_service import get_layer1_service
 from app.services.job_store import job_store, extraction_semaphore
 
@@ -200,6 +201,134 @@ def run_layer1(request: Layer1Request):
         ),
         daemon=True,
         name=f"layer1-worker-{job_id[:8]}",
+    ).start()
+
+    return {"job_id": job_id}
+
+
+def _run_deterministic_worker(
+    job_id: str,
+    session_id: str,
+    sheet_name: str,
+    sheet_type: str,
+    reporting_period: str,
+    filepath: str,
+    company_id: int,
+    template: Dict[str, Any],
+    shared_tab: bool,
+) -> None:
+    """Background worker for deterministic IS extraction using a stored template."""
+    extraction_semaphore.acquire()
+    try:
+        job_store.set_running(job_id)
+        db: Session = SessionLocal()
+        try:
+            service = get_layer1_service()
+            try:
+                result = service.run_deterministic_extraction(
+                    filepath=filepath,
+                    sheet_name=sheet_name,
+                    reporting_period=reporting_period,
+                    template=template,
+                    shared_tab=shared_tab,
+                )
+            except anthropic.AuthenticationError:
+                job_store.set_error(job_id, "Invalid Anthropic API key.")
+                return
+            except anthropic.RateLimitError:
+                job_store.set_error(job_id, "Rate limit exceeded. Please wait a moment and try again.")
+                return
+            except anthropic.APIError as e:
+                job_store.set_error(job_id, f"Claude API error: {e}")
+                return
+            except Exception as e:
+                logger.exception("Deterministic worker unexpected error for job %s", job_id)
+                job_store.set_error(job_id, str(e))
+                return
+
+            # DB persistence
+            try:
+                row = db.execute(
+                    text("SELECT layer1_data FROM reviews WHERE session_id = :sid"),
+                    {"sid": session_id},
+                ).fetchone()
+                raw = row[0] if row else None
+                existing: Dict[str, Any] = (
+                    {} if raw is None
+                    else raw if isinstance(raw, dict)
+                    else json.loads(raw)
+                )
+                existing[sheet_name] = {
+                    "lineItems": result["lineItems"],
+                    "sourceScaling": result["sourceScaling"],
+                    "columnIdentified": result["columnIdentified"],
+                    "structured": result.get("structured"),
+                }
+                db.execute(
+                    text("""
+                        UPDATE reviews
+                        SET layer1_data = :data,
+                            company_id = COALESCE(company_id, :cid)
+                        WHERE session_id = :sid
+                    """),
+                    {"data": json.dumps(existing), "sid": session_id, "cid": company_id},
+                )
+                db.commit()
+            except Exception as exc:
+                db.rollback()
+                logger.warning("Deterministic DB persistence failed for session %s: %s", session_id, exc)
+
+            response = Layer1Response(
+                sheetName=sheet_name,
+                lineItems=result["lineItems"],
+                sourceScaling=result["sourceScaling"],
+                columnIdentified=result["columnIdentified"],
+                structured=result.get("structured"),
+                templateCheck={"has_template": True, "matched": [], "unmatched": []},
+                extractionDebug=result.get("extractionDebug"),
+            )
+            job_store.set_done(job_id, response.model_dump())
+
+        except Exception as e:
+            logger.exception("Unhandled error in deterministic worker for job %s", job_id)
+            job_store.set_error(job_id, f"Internal error: {e}")
+        finally:
+            db.close()
+    finally:
+        extraction_semaphore.release()
+
+
+@router.post("/layer1/run-deterministic", status_code=202)
+def run_layer1_deterministic(request: Layer1DeterministicRequest):
+    """
+    Enqueue a deterministic IS extraction job using a stored schema_version 2 template.
+    Skips Step D (AI hierarchy). Returns { job_id } immediately (HTTP 202).
+    """
+    if not request.sessionId or not request.sheetName:
+        raise HTTPException(status_code=400, detail="sessionId and sheetName are required.")
+
+    session_dir = UPLOADS_DIR / request.sessionId
+    try:
+        filepath = str(_find_xlsx(session_dir))
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+    job_id = job_store.create_job()
+    threading.Thread(
+        target=_run_deterministic_worker,
+        args=(
+            job_id,
+            request.sessionId,
+            request.sheetName,
+            request.sheetType,
+            request.reportingPeriod,
+            filepath,
+            request.companyId,
+            request.template,
+            request.sharedTab,
+        ),
+        daemon=True,
+        name=f"layer1-det-{job_id[:8]}",
     ).start()
 
     return {"job_id": job_id}

@@ -115,6 +115,19 @@ CREATE TABLE IF NOT EXISTS extraction_jobs (
 );
 """
 
+_SQLITE_CREATE_SOURCE_LAYOUTS = """
+CREATE TABLE IF NOT EXISTS source_layouts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    company_id INTEGER NOT NULL,
+    statement_type TEXT NOT NULL,
+    layout JSON NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (company_id) REFERENCES companies(id),
+    UNIQUE(company_id, statement_type)
+);
+"""
+
 
 # ── PostgreSQL CREATE TABLE statements ────────────────────────────────────────
 
@@ -185,6 +198,19 @@ CREATE TABLE IF NOT EXISTS extraction_jobs (
 );
 """
 
+_PG_CREATE_SOURCE_LAYOUTS = """
+CREATE TABLE IF NOT EXISTS source_layouts (
+    id SERIAL PRIMARY KEY,
+    company_id INTEGER NOT NULL,
+    statement_type TEXT NOT NULL,
+    layout JSONB NOT NULL,
+    created_at TIMESTAMP DEFAULT NOW(),
+    updated_at TIMESTAMP DEFAULT NOW(),
+    FOREIGN KEY (company_id) REFERENCES companies(id),
+    UNIQUE(company_id, statement_type)
+);
+"""
+
 # ── Idempotent migrations for pre-existing databases ─────────────────────────
 
 _MIGRATIONS = [
@@ -230,6 +256,7 @@ def init_db() -> None:
             _SQLITE_CREATE_CORRECTIONS,
             _SQLITE_CREATE_LAYER1_TEMPLATES,
             _SQLITE_CREATE_EXTRACTION_JOBS,
+            _SQLITE_CREATE_SOURCE_LAYOUTS,
         ]
     else:
         ddl_statements = [
@@ -238,6 +265,7 @@ def init_db() -> None:
             _PG_CREATE_CORRECTIONS,
             _PG_CREATE_LAYER1_TEMPLATES,
             _PG_CREATE_EXTRACTION_JOBS,
+            _PG_CREATE_SOURCE_LAYOUTS,
         ]
 
     # Each CREATE TABLE runs in its own transaction so a failed migration

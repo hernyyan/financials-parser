@@ -203,6 +203,7 @@ class Layer1Service:
             structured = self.claude.parse_json_response(struct_response)
             if "rows" in structured:
                 structured["rows"] = _strip_margins(structured["rows"])
+                _stamp_source_rows(structured["rows"], rows)
 
             line_items = _flatten_structured(structured.get("rows", []))
             logger.info("[Layer1] %s attempt %d: %d lineItems", normalized, attempt + 1, len(line_items))
@@ -237,6 +238,123 @@ class Layer1Service:
         }
 
     # ── Public: template helpers ─────────────────────────────────────────────
+
+    def run_deterministic_extraction(
+        self,
+        filepath: str,
+        sheet_name: str,
+        reporting_period: str,
+        template: Dict[str, Any],
+        shared_tab: bool = False,
+    ) -> Dict[str, Any]:
+        """
+        Deterministic IS extraction using a schema_version 2 template.
+
+        Runs Steps A+B (AI column identification) and Step C (Python row extraction).
+        Skips Step D (AI hierarchy classification) — uses the stored template rows
+        directly and maps values by source_row (row_index from Step C).
+
+        Returns the same shape as run_extraction().
+        """
+        model = os.getenv("LAYER1_MODEL", "claude-sonnet-4-6")
+
+        # Step A + B: identify column (still needs AI for period matching)
+        header_text = extract_header_rows(filepath, sheet_name, n_rows=150)
+        normalized = template.get("meta", {}).get("statement_type", "income_statement")
+
+        col_prompt_vars: Dict[str, Any] = {
+            "reporting_period": reporting_period,
+            "header_rows": header_text,
+            "statement_type": normalized if shared_tab else "",
+            "retry_hint": "",
+        }
+        col_info = self.claude.call_claude_with_tool(
+            "layer1_column_identifier",
+            col_prompt_vars,
+            model,
+            tool_def=_COLUMN_IDENTIFIER_TOOL,
+            max_tokens=4096,
+        )
+        column_index = int(col_info.get("column_index", 1))
+        source_scaling = str(col_info.get("source_scaling", "actual_dollars"))
+        skip_rows = int(col_info.get("skip_rows", 0))
+        column_identified = str(col_info.get("period_matched", col_info.get("column_letter", "")))
+        section_start_row = int(col_info.get("section_start_row", 0)) if shared_tab else 0
+        section_end_row = int(col_info.get("section_end_row", 0)) if shared_tab else 0
+
+        # Step C: full row extraction
+        rows = extract_rows_with_metadata(
+            filepath, sheet_name,
+            column_index=column_index,
+            source_scaling=source_scaling,
+            skip_rows=skip_rows,
+            section_start_row=section_start_row,
+            section_end_row=section_end_row,
+        )
+
+        # Map template rows to Step C values by source_row
+        step_c_by_row_index = {r["row_index"]: r for r in rows}
+        template_rows = template.get("rows", [])
+
+        def _build_structured_rows(tmpl_rows: List[Dict]) -> List[Dict]:
+            result = []
+            for tr in tmpl_rows:
+                source_row = tr.get("source_row")
+                step_c = step_c_by_row_index.get(source_row) if source_row else None
+                value = step_c["value"] if step_c else None
+                row_out: Dict[str, Any] = {
+                    "id": tr.get("id", 0),
+                    "label": tr["label"],
+                    "operator": tr.get("operator"),
+                    "source_row": source_row,
+                    "value": value,
+                    "children": _build_structured_rows(tr.get("children", [])),
+                }
+                result.append(row_out)
+            return result
+
+        structured_rows = _build_structured_rows(template_rows)
+
+        # Build lineItems flat dict for Layer 2 compatibility
+        line_items: Dict[str, float] = {}
+        def _collect_line_items(rows: List[Dict]) -> None:
+            for r in rows:
+                if r.get("value") is not None:
+                    try:
+                        line_items[r["label"]] = float(r["value"])
+                    except (TypeError, ValueError):
+                        pass
+                _collect_line_items(r.get("children", []))
+
+        _collect_line_items(structured_rows)
+
+        structured = {
+            "rows": structured_rows,
+            "meta": template.get("meta", {}),
+            "deterministic": True,
+        }
+
+        logger.info(
+            "[Layer1] deterministic extraction: col=%d scaling=%s %d template rows → %d lineItems",
+            column_index, source_scaling, len(template_rows), len(line_items),
+        )
+
+        return {
+            "lineItems": line_items,
+            "structured": structured,
+            "sourceScaling": source_scaling,
+            "columnIdentified": column_identified,
+            "extractionDebug": {
+                "columnIndex": column_index,
+                "columnLetter": col_info.get("column_letter"),
+                "periodMatched": col_info.get("period_matched"),
+                "skipRows": skip_rows,
+                "sectionStartRow": section_start_row,
+                "sectionEndRow": section_end_row,
+                "stepCRowCount": len(rows),
+                "deterministic": True,
+            },
+        }
 
     def check_template(
         self,
@@ -343,6 +461,24 @@ def _strip_margins(rows: List[Dict]) -> List[Dict]:
             continue
         cleaned.append({**r, "children": _strip_margins(r.get("children", []))})
     return cleaned
+
+
+def _stamp_source_rows(structured_rows: List[Dict], step_c_rows: List[Dict]) -> None:
+    """
+    Walk structured rows in-place and stamp source_row by fuzzy-matching
+    each row's label against the Step C extraction rows.
+    Called after Step D so every row has a back-reference to the sheet.
+    """
+    lookup = {re.sub(r"[^a-z0-9]", "", r["label"].lower()): r["row_index"] for r in step_c_rows}
+
+    def walk(rows: List[Dict]) -> None:
+        for r in rows:
+            norm = re.sub(r"[^a-z0-9]", "", r.get("label", "").lower())
+            if norm in lookup:
+                r["source_row"] = lookup[norm]
+            walk(r.get("children", []))
+
+    walk(structured_rows)
 
 
 def _iter_all_rows(rows: List[Dict]):

@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, ReactNode, createElement } from 'react'
-import type { WizardState, Layer1Result, Layer2Result, Correction } from '../types'
+import type { WizardState, Layer1Result, Layer2Result, Correction, TemplateEditorState } from '../types'
 import {
   MOCK_LAYER2_INCOME_STATEMENT,
   MOCK_LAYER2_BALANCE_SHEET,
@@ -33,6 +33,7 @@ interface WizardContextType extends WizardState {
   setPdfPageAssignments: (assignments: Record<number, 'income_statement' | 'balance_sheet' | 'cash_flow_statement'>) => void
   resetWizard: () => void
   loadMockStep2: () => void
+  setEditorState: (state: TemplateEditorState | null) => void
 }
 
 const defaultState: WizardState = {
@@ -57,6 +58,7 @@ const defaultState: WizardState = {
   activeSheetTab: '',
   selectedCell: null,
   sidePanelOpen: false,
+  editorState: null,
 }
 
 const WizardContext = createContext<WizardContextType | null>(null)
@@ -228,6 +230,10 @@ export function WizardProvider({ children }: { children: ReactNode }) {
     setState((s) => ({ ...s, pdfPageAssignments: assignments }))
   }
 
+  function setEditorState(editorState: TemplateEditorState | null) {
+    setState((s) => ({ ...s, editorState }))
+  }
+
   function resetWizard() {
     setState(defaultState)
   }
@@ -259,6 +265,7 @@ export function WizardProvider({ children }: { children: ReactNode }) {
       activeSheetTab: 'Income Statement',
       selectedCell: null,
       sidePanelOpen: false,
+      editorState: null,
     })
   }
 
@@ -290,6 +297,7 @@ export function WizardProvider({ children }: { children: ReactNode }) {
     setPdfPageAssignments,
     resetWizard,
     loadMockStep2,
+    setEditorState,
   }
 
   return createElement(WizardContext.Provider, { value }, children)

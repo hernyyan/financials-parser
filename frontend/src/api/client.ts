@@ -17,6 +17,8 @@ import type {
   ExistingReviewCheck,
   ContinuedReview,
   Layer1Template,
+  SourceLayoutRow,
+  LayoutCheckResult,
 } from '../types'
 
 export const API_BASE = import.meta.env.VITE_API_URL || '/api'
@@ -379,5 +381,90 @@ export async function saveLayer1Template(
     body: JSON.stringify(template),
   })
   await handleResponse<{ success: boolean }>(res)
+}
+
+// POST /companies/{id}/layer1-templates/{statement_type}/check-layout
+export async function checkLayout(
+  companyId: number,
+  statementType: string,
+  layoutRows: SourceLayoutRow[],
+): Promise<LayoutCheckResult> {
+  const res = await fetch(
+    `${API_BASE}/companies/${companyId}/layer1-templates/${statementType}/check-layout`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ layout_rows: layoutRows }),
+    },
+  )
+  return handleResponse<LayoutCheckResult>(res)
+}
+
+// POST /companies/{id}/layer1-templates/{statement_type}/save-layout
+export async function saveLayout(
+  companyId: number,
+  statementType: string,
+  layoutRows: SourceLayoutRow[],
+): Promise<void> {
+  const res = await fetch(
+    `${API_BASE}/companies/${companyId}/layer1-templates/${statementType}/save-layout`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ layout_rows: layoutRows }),
+    },
+  )
+  await handleResponse<{ success: boolean }>(res)
+}
+
+// POST /companies/{id}/layer1-templates/{statement_type}/apply-changes
+export async function applyTemplateChanges(
+  companyId: number,
+  statementType: string,
+  renames: Array<{ old_label: string; new_label: string }>,
+  additions: string[],
+  deletions: string[],
+): Promise<void> {
+  const res = await fetch(
+    `${API_BASE}/companies/${companyId}/layer1-templates/${statementType}/apply-changes`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ renames, additions, deletions }),
+    },
+  )
+  await handleResponse<{ success: boolean }>(res)
+}
+
+// POST /layer1/run-deterministic  (async — starts job, polls until done)
+export async function runLayer1Deterministic(
+  sessionId: string,
+  sheetName: string,
+  sheetType: string,
+  reportingPeriod: string,
+  companyId: number,
+  template: Layer1Template,
+  sharedTab?: boolean,
+  onElapsedTick?: (seconds: number) => void,
+): Promise<Layer1Response> {
+  const startRes = await fetch(`${API_BASE}/layer1/run-deterministic`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      sessionId,
+      sheetName,
+      sheetType,
+      reportingPeriod,
+      companyId,
+      template,
+      sharedTab: sharedTab ?? false,
+    }),
+  })
+  const { job_id } = await handleResponse<_JobStartResponse>(startRes)
+  const result = await _pollJobUntilDone(
+    `${API_BASE}/layer1/jobs/${job_id}`,
+    onElapsedTick,
+  )
+  return result as unknown as Layer1Response
 }
 

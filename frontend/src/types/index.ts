@@ -33,21 +33,68 @@ export interface WizardState {
   activeSheetTab: string
   selectedCell: string | null
   sidePanelOpen: boolean
+
+  // Template editor / reconciliation state (set after extraction, cleared on save/cancel)
+  editorState: TemplateEditorState | null
+}
+
+export type TemplateEditorMode = 'new' | 'reconcile'
+
+export interface TemplateEditorState {
+  mode: TemplateEditorMode
+  statementType: string
+  sheetName: string
+  // Full Step C rows (label + value + row_index) for the source panel
+  stepCRows: Array<{ row_index: number; label: string; value: number | null }>
+  // Existing template (null for mode='new')
+  existingTemplate: Layer1Template | null
+  // Diff result (only for mode='reconcile')
+  diff?: LayoutDiffChange[]
+  // Old layout rows (only for mode='reconcile', labels only)
+  oldLayout?: SourceLayoutRow[]
 }
 
 export interface Layer1TemplateRow {
   id: number
-  type: 'individual' | 'sum'
   label: string
-  value?: number | null
+  // Schema v2 fields (flat operator model)
+  source_row?: number                     // 1-based Excel row number from Step C
+  operator?: '+' | '-' | '=' | null       // null = blank (section break / informational)
+  expanded?: boolean                       // whether children are visible
+  children: Layer1TemplateRow[]            // always present (empty array for leaf nodes)
+  value?: number | null                    // for display only
+  // Schema v1 fields (legacy — admin view / BS / CFS)
+  type?: 'individual' | 'sum' | 'margin'
   bold?: boolean
   italic?: boolean
   indent?: number
-  children: Layer1TemplateRow[]
   computed_as?: string
   derived_from?: number[]
   validated?: boolean
   validation_note?: string
+}
+
+// A single row from the source layout record (label column only)
+export interface SourceLayoutRow {
+  row_index: number
+  label: string
+}
+
+// A single diff change from the LCS comparison
+export interface LayoutDiffChange {
+  type: 'add' | 'remove' | 'rename'
+  old: SourceLayoutRow | null
+  new: SourceLayoutRow | null
+  silent: boolean
+}
+
+// Result of /check-layout endpoint
+export interface LayoutCheckResult {
+  has_template: boolean
+  has_layout: boolean
+  has_real_diff: boolean
+  silent_update: boolean
+  changes: LayoutDiffChange[]
 }
 
 export interface WaterfallStep {

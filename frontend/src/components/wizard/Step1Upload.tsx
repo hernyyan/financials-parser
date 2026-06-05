@@ -4,8 +4,6 @@ import TabSelector from '../shared/TabSelector'
 import ExcelViewer from '../shared/ExcelViewer'
 import PdfPageViewer from '../shared/PdfPageViewer'
 import StatusBanner from '../shared/StatusBanner'
-import TemplateReview from './TemplateReview'
-import TemplateDeltaReview from './TemplateDeltaReview'
 import PreviousReviewPreview from './PreviousReviewPreview'
 import {
   uploadFile,
@@ -18,9 +16,11 @@ import {
   getReviewData,
   saveLayer1Template,
   saveTabPreferences,
+  checkLayout,
+  getLayer1Template,
 } from '../../api/client'
 import { API_BASE } from '../../api/client'
-import type { Company, CompanyContextStatus, Layer1Result, Layer1Template, Layer1TemplateRow, Layer2Result } from '../../types'
+import type { Company, CompanyContextStatus, Layer1Result, Layer1Template, Layer1TemplateRow, Layer2Result, SourceLayoutRow } from '../../types'
 import {
   Upload,
   Search,
@@ -155,6 +155,7 @@ export default function Step1Upload() {
     setPdfUrl,
     setPdfPageAssignments,
     approveStep1,
+    setEditorState,
   } = useWizardState()
 
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -205,13 +206,6 @@ export default function Step1Upload() {
   } | null>(null)
   const [previewLoading, setPreviewLoading] = useState(false)
 
-  // Template review state — shown between extraction and Step 2
-  const [templateReview, setTemplateReview] = useState<{
-    mode: 'new' | 'delta'
-    structured: Layer1Template
-    statementType: string
-    unmatchedItems?: Layer1TemplateRow[]
-  } | null>(null)
 
   const hasUpload = uploadFileType === 'excel'
     ? sheetNames.length > 0
@@ -649,43 +643,75 @@ export default function Step1Upload() {
       }
       setExtractionStatus('done')
 
-      // Handle template review for IS (if companyId is set)
+      // Handle template editor / reconciliation for IS (if companyId is set)
       if (companyId) {
         const isResult = results['income_statement']
-        if (isResult?.structured) {
-          const check = isResult.templateCheck
+        const isTab = assignments['income_statement']
 
-          // Auto-save BS/CFS templates silently if no template exists
+        if (isResult?.structured && isTab) {
+          // Build Step C rows for the IS (source_row + label + value)
+          const flattenRows = (r: Layer1TemplateRow): Array<{ row_index: number; label: string; value: number | null }> => {
+            const out: Array<{ row_index: number; label: string; value: number | null }> = []
+            if (r.source_row) out.push({ row_index: r.source_row, label: r.label, value: r.value ?? null })
+            r.children.forEach(c => out.push(...flattenRows(c)))
+            return out
+          }
+          const stepCRows = (isResult.structured.rows ?? []).flatMap(flattenRows).sort((a, b) => a.row_index - b.row_index)
+
+          // Build layout rows (all Step C rows including any we can infer from extractionDebug)
+          // Use stepCRows as the layout — these are the rows Python extracted
+          const layoutRows: SourceLayoutRow[] = stepCRows.map(r => ({ row_index: r.row_index, label: r.label }))
+
+          // Auto-save BS/CFS templates silently if no existing template
+          const check = isResult.templateCheck
           for (const stmtType of ['balance_sheet', 'cash_flow_statement'] as const) {
             const r = results[stmtType]
-            if (r?.structured && check && !check.has_template) {
+            if (r?.structured && (!check || !check.has_template)) {
               const tmpl: Layer1Template = {
                 meta: { statement_type: stmtType, created_at: new Date().toISOString() },
-                rows: r.structured.rows,
+                rows: r.structured.rows ?? [],
               }
               saveLayer1Template(companyId, stmtType, tmpl).catch(() => {})
             }
           }
 
           if (!check || !check.has_template) {
-            // First upload — show IS template review
-            setTemplateReview({
+            // First upload for this company — show new template editor
+            setEditorState({
               mode: 'new',
-              structured: isResult.structured,
               statementType: 'income_statement',
+              sheetName: isTab,
+              stepCRows,
+              existingTemplate: null,
             })
             return
           }
 
-          if (check.has_template && check.unmatched_items && check.unmatched_items.length > 0) {
-            // Existing template with new unmatched items
-            setTemplateReview({
-              mode: 'delta',
-              structured: isResult.structured,
+          // Has template — run layout diff to decide between silent proceed, reconcile, or direct extract
+          try {
+            const layoutCheck = await checkLayout(companyId, 'income_statement', layoutRows)
+
+            if (!layoutCheck.has_layout || !layoutCheck.has_real_diff) {
+              // No layout yet, or layout is unchanged / only silent diffs — proceed directly
+              // (extraction already ran with AI, results are in layer1Results — just move to Step 2)
+              return
+            }
+
+            // Real diff detected — show reconciliation UI
+            const existingTemplate = await getLayer1Template(companyId, 'income_statement')
+            setEditorState({
+              mode: 'reconcile',
               statementType: 'income_statement',
-              unmatchedItems: check.unmatched_items,
+              sheetName: isTab,
+              stepCRows,
+              existingTemplate,
+              diff: layoutCheck.changes,
+              oldLayout: undefined, // fetched from DB via the diff endpoint context
             })
             return
+          } catch (layoutErr) {
+            // Layout check failure is non-fatal — log and proceed
+            console.warn('[Step1Upload] layout check failed, proceeding without reconciliation:', layoutErr)
           }
         }
       }
@@ -775,37 +801,6 @@ export default function Step1Upload() {
     )
   }
 
-  // ── Template review overlay ─────────────────────────────────────────────
-
-  if (templateReview && companyId) {
-    if (templateReview.mode === 'new') {
-      return (
-        <TemplateReview
-          structured={templateReview.structured}
-          statementType={templateReview.statementType}
-          companyId={companyId}
-          onSaved={() => setTemplateReview(null)}
-          onCancel={() => {
-            setTemplateReview(null)
-            setExtractionStatus('idle')
-            setExtractionError(null)
-            setLayer1Results({})
-          }}
-        />
-      )
-    }
-    if (templateReview.mode === 'delta' && templateReview.unmatchedItems) {
-      return (
-        <TemplateDeltaReview
-          unmatchedItems={templateReview.unmatchedItems}
-          statementType={templateReview.statementType}
-          companyId={companyId}
-          onSaved={() => setTemplateReview(null)}
-          onSkip={() => setTemplateReview(null)}
-        />
-      )
-    }
-  }
 
   return (
     <div className="flex flex-col h-full">
