@@ -79,18 +79,36 @@ function propagateSign(parentOp: Operator, childOp: Operator): Operator {
   return childOp
 }
 
-function templateToRows(tmpl: Layer1Template): TRow[] {
+function buildLabelLookup(stepCRows: StepCRow[]): Map<string, number> {
+  const map = new Map<string, number>()
+  stepCRows.forEach(sr => {
+    if (sr.label) map.set(sr.label.toLowerCase().trim(), sr.row_index)
+  })
+  return map
+}
+
+function resolveSourceRow(
+  r: Layer1TemplateRow,
+  labelLookup: Map<string, number>,
+): number {
+  if (r.source_row && r.source_row > 0) return r.source_row
+  return labelLookup.get(r.label.toLowerCase().trim()) ?? 0
+}
+
+function templateToRows(tmpl: Layer1Template, stepCRows: StepCRow[]): TRow[] {
+  const labelLookup = buildLabelLookup(stepCRows)
+
   // Handle schema v2 (flat operator model)
   if ((tmpl.meta as any)?.schema_version === 2) {
     return (tmpl.rows ?? []).map(r => ({
       id: r.id ?? nextId(),
-      source_row: r.source_row ?? 0,
+      source_row: resolveSourceRow(r, labelLookup),
       label: r.label,
       operator: (r.operator ?? null) as Operator,
       expanded: r.expanded ?? false,
       children: (r.children ?? []).map(c => ({
         id: c.id ?? nextId(),
-        source_row: c.source_row ?? 0,
+        source_row: resolveSourceRow(c, labelLookup),
         label: c.label,
         operator: (c.operator ?? '+') as Operator,
       })),
@@ -102,9 +120,9 @@ function templateToRows(tmpl: Layer1Template): TRow[] {
     for (const r of rows) {
       if ((r.children ?? []).length > 0) {
         walk(r.children ?? [])
-        flat.push({ id: r.id ?? nextId(), source_row: r.source_row ?? 0, label: r.label, operator: '=', expanded: false, children: [] })
+        flat.push({ id: r.id ?? nextId(), source_row: resolveSourceRow(r, labelLookup), label: r.label, operator: '=', expanded: false, children: [] })
       } else {
-        flat.push({ id: r.id ?? nextId(), source_row: r.source_row ?? 0, label: r.label, operator: r.type === 'sum' ? '=' : '+', expanded: false, children: [] })
+        flat.push({ id: r.id ?? nextId(), source_row: resolveSourceRow(r, labelLookup), label: r.label, operator: r.type === 'sum' ? '=' : '+', expanded: false, children: [] })
       }
     }
   }
@@ -170,7 +188,10 @@ function StatementPanel({ config, rows, onRowsChange }: {
   const dragRef = useRef<{ type: 'source' | 'outer' | 'child'; sourceRow?: number; outerIdx?: number; innerIdx?: number } | null>(null)
   const [dropState, setDropState] = useState<{ zone: 'before' | 'after' | 'onto' | 'child-before' | 'child-after' | 'end'; outerIdx?: number; innerIdx?: number } | null>(null)
 
-  const usedSourceRows = new Set(rows.flatMap(r => [r.source_row, ...r.children.map(c => c.source_row)]))
+  // Exclude 0 (unresolved source_row) so unmatched template rows don't grey out real source rows
+  const usedSourceRows = new Set(
+    rows.flatMap(r => [r.source_row, ...r.children.map(c => c.source_row)]).filter(v => v > 0)
+  )
 
   function onSourceDragStart(e: React.DragEvent, sr: number) {
     dragRef.current = { type: 'source', sourceRow: sr }
@@ -458,7 +479,7 @@ const STMT_SHORT: Record<string, string> = {
 export default function TemplateEditor({ statements, companyId, sessionId, reportingPeriod, sharedTab, onSaved, onCancel }: Props) {
   const [activeTab, setActiveTab] = useState(statements[0]?.statementType ?? 'income_statement')
   const [allRows, setAllRows] = useState<Record<string, TRow[]>>(() =>
-    Object.fromEntries(statements.map(s => [s.statementType, s.existingTemplate ? templateToRows(s.existingTemplate) : []]))
+    Object.fromEntries(statements.map(s => [s.statementType, s.existingTemplate ? templateToRows(s.existingTemplate, s.stepCRows) : []]))
   )
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)

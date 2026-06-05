@@ -119,11 +119,18 @@ function buildDiffSets(diff: LayoutDiffChange[]) {
 }
 
 // Convert existing template to TRow list, annotating dead/renamed rows
-function templateToRows(tmpl: Layer1Template, diff: LayoutDiffChange[]): TRow[] {
+function templateToRows(tmpl: Layer1Template, diff: LayoutDiffChange[], newStepCRows: StepCRow[]): TRow[] {
   const { renames, removedRowIndices } = buildDiffSets(diff)
 
+  // Label lookup from new source rows for resolving missing source_row values
+  const labelLookup = new Map<string, number>()
+  newStepCRows.forEach(sr => { if (sr.label) labelLookup.set(sr.label.toLowerCase().trim(), sr.row_index) })
+
+  const resolveSourceRow = (r: Layer1TemplateRow) =>
+    (r.source_row && r.source_row > 0) ? r.source_row : (labelLookup.get(r.label.toLowerCase().trim()) ?? 0)
+
   const convert = (r: Layer1TemplateRow, depth = 0): TRow => {
-    const sourceRow = r.source_row ?? 0
+    const sourceRow = resolveSourceRow(r)
     const isDead = removedRowIndices.has(sourceRow)
     const renameEntry = renames.get(sourceRow)
     return {
@@ -134,7 +141,7 @@ function templateToRows(tmpl: Layer1Template, diff: LayoutDiffChange[]): TRow[] 
       expanded: r.expanded ?? false,
       children: (r.children ?? []).map((c) => ({
         id: c.id ?? nextId(),
-        source_row: c.source_row ?? 0,
+        source_row: resolveSourceRow(c),
         label: c.label,
         operator: (c.operator ?? '+') as Operator,
       })),
@@ -221,7 +228,7 @@ export default function LayoutReconciliation({
   onSaved,
   onCancel,
 }: Props) {
-  const [rows, setRows] = useState<TRow[]>(() => templateToRows(existingTemplate, diff))
+  const [rows, setRows] = useState<TRow[]>(() => templateToRows(existingTemplate, diff, newStepCRows))
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [hoveredRow, setHoveredRow] = useState<number | null>(null)
@@ -243,7 +250,7 @@ export default function LayoutReconciliation({
   } | null>(null)
 
   const usedSourceRows = new Set(
-    rows.flatMap((r) => [r.source_row, ...r.children.map((c) => c.source_row)]),
+    rows.flatMap((r) => [r.source_row, ...r.children.map((c) => c.source_row)]).filter(v => v > 0),
   )
 
   // ── Drag handlers ──────────────────────────────────────────────────────────
