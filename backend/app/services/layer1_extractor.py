@@ -279,7 +279,12 @@ def extract_all_rows_for_display(
         })
 
     wb.close()
-    return rows
+
+    # Trim trailing blank rows — keep all blanks in the middle, drop those at the end
+    last_nonempty = len(rows) - 1
+    while last_nonempty >= 0 and not rows[last_nonempty]["label"]:
+        last_nonempty -= 1
+    return rows[:last_nonempty + 1]
 
 
 # ── Step B validation ─────────────────────────────────────────────────────────

@@ -361,7 +361,7 @@ function StatementPanel({ config, rows, onRowsChange }: {
                 onMouseLeave={() => setHoveredRow(null)}
                 className={`grid grid-cols-[36px_1fr_80px] items-center px-2 min-h-[26px] border-b border-slate-50 select-none transition-colors
                   ${isDraggable ? 'cursor-grab hover:bg-blue-50' : isUsed ? 'opacity-30' : ''}
-                  ${isHovered ? '!bg-yellow-200' : ''}
+                  ${isHovered ? '!bg-sky-100' : ''}
                 `}
               >
                 <span className="text-[10px] text-slate-400 font-mono text-center">{sr.row_index}</span>
@@ -414,7 +414,7 @@ function StatementPanel({ config, rows, onRowsChange }: {
                   onMouseLeave={() => setHoveredRow(null)}
                   className={`grid grid-cols-[40px_52px_1fr_26px_26px] items-center px-3 min-h-[30px] border transition-colors
                     ${isEq ? 'bg-blue-50 border-blue-200 my-0.5 font-semibold' : 'border-transparent hover:bg-slate-50'}
-                    ${isHovered ? '!bg-yellow-200' : ''}
+                    ${isHovered ? '!bg-sky-100' : ''}
                     ${dropOnto ? 'outline outline-2 outline-blue-500 rounded' : ''}
                   `}
                 >
@@ -445,7 +445,7 @@ function StatementPanel({ config, rows, onRowsChange }: {
                         onDrop={e => { e.preventDefault(); e.stopPropagation(); commitDrop() }}
                         onMouseEnter={() => setHoveredRow(ch.source_row)}
                         onMouseLeave={() => setHoveredRow(null)}
-                        className={`grid grid-cols-[40px_52px_1fr_26px_26px] items-center pl-8 pr-3 min-h-[26px] border-l-2 border-blue-200 ml-4 bg-blue-50/40 transition-colors ${chHov ? '!bg-yellow-200' : 'hover:bg-blue-50/70'}`}
+                        className={`grid grid-cols-[40px_52px_1fr_26px_26px] items-center pl-8 pr-3 min-h-[26px] border-l-2 border-blue-200 ml-4 bg-blue-50/40 transition-colors ${chHov ? '!bg-sky-100' : 'hover:bg-blue-50/70'}`}
                       >
                         <span className="text-[10px] text-slate-400 font-mono text-center">{ch.source_row || ''}</span>
                         <button onMouseDown={e => e.stopPropagation()} onClick={e => { e.stopPropagation(); setPopover({ outerIdx: oi, innerIdx: ci, rect: e.currentTarget.getBoundingClientRect() }) }}
