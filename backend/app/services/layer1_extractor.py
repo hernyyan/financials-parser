@@ -23,6 +23,28 @@ from openpyxl.styles import Font
 
 # ── helpers ──────────────────────────────────────────────────────────────────
 
+def _find_label_column(ws, start_row: int, end_row: Optional[int]) -> int:
+    """
+    Identify the most consistent label column by finding which column index
+    most frequently holds the first non-empty text cell across the section.
+
+    This prevents hidden account-code columns (which only have values on some
+    rows) from winning over the real display-name column (which has values on
+    every row).
+    """
+    from collections import Counter
+    col_counts: Counter = Counter()
+    max_row = end_row if end_row else start_row + 300
+
+    for row in ws.iter_rows(min_row=start_row, max_row=max_row):
+        for cell in row:
+            if cell.value is not None and str(cell.value).strip():
+                col_counts[cell.column] += 1
+                break
+
+    return col_counts.most_common(1)[0][0] if col_counts else 1
+
+
 def _effective_font(cell) -> Font:
     """Return the cell's font, falling back to a plain Font() if absent."""
     return cell.font if cell.font else Font()
@@ -111,6 +133,11 @@ def extract_rows_with_metadata(
     wb = openpyxl.load_workbook(filepath, read_only=False, data_only=True)
     ws = wb[sheet_name]
 
+    # Identify the consistent label column across the section (most-frequent
+    # first-non-empty column), avoiding hidden account-code columns that only
+    # appear on some rows.
+    label_column = _find_label_column(ws, start_row, end_row)
+
     rows: List[Dict[str, Any]] = []
 
     for row_num, row in enumerate(ws.iter_rows(), start=1):
@@ -119,16 +146,10 @@ def extract_rows_with_metadata(
         if end_row is not None and row_num > end_row:
             break
 
-        # Find label: first non-empty cell in the row
-        label: Optional[str] = None
-        label_col: Optional[int] = None
-        label_cell = None
-        for cell in row:
-            if cell.value is not None and str(cell.value).strip():
-                label = str(cell.value).strip()
-                label_col = cell.column
-                label_cell = cell
-                break
+        # Use the identified label column consistently for every row
+        label_cell = ws.cell(row=row_num, column=label_column)
+        label_val = label_cell.value
+        label: Optional[str] = str(label_val).strip() if label_val is not None and str(label_val).strip() else None
 
         if label is None:
             continue  # blank row
@@ -161,7 +182,7 @@ def extract_rows_with_metadata(
 
         rows.append({
             "label": label,
-            "label_col": label_col,
+            "label_col": label_column,
             "value": value,
             "bold": is_bold,
             "italic": bool(font.italic),
@@ -216,7 +237,7 @@ def extract_all_rows_for_display(
     Unlike extract_rows_with_metadata, this includes blank rows and non-numeric
     rows. Every row in the section range is returned with:
       - row_index : int    — 1-based sheet row number
-      - label     : str    — first non-empty cell text, or "" for blank rows
+      - label     : str    — text from the identified label column, or "" for blank rows
       - value     : float | None — numeric value from target column (None if absent)
       - bold      : bool
       - italic    : bool
@@ -229,6 +250,9 @@ def extract_all_rows_for_display(
 
     wb = openpyxl.load_workbook(filepath, read_only=False, data_only=True)
     ws = wb[sheet_name]
+
+    label_column = _find_label_column(ws, start_row, end_row)
+
     rows: List[Dict[str, Any]] = []
 
     for row_num, row in enumerate(ws.iter_rows(), start=1):
@@ -237,14 +261,10 @@ def extract_all_rows_for_display(
         if end_row is not None and row_num > end_row:
             break
 
-        # Label: first non-empty cell in the row
-        label = ""
-        label_cell = None
-        for cell in row:
-            if cell.value is not None and str(cell.value).strip():
-                label = str(cell.value).strip()
-                label_cell = cell
-                break
+        # Use the consistent label column for every row
+        label_cell = ws.cell(row=row_num, column=label_column)
+        label_val = label_cell.value
+        label = str(label_val).strip() if label_val is not None and str(label_val).strip() else ""
 
         # Value from the target column
         value_cell = ws.cell(row=row_num, column=column_index)
