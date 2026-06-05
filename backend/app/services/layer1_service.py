@@ -53,6 +53,19 @@ _COLUMN_IDENTIFIER_TOOL = {
 }
 
 
+MAX_ATTEMPTS = 2
+
+
+def _unpack_col_info(info: Dict[str, Any], shared_tab: bool) -> tuple:
+    col_idx = int(info.get("column_index", 1))
+    scaling = str(info.get("source_scaling", "actual_dollars"))
+    s_skip = int(info.get("skip_rows", 0))
+    col_id = str(info.get("period_matched", info.get("column_letter", "")))
+    s_start = int(info.get("section_start_row", 0)) if shared_tab else 0
+    s_end = int(info.get("section_end_row", 0)) if shared_tab else 0
+    return col_idx, scaling, s_skip, col_id, s_start, s_end
+
+
 class Layer1Service:
     """Orchestrates the 4-step Layer 1 extraction pipeline."""
 
@@ -94,16 +107,6 @@ class Layer1Service:
         # ── Steps B→D: column identification, extraction, hierarchy ─────────────
         # Retried up to MAX_ATTEMPTS times if lineItems comes back empty.
 
-        def _unpack_col_info(info: Dict[str, Any], st: bool) -> tuple:
-            col_idx = int(info.get("column_index", 1))
-            scaling = str(info.get("source_scaling", "actual_dollars"))
-            s_skip = int(info.get("skip_rows", 0))
-            col_id = str(info.get("period_matched", info.get("column_letter", "")))
-            s_start = int(info.get("section_start_row", 0)) if st else 0
-            s_end = int(info.get("section_end_row", 0)) if st else 0
-            return col_idx, scaling, s_skip, col_id, s_start, s_end
-
-        MAX_ATTEMPTS = 2
         col_prompt_vars: Dict[str, Any] = {
             "reporting_period": reporting_period,
             "header_rows": header_text,
@@ -251,6 +254,9 @@ class Layer1Service:
         Steps A+B+C only. Returns (rows, column_identified, source_scaling) where
         rows is a list of {row_index, label, value} dicts. Used by the template
         editor to populate the source panel without running full AI classification.
+
+        Uses the same column validation + retry logic as run_extraction to avoid
+        AI misidentifying the wrong column.
         """
         model = os.getenv("LAYER1_MODEL", "claude-sonnet-4-6")
         normalized = sheet_type.lower().replace(" ", "_")
@@ -262,28 +268,74 @@ class Layer1Service:
             "statement_type": normalized if shared_tab else "",
             "retry_hint": "",
         }
-        col_info = self.claude.call_claude_with_tool(
-            "layer1_column_identifier",
-            col_prompt_vars,
-            model,
-            tool_def=_COLUMN_IDENTIFIER_TOOL,
-            max_tokens=4096,
-        )
-        column_index = int(col_info.get("column_index", 1))
-        source_scaling = str(col_info.get("source_scaling", "actual_dollars"))
-        skip_rows = int(col_info.get("skip_rows", 0))
-        column_identified = str(col_info.get("period_matched", col_info.get("column_letter", "")))
-        section_start_row = int(col_info.get("section_start_row", 0)) if shared_tab else 0
-        section_end_row = int(col_info.get("section_end_row", 0)) if shared_tab else 0
 
-        rows = extract_rows_with_metadata(
-            filepath, sheet_name,
-            column_index=column_index,
-            source_scaling=source_scaling,
-            skip_rows=skip_rows,
-            section_start_row=section_start_row,
-            section_end_row=section_end_row,
-        )
+        col_info: Dict[str, Any] = {}
+        column_index = 1
+        source_scaling = "actual_dollars"
+        skip_rows = 0
+        column_identified = ""
+        section_start_row = 0
+        section_end_row = 0
+        rows: list = []
+
+        for attempt in range(MAX_ATTEMPTS):
+            col_info = self.claude.call_claude_with_tool(
+                "layer1_column_identifier",
+                col_prompt_vars,
+                model,
+                tool_def=_COLUMN_IDENTIFIER_TOOL,
+                max_tokens=4096,
+            )
+            column_index, source_scaling, skip_rows, column_identified, section_start_row, section_end_row = (
+                _unpack_col_info(col_info, shared_tab)
+            )
+
+            # Validate column has numeric data; retry inline if not
+            _verify_start = section_start_row if section_start_row > 0 else max(skip_rows + 1, 1)
+            _verify_end = section_end_row if section_end_row > 0 else None
+            numeric_count = count_numeric_values_in_column(
+                filepath, sheet_name, column_index,
+                start_row=_verify_start, end_row=_verify_end,
+            )
+            if numeric_count < 3:
+                logger.warning(
+                    "[source-rows] attempt %d: col %d has only %d numeric rows — retrying",
+                    attempt + 1, column_index, numeric_count,
+                )
+                col_prompt_vars["retry_hint"] = (
+                    f"\n> **COLUMN CHECK:** Column {column_index} "
+                    f"('{col_info.get('column_letter', '?')}') contains only "
+                    f"{numeric_count} numeric values — it is wrong. "
+                    f"Select the column that actually contains financial data for '{reporting_period}'."
+                )
+                col_info = self.claude.call_claude_with_tool(
+                    "layer1_column_identifier",
+                    col_prompt_vars,
+                    model,
+                    tool_def=_COLUMN_IDENTIFIER_TOOL,
+                    max_tokens=4096,
+                )
+                column_index, source_scaling, skip_rows, column_identified, section_start_row, section_end_row = (
+                    _unpack_col_info(col_info, shared_tab)
+                )
+
+            rows = extract_rows_with_metadata(
+                filepath, sheet_name,
+                column_index=column_index,
+                source_scaling=source_scaling,
+                skip_rows=skip_rows,
+                section_start_row=section_start_row,
+                section_end_row=section_end_row,
+            )
+            logger.info("[source-rows] attempt %d: col=%d → %d rows", attempt + 1, column_index, len(rows))
+
+            if rows or attempt == MAX_ATTEMPTS - 1:
+                break
+
+            col_prompt_vars["retry_hint"] = (
+                f"\n> **RETRY {attempt + 2}/{MAX_ATTEMPTS}:** Column {column_index} produced 0 rows. "
+                f"Choose a different column with actual financial data for '{reporting_period}'."
+            )
 
         simplified = [
             {"row_index": r["row_index"], "label": r["label"], "value": r["value"]}
