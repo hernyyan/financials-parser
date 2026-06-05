@@ -69,7 +69,7 @@ export async function uploadFile(
 // ── Async job polling ─────────────────────────────────────────────────────────
 
 const POLL_INTERVAL_MS = 3000
-const POLL_TIMEOUT_MS = 12 * 60 * 1000  // 12 min — beyond worst-case extraction
+const POLL_TIMEOUT_MS = 10 * 60 * 1000  // 10 min
 
 interface _JobStartResponse { job_id: string }
 interface _JobStatusResponse {
@@ -122,7 +122,7 @@ async function _pollJobUntilDone(
     }
 
     throw new Error(
-      `Extraction timed out after ${POLL_TIMEOUT_MS / 60000} minutes. Please try again.`
+      `Extraction timed out after ${Math.round(POLL_TIMEOUT_MS / 60000)} minutes. Please try again.`
     )
   } finally {
     if (tickInterval !== null) clearInterval(tickInterval)

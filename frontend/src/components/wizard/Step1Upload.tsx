@@ -610,18 +610,34 @@ export default function Step1Upload() {
     setExtractionElapsed(0)
 
     const stmtTypes = ['income_statement', 'balance_sheet', 'cash_flow_statement'] as const
+    const assignedStmtTypes = stmtTypes.filter(s => assignments[s])
     const results: Record<string, Awaited<ReturnType<typeof runLayer1>>> = {}
 
-    // Determine which tabs are shared across multiple statement types
-    const assignedTabs = stmtTypes.map(s => assignments[s]).filter(Boolean)
+    const assignedTabs = assignedStmtTypes.map(s => assignments[s])
     const tabCounts: Record<string, number> = {}
     for (const t of assignedTabs) tabCounts[t] = (tabCounts[t] ?? 0) + 1
 
-    const tasks = stmtTypes
-      .filter(stmtType => assignments[stmtType])
-      .map(async (stmtType) => {
-        const tab = assignments[stmtType]
-        const sharedTab = tabCounts[tab] > 1
+    // If IS has no template yet, skip straight to Configure Template flow —
+    // same as clicking the Configure Template button. No need to run full
+    // extraction first; the template editor will handle it.
+    if (companyId && assignments['income_statement']) {
+      const isTemplate = await getLayer1Template(companyId, 'income_statement').catch(() => null)
+      if (!isTemplate) {
+        setExtractionStatus('idle')
+        // Delegate to the same flow as Configure Template
+        await handleConfigureTemplate()
+        return
+      }
+    }
+
+    // Run extractions sequentially — backend semaphore already serializes them,
+    // so parallel submission just burns poll-timeout on queued jobs.
+    let anyFailed = false
+    let firstError = ''
+    for (const stmtType of assignedStmtTypes) {
+      const tab = assignments[stmtType]
+      const sharedTab = tabCounts[tab] > 1
+      try {
         const result = await runLayer1(sessionId!, tab, stmtType, reportingPeriod, undefined, companyId, sharedTab, (s) => setExtractionElapsed(s))
         console.log(`[Layer1 debug] ${stmtType} (tab="${tab}"):`, result.extractionDebug, '| lineItems:', Object.keys(result.lineItems).length)
         results[stmtType] = result
@@ -633,23 +649,21 @@ export default function Step1Upload() {
           structured: result.structured,
           templateCheck: result.templateCheck,
         })
-      })
+      } catch (err: any) {
+        anyFailed = true
+        firstError = err?.message ?? 'Extraction failed.'
+      }
+    }
 
     try {
-      const settled = await Promise.allSettled(tasks)
-      const failed = settled.filter(s => s.status === 'rejected')
-      if (failed.length > 0 && settled.every(s => s.status === 'rejected')) {
-        // All tasks failed
-        const msg = (failed[0] as PromiseRejectedResult).reason?.message ?? 'Extraction failed.'
+      if (anyFailed && Object.keys(results).length === 0) {
         setExtractionStatus('error')
-        setExtractionError(msg)
-        setStatus({ type: 'error', message: msg })
+        setExtractionError(firstError)
+        setStatus({ type: 'error', message: firstError })
         return
       }
-      if (failed.length > 0) {
-        // Some failed — warn but continue with partial results
-        const msg = (failed[0] as PromiseRejectedResult).reason?.message ?? 'One or more extractions failed.'
-        setStatus({ type: 'error', message: msg })
+      if (anyFailed) {
+        setStatus({ type: 'error', message: firstError })
       }
       setExtractionStatus('done')
 
