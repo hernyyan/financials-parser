@@ -79,11 +79,13 @@ function propagateSign(parentOp: Operator, childOp: Operator): Operator {
   return childOp
 }
 
-// Build label → [row_index, ...] ordered list for sequential duplicate matching
+// Build label → [row_index, ...] ordered list for sequential duplicate matching.
+// Only includes data rows (value !== null) — title rows (label with no value)
+// are excluded so they don't steal label matches from real data rows.
 function buildLabelLookup(stepCRows: StepCRow[]): Map<string, number[]> {
   const map = new Map<string, number[]>()
   stepCRows.forEach(sr => {
-    if (sr.label) {
+    if (sr.label && sr.value !== null) {
       const key = sr.label.toLowerCase().trim()
       if (!map.has(key)) map.set(key, [])
       map.get(key)!.push(sr.row_index)
@@ -346,18 +348,20 @@ function StatementPanel({ config, rows, onRowsChange }: {
         <div className="flex-1 overflow-y-auto">
           {config.stepCRows.map(sr => {
             const isEmpty = !sr.label
+            const isTitleRow = Boolean(sr.label) && sr.value === null  // label exists but no value
             const isUsed = usedSourceRows.has(sr.row_index)
             const isHovered = hoveredRow === sr.row_index
+            const isDraggable = !isEmpty && !isTitleRow && !isUsed
             return (
               <div
                 key={sr.row_index}
-                draggable={!isEmpty && !isUsed}
-                onDragStart={isEmpty || isUsed ? undefined : e => onSourceDragStart(e, sr.row_index)}
+                draggable={isDraggable}
+                onDragStart={isDraggable ? e => onSourceDragStart(e, sr.row_index) : undefined}
                 onMouseEnter={() => setHoveredRow(sr.row_index)}
                 onMouseLeave={() => setHoveredRow(null)}
                 className={`grid grid-cols-[36px_1fr_80px] items-center px-2 min-h-[26px] border-b border-slate-50 select-none transition-colors
-                  ${isEmpty ? '' : isUsed ? 'opacity-30' : 'cursor-grab hover:bg-blue-50'}
-                  ${isHovered && !isEmpty ? 'bg-amber-50' : ''}
+                  ${isDraggable ? 'cursor-grab hover:bg-blue-50' : isUsed ? 'opacity-30' : ''}
+                  ${isHovered ? '!bg-yellow-200' : ''}
                 `}
               >
                 <span className="text-[10px] text-slate-400 font-mono text-center">{sr.row_index}</span>
@@ -410,7 +414,7 @@ function StatementPanel({ config, rows, onRowsChange }: {
                   onMouseLeave={() => setHoveredRow(null)}
                   className={`grid grid-cols-[40px_52px_1fr_26px_26px] items-center px-3 min-h-[30px] border transition-colors
                     ${isEq ? 'bg-blue-50 border-blue-200 my-0.5 font-semibold' : 'border-transparent hover:bg-slate-50'}
-                    ${isHovered ? '!bg-amber-50' : ''}
+                    ${isHovered ? '!bg-yellow-200' : ''}
                     ${dropOnto ? 'outline outline-2 outline-blue-500 rounded' : ''}
                   `}
                 >
@@ -441,7 +445,7 @@ function StatementPanel({ config, rows, onRowsChange }: {
                         onDrop={e => { e.preventDefault(); e.stopPropagation(); commitDrop() }}
                         onMouseEnter={() => setHoveredRow(ch.source_row)}
                         onMouseLeave={() => setHoveredRow(null)}
-                        className={`grid grid-cols-[40px_52px_1fr_26px_26px] items-center pl-8 pr-3 min-h-[26px] border-l-2 border-blue-200 ml-4 bg-blue-50/40 transition-colors ${chHov ? 'bg-amber-50' : 'hover:bg-blue-50/70'}`}
+                        className={`grid grid-cols-[40px_52px_1fr_26px_26px] items-center pl-8 pr-3 min-h-[26px] border-l-2 border-blue-200 ml-4 bg-blue-50/40 transition-colors ${chHov ? '!bg-yellow-200' : 'hover:bg-blue-50/70'}`}
                       >
                         <span className="text-[10px] text-slate-400 font-mono text-center">{ch.source_row || ''}</span>
                         <button onMouseDown={e => e.stopPropagation()} onClick={e => { e.stopPropagation(); setPopover({ outerIdx: oi, innerIdx: ci, rect: e.currentTarget.getBoundingClientRect() }) }}

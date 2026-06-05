@@ -122,10 +122,10 @@ function buildDiffSets(diff: LayoutDiffChange[]) {
 function templateToRows(tmpl: Layer1Template, diff: LayoutDiffChange[], newStepCRows: StepCRow[]): TRow[] {
   const { renames, removedRowIndices } = buildDiffSets(diff)
 
-  // Sequential label lookup: Nth template row with label X → Nth source row with label X
+  // Sequential label lookup: only data rows (value !== null) — title rows excluded
   const labelLookup = new Map<string, number[]>()
   newStepCRows.forEach(sr => {
-    if (sr.label) {
+    if (sr.label && sr.value !== null) {
       const key = sr.label.toLowerCase().trim()
       if (!labelLookup.has(key)) labelLookup.set(key, [])
       labelLookup.get(key)!.push(sr.row_index)
@@ -579,21 +579,23 @@ export default function LayoutReconciliation({
             </div>
             <div className="flex-1 overflow-y-auto">
               {newStepCRows.map((sr) => {
+                const isTitleRow = Boolean(sr.label) && sr.value === null
                 const isAdded = addedRowIndices.has(sr.row_index)
                 const isRenamed = renames.has(sr.row_index)
                 const isHovered = hoveredRow === sr.row_index
                 const isUsed = usedSourceRows.has(sr.row_index)
+                const isDraggable = !isTitleRow && !isUsed
                 return (
                   <div
                     key={sr.row_index}
-                    draggable={!isUsed}
-                    onDragStart={isUsed ? undefined : (e) => onNewSourceDragStart(e, sr.row_index)}
+                    draggable={isDraggable}
+                    onDragStart={isDraggable ? (e) => onNewSourceDragStart(e, sr.row_index) : undefined}
                     onMouseEnter={() => setHoveredRow(sr.row_index)}
                     onMouseLeave={() => setHoveredRow(null)}
                     className={`grid grid-cols-[36px_1fr_72px] items-center px-2 min-h-[26px] border-b border-slate-50 select-none transition-colors
                       ${isAdded ? 'bg-green-50' : isRenamed ? 'bg-amber-50' : ''}
-                      ${isUsed ? 'opacity-30' : !isAdded && !isRenamed ? 'cursor-grab hover:bg-blue-50' : 'cursor-grab'}
-                      ${isHovered ? '!bg-amber-100' : ''}
+                      ${isDraggable ? (!isAdded && !isRenamed ? 'cursor-grab hover:bg-blue-50' : 'cursor-grab') : isUsed ? 'opacity-30' : ''}
+                      ${isHovered ? '!bg-yellow-200' : ''}
                     `}
                   >
                     <span className="text-[10px] text-slate-400 font-mono text-center">{sr.row_index}</span>
@@ -649,7 +651,7 @@ export default function LayoutReconciliation({
                       onMouseLeave={() => setHoveredRow(null)}
                       className={`grid grid-cols-[40px_52px_1fr_26px_26px] items-center px-3 min-h-[30px] border transition-colors
                         ${tr.isDead ? 'bg-red-50 border-red-200' : tr.isRenamed ? 'bg-amber-50 border-amber-200' : isEq ? 'bg-blue-50 border-blue-200 my-0.5' : 'border-transparent hover:bg-slate-50'}
-                        ${isHovered ? '!bg-amber-100' : ''}
+                        ${isHovered ? '!bg-yellow-200' : ''}
                         ${dropOnto ? 'outline outline-2 outline-blue-500 rounded' : ''}
                         ${isRenameTarget ? 'outline outline-2 outline-amber-400 rounded' : ''}
                       `}
@@ -707,7 +709,7 @@ export default function LayoutReconciliation({
                             onDrop={(e) => { e.preventDefault(); e.stopPropagation(); commitDrop() }}
                             onMouseEnter={() => setHoveredRow(ch.source_row)}
                             onMouseLeave={() => setHoveredRow(null)}
-                            className={`grid grid-cols-[40px_52px_1fr_26px_26px] items-center pl-8 pr-3 min-h-[26px] border-l-2 border-blue-200 ml-4 bg-blue-50/40 transition-colors ${chHovered ? 'bg-amber-50' : 'hover:bg-blue-50/70'}`}
+                            className={`grid grid-cols-[40px_52px_1fr_26px_26px] items-center pl-8 pr-3 min-h-[26px] border-l-2 border-blue-200 ml-4 bg-blue-50/40 transition-colors ${chHovered ? '!bg-yellow-200' : 'hover:bg-blue-50/70'}`}
                           >
                             <span className="text-[10px] text-slate-400 font-mono text-center">{ch.source_row || ''}</span>
                             <button
