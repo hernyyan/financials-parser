@@ -155,6 +155,7 @@ def _run_extraction_worker(
                 structured=result.get("structured"),
                 templateCheck=template_check,
                 extractionDebug=result.get("extractionDebug"),
+                sourceRows=result.get("sourceRows"),
             )
             job_store.set_done(job_id, response.model_dump())
 
@@ -375,7 +376,7 @@ def _run_source_rows_worker(
             return
 
         job_store.set_done(job_id, {
-            "rows": rows,
+            "sourceRows": rows,
             "columnIdentified": column_identified,
             "sourceScaling": source_scaling,
         })

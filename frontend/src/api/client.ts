@@ -19,6 +19,7 @@ import type {
   Layer1Template,
   SourceLayoutRow,
   LayoutCheckResult,
+  StepCRow,
 } from '../types'
 
 export const API_BASE = import.meta.env.VITE_API_URL || '/api'
@@ -454,8 +455,8 @@ export async function extractSourceRows(
   sheetType: string,
   reportingPeriod: string,
   sharedTab?: boolean,
-  onElapsedTick?: (seconds: number) => void,
-): Promise<{ rows: Array<{ row_index: number; label: string; value: number | null }>; columnIdentified: string; sourceScaling: string }> {
+  onElapsedTick?: (s: number) => void,
+): Promise<{ sourceRows: StepCRow[]; columnIdentified: string; sourceScaling: string }> {
   const startRes = await fetch(`${API_BASE}/layer1/source-rows`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

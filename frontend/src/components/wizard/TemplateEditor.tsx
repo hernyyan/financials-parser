@@ -313,7 +313,10 @@ function StatementPanel({ config, rows, onRowsChange }: {
                 `}
               >
                 <span className="text-[10px] text-slate-400 font-mono text-center">{sr.row_index}</span>
-                <span className={`text-xs px-1.5 truncate ${!sr.label ? 'invisible' : 'text-slate-700'}`}>{sr.label || ' '}</span>
+                <span
+                  className={`text-xs truncate ${!sr.label ? 'invisible' : 'text-slate-700'}`}
+                  style={{ paddingLeft: 6 + (sr.indent ?? 0) * 14, fontWeight: sr.bold ? 700 : 400, fontStyle: sr.italic ? 'italic' : 'normal' }}
+                >{sr.label || ' '}</span>
                 <span className={`text-[11px] font-mono text-right pr-1 ${sr.value != null && sr.value < 0 ? 'text-red-600' : 'text-slate-500'}`}>{fmtVal(sr.value)}</span>
               </div>
             )

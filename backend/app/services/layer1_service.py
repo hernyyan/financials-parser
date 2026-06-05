@@ -24,6 +24,7 @@ from app.services.layer1_extractor import (
     count_numeric_values_in_column,
     extract_header_rows,
     extract_rows_with_metadata,
+    extract_all_rows_for_display,
     rows_to_csv_with_metadata,
 )
 
@@ -222,9 +223,20 @@ class Layer1Service:
             )
             logger.warning("[Layer1] %s: 0 lineItems on attempt %d — retrying", normalized, attempt + 1)
 
+        # Full-fidelity display rows for template editor left panel
+        display_rows = extract_all_rows_for_display(
+            filepath, sheet_name,
+            column_index=column_index,
+            source_scaling=source_scaling,
+            skip_rows=skip_rows,
+            section_start_row=section_start_row,
+            section_end_row=section_end_row,
+        )
+
         return {
             "lineItems": line_items,
             "structured": structured,
+            "sourceRows": display_rows,
             "sourceScaling": source_scaling,
             "columnIdentified": column_identified,
             "extractionDebug": {
@@ -337,11 +349,15 @@ class Layer1Service:
                 f"Choose a different column with actual financial data for '{reporting_period}'."
             )
 
-        simplified = [
-            {"row_index": r["row_index"], "label": r["label"], "value": r["value"]}
-            for r in rows
-        ]
-        return simplified, column_identified, source_scaling
+        display_rows = extract_all_rows_for_display(
+            filepath, sheet_name,
+            column_index=column_index,
+            source_scaling=source_scaling,
+            skip_rows=skip_rows,
+            section_start_row=section_start_row,
+            section_end_row=section_end_row,
+        )
+        return display_rows, column_identified, source_scaling
 
     def run_deterministic_extraction(
         self,

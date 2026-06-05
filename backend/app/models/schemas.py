@@ -72,6 +72,7 @@ class Layer1Response(BaseModel):
     structured: Optional[Dict] = None
     templateCheck: Optional[Dict] = None
     extractionDebug: Optional[Dict] = None
+    sourceRows: Optional[List[Dict]] = None  # full-fidelity display rows for template editor
 
 
 # ─── Layer 2 ──────────────────────────────────────────────────────────────────

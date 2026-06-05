@@ -199,6 +199,89 @@ def rows_to_csv_with_metadata(rows: List[Dict[str, Any]]) -> str:
     return output.getvalue()
 
 
+# ── Display rows (full fidelity for template editor) ─────────────────────────
+
+def extract_all_rows_for_display(
+    filepath: str,
+    sheet_name: str,
+    column_index: int,
+    source_scaling: str,
+    skip_rows: int = 0,
+    section_start_row: int = 0,
+    section_end_row: int = 0,
+) -> List[Dict[str, Any]]:
+    """
+    Extract ALL rows between section boundaries for the template editor left panel.
+
+    Unlike extract_rows_with_metadata, this includes blank rows and non-numeric
+    rows. Every row in the section range is returned with:
+      - row_index : int    — 1-based sheet row number
+      - label     : str    — first non-empty cell text, or "" for blank rows
+      - value     : float | None — numeric value from target column (None if absent)
+      - bold      : bool
+      - italic    : bool
+      - indent    : int    — alignment indent level
+    """
+    scale = _parse_scale(source_scaling)
+
+    start_row = section_start_row if section_start_row > 0 else (skip_rows + 1)
+    end_row: Optional[int] = section_end_row if section_end_row > 0 else None
+
+    wb = openpyxl.load_workbook(filepath, read_only=False, data_only=True)
+    ws = wb[sheet_name]
+    rows: List[Dict[str, Any]] = []
+
+    for row_num, row in enumerate(ws.iter_rows(), start=1):
+        if row_num < start_row:
+            continue
+        if end_row is not None and row_num > end_row:
+            break
+
+        # Label: first non-empty cell in the row
+        label = ""
+        label_cell = None
+        for cell in row:
+            if cell.value is not None and str(cell.value).strip():
+                label = str(cell.value).strip()
+                label_cell = cell
+                break
+
+        # Value from the target column
+        value_cell = ws.cell(row=row_num, column=column_index)
+        raw_val = _cell_value(value_cell)
+        value: Optional[float] = None
+        if raw_val is not None:
+            raw_str = str(raw_val).strip()
+            if raw_str not in ("", "-", "—", "–"):
+                try:
+                    value = float(raw_str.replace(",", "").replace("(", "-").replace(")", "")) * scale
+                except (ValueError, TypeError):
+                    pass
+
+        # Formatting from label cell (defaults for blank rows)
+        if label_cell is not None:
+            font = _effective_font(label_cell)
+            is_bold = bool(font.bold)
+            is_italic = bool(font.italic)
+            indent = _indent_level(label_cell)
+        else:
+            is_bold = False
+            is_italic = False
+            indent = 0
+
+        rows.append({
+            "row_index": row_num,
+            "label": label,
+            "value": value,
+            "bold": is_bold,
+            "italic": is_italic,
+            "indent": indent,
+        })
+
+    wb.close()
+    return rows
+
+
 # ── Step B validation ─────────────────────────────────────────────────────────
 
 def count_numeric_values_in_column(

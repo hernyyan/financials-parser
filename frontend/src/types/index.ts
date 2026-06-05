@@ -42,6 +42,9 @@ export interface StepCRow {
   row_index: number
   label: string
   value: number | null
+  bold?: boolean
+  italic?: boolean
+  indent?: number
 }
 
 // One statement's worth of data for the template editor
@@ -219,6 +222,7 @@ export interface Layer1Response {
   structured?: Layer1Template
   templateCheck?: TemplateCheckResult
   extractionDebug?: Layer1ExtractionDebug
+  sourceRows?: StepCRow[]
 }
 
 export interface Layer2Request {

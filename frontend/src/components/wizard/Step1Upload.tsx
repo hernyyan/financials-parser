@@ -659,14 +659,8 @@ export default function Step1Upload() {
         const isTab = assignments['income_statement']
 
         if (isResult?.structured && isTab) {
-          // Build Step C rows for the IS (source_row + label + value)
-          const flattenRows = (r: Layer1TemplateRow): Array<{ row_index: number; label: string; value: number | null }> => {
-            const out: Array<{ row_index: number; label: string; value: number | null }> = []
-            if (r.source_row) out.push({ row_index: r.source_row, label: r.label, value: r.value ?? null })
-            r.children.forEach(c => out.push(...flattenRows(c)))
-            return out
-          }
-          const stepCRows = (isResult.structured.rows ?? []).flatMap(flattenRows).sort((a, b) => a.row_index - b.row_index)
+          // Use full-fidelity source rows returned by the backend
+          const stepCRows = isResult.sourceRows ?? []
 
           // Build layout rows (all Step C rows including any we can infer from extractionDebug)
           // Use stepCRows as the layout — these are the rows Python extracted
@@ -746,22 +740,60 @@ export default function Step1Upload() {
     const tickHandle = setInterval(() => setExtractionElapsed(s => s + 1), 1000)
 
     try {
-      const statementConfigs = await Promise.all(
-        assignedStatements.map(async stmtType => {
-          const sheetName = assignments[stmtType]
-          const shared = tabCounts[sheetName] > 1
+      // Run Extraction and Configure Template follow the same routing logic.
+      // The only difference: Configure Template always shows the editor,
+      // even when the layout is unchanged.
+      const statementConfigs: import('../../types').TemplateStatementConfig[] = []
+      let reconcileState: import('../../types').TemplateReconcileState | null = null
 
-          // Load source rows (Steps A+B+C) and existing template in parallel
-          const [sourceResult, existingTemplate] = await Promise.all([
-            extractSourceRows(sessionId!, sheetName, stmtType, reportingPeriod, shared),
-            companyId ? getLayer1Template(companyId, stmtType).catch(() => null) : Promise.resolve(null),
-          ])
+      for (const stmtType of assignedStatements) {
+        const sheetName = assignments[stmtType]
+        const shared = tabCounts[sheetName] > 1
 
-          return { statementType: stmtType, sheetName, stepCRows: sourceResult.rows, existingTemplate }
-        })
-      )
+        const existingTemplate = companyId
+          ? await getLayer1Template(companyId, stmtType).catch(() => null)
+          : null
 
-      setEditorState({ mode: 'configure', statements: statementConfigs })
+        if (!existingTemplate) {
+          // No template — run full extraction so AI pre-fills the right panel
+          const result = await runLayer1(sessionId!, sheetName, stmtType, reportingPeriod, undefined, companyId, shared, (s) => setExtractionElapsed(s))
+          const stepCRows = result.sourceRows ?? []
+          const aiTemplate = result.structured ? structuredToTemplate(result.structured, stmtType) : null
+          statementConfigs.push({ statementType: stmtType, sheetName, stepCRows, existingTemplate: aiTemplate })
+        } else {
+          // Has template — load source rows and run layout check
+          const sourceResult = await extractSourceRows(sessionId!, sheetName, stmtType, reportingPeriod, shared, (s) => setExtractionElapsed(s))
+          const stepCRows = sourceResult.sourceRows ?? []
+
+          if (companyId) {
+            const layoutRows = stepCRows.map(r => ({ row_index: r.row_index, label: r.label }))
+            const layoutCheck = await checkLayout(companyId, stmtType, layoutRows).catch(() => null)
+
+            if (layoutCheck?.has_real_diff) {
+              // Layout changed — show 3-panel reconciliation for this statement
+              // (reconcile only handles one statement at a time for now)
+              reconcileState = {
+                mode: 'reconcile',
+                statementType: stmtType,
+                sheetName,
+                stepCRows,
+                existingTemplate,
+                diff: layoutCheck.changes,
+                oldLayout: [],
+              }
+              break
+            }
+          }
+
+          statementConfigs.push({ statementType: stmtType, sheetName, stepCRows, existingTemplate })
+        }
+      }
+
+      if (reconcileState) {
+        setEditorState(reconcileState)
+      } else {
+        setEditorState({ mode: 'configure', statements: statementConfigs })
+      }
     } catch (e: any) {
       setStatus({ type: 'error', message: `Failed to load template data: ${e.message}` })
     } finally {
