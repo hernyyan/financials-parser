@@ -447,6 +447,25 @@ export async function applyTemplateChanges(
   await handleResponse<{ success: boolean }>(res)
 }
 
+// POST /layer1/source-rows  (async — Steps A+B+C only, returns raw row list for template editor)
+export async function extractSourceRows(
+  sessionId: string,
+  sheetName: string,
+  sheetType: string,
+  reportingPeriod: string,
+  sharedTab?: boolean,
+  onElapsedTick?: (seconds: number) => void,
+): Promise<{ rows: Array<{ row_index: number; label: string; value: number | null }>; columnIdentified: string; sourceScaling: string }> {
+  const startRes = await fetch(`${API_BASE}/layer1/source-rows`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ sessionId, sheetName, sheetType: sheetType, reportingPeriod, sharedTab: sharedTab ?? false }),
+  })
+  const { job_id } = await handleResponse<_JobStartResponse>(startRes)
+  const result = await _pollJobUntilDone(`${API_BASE}/layer1/jobs/${job_id}`, onElapsedTick)
+  return result as any
+}
+
 // POST /layer1/run-deterministic  (async — starts job, polls until done)
 export async function runLayer1Deterministic(
   sessionId: string,

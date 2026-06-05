@@ -1,6 +1,7 @@
 """
 POST /layer1/run                  — enqueue async extraction job, returns { job_id } immediately (HTTP 202)
 POST /layer1/run-deterministic    — same async pattern but skips Step D using stored template
+POST /layer1/source-rows          — Steps A+B+C only: returns raw label+value rows for template editor
 GET  /layer1/jobs/{job_id}        — poll job status: pending | running | done | error
 
 The extraction pipeline (2-5 Claude API calls, up to 8 minutes on complex sheets) runs
@@ -23,7 +24,7 @@ from sqlalchemy import text
 
 from app.config import UPLOADS_DIR
 from app.db.database import SessionLocal
-from app.models.schemas import Layer1Request, Layer1DeterministicRequest, Layer1Response
+from app.models.schemas import Layer1Request, Layer1DeterministicRequest, Layer1SourceRowsRequest, Layer1Response
 from app.services.layer1_service import get_layer1_service
 from app.services.job_store import job_store, extraction_semaphore
 
@@ -329,6 +330,81 @@ def run_layer1_deterministic(request: Layer1DeterministicRequest):
         ),
         daemon=True,
         name=f"layer1-det-{job_id[:8]}",
+    ).start()
+
+    return {"job_id": job_id}
+
+
+def _run_source_rows_worker(
+    job_id: str,
+    filepath: str,
+    sheet_name: str,
+    sheet_type: str,
+    reporting_period: str,
+    shared_tab: bool,
+) -> None:
+    """
+    Steps A+B+C only — identifies the data column and extracts raw rows.
+    No Step D (AI hierarchy), no template mapping. Used by the template editor
+    "Configure Template" flow to populate the source panel without full extraction.
+    """
+    extraction_semaphore.acquire()
+    try:
+        job_store.set_running(job_id)
+        service = get_layer1_service()
+        try:
+            rows, column_identified, source_scaling = service.extract_source_rows(
+                filepath=filepath,
+                sheet_name=sheet_name,
+                sheet_type=sheet_type,
+                reporting_period=reporting_period,
+                shared_tab=shared_tab,
+            )
+        except anthropic.AuthenticationError:
+            job_store.set_error(job_id, "Invalid Anthropic API key.")
+            return
+        except anthropic.RateLimitError:
+            job_store.set_error(job_id, "Rate limit exceeded. Please wait a moment and try again.")
+            return
+        except anthropic.APIError as e:
+            job_store.set_error(job_id, f"Claude API error: {e}")
+            return
+        except Exception as e:
+            logger.exception("Source-rows worker unexpected error for job %s", job_id)
+            job_store.set_error(job_id, str(e))
+            return
+
+        job_store.set_done(job_id, {
+            "rows": rows,
+            "columnIdentified": column_identified,
+            "sourceScaling": source_scaling,
+        })
+    finally:
+        extraction_semaphore.release()
+
+
+@router.post("/layer1/source-rows", status_code=202)
+def extract_source_rows(request: Layer1SourceRowsRequest):
+    """
+    Enqueue a Steps A+B+C only job — returns raw label+value rows for the template editor
+    source panel without running the full AI hierarchy classification (Step D).
+    Returns { job_id } immediately (HTTP 202). Poll GET /layer1/jobs/{job_id}.
+    """
+    if not request.sessionId or not request.sheetName:
+        raise HTTPException(status_code=400, detail="sessionId and sheetName are required.")
+
+    session_dir = UPLOADS_DIR / request.sessionId
+    try:
+        filepath = str(_find_xlsx(session_dir))
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+    job_id = job_store.create_job()
+    threading.Thread(
+        target=_run_source_rows_worker,
+        args=(job_id, filepath, request.sheetName, request.sheetType, request.reportingPeriod, request.sharedTab),
+        daemon=True,
+        name=f"layer1-src-{job_id[:8]}",
     ).start()
 
     return {"job_id": job_id}

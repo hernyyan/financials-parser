@@ -18,6 +18,7 @@ import {
   saveTabPreferences,
   checkLayout,
   getLayer1Template,
+  extractSourceRows,
 } from '../../api/client'
 import { API_BASE } from '../../api/client'
 import type { Company, CompanyContextStatus, Layer1Result, Layer1Template, Layer1TemplateRow, Layer2Result, SourceLayoutRow } from '../../types'
@@ -178,6 +179,7 @@ export default function Step1Upload() {
   const [extractionStatus, setExtractionStatus] = useState<ExtractionStatus>('idle')
   const [extractionError, setExtractionError] = useState<string | null>(null)
   const [extractionElapsed, setExtractionElapsed] = useState(0)
+  const [configuringTemplate, setConfiguringTemplate] = useState(false)
 
   // Resizable divider — left panel width as percentage
   const [leftPct, setLeftPct] = useState(65)
@@ -346,6 +348,15 @@ export default function Step1Upload() {
     reportingPeriod.trim() !== '' &&
     companyName.trim() !== '' &&
     extractionStatus !== 'running'
+
+  const canConfigureTemplate =
+    hasUpload &&
+    !!assignments.income_statement &&
+    !!sessionId &&
+    !!companyId &&
+    reportingPeriod.trim() !== '' &&
+    extractionStatus !== 'running' &&
+    !configuringTemplate
 
   // ── Resizable divider ───────────────────────────────────────────────────
 
@@ -720,6 +731,36 @@ export default function Step1Upload() {
       setExtractionStatus('error')
       setExtractionError(msg)
       setStatus({ type: 'error', message: msg })
+    }
+  }
+
+  async function handleConfigureTemplate() {
+    if (!sessionId || !companyId) return
+    const isTab = assignments.income_statement
+    if (!isTab) return
+
+    setConfiguringTemplate(true)
+    try {
+      const tabCounts: Record<string, number> = {}
+      Object.values(assignments).forEach(t => { if (t) tabCounts[t] = (tabCounts[t] ?? 0) + 1 })
+      const sharedTab = tabCounts[isTab] > 1
+
+      const [sourceResult, existingTemplate] = await Promise.all([
+        extractSourceRows(sessionId, isTab, 'income_statement', reportingPeriod, sharedTab),
+        getLayer1Template(companyId, 'income_statement'),
+      ])
+
+      setEditorState({
+        mode: 'new',
+        statementType: 'income_statement',
+        sheetName: isTab,
+        stepCRows: sourceResult.rows,
+        existingTemplate,
+      })
+    } catch (e: any) {
+      setStatus({ type: 'error', message: `Failed to load source rows: ${e.message}` })
+    } finally {
+      setConfiguringTemplate(false)
     }
   }
 
@@ -1186,7 +1227,7 @@ export default function Step1Upload() {
               </p>
             </div>
 
-            <div className="shrink-0 px-[14px] py-2.5 border-b border-border">
+            <div className="shrink-0 px-[14px] py-2.5 border-b border-border flex flex-col gap-1.5">
               <button
                 onClick={handleRunExtraction}
                 disabled={!canRunExtraction}
@@ -1202,8 +1243,25 @@ export default function Step1Upload() {
                   'Run Extraction'
                 )}
               </button>
+              {canConfigureTemplate && (
+                <button
+                  onClick={handleConfigureTemplate}
+                  disabled={configuringTemplate}
+                  className="w-full flex items-center justify-center gap-2 rounded-lg text-[13px] border transition-colors disabled:opacity-50 hover:bg-slate-50"
+                  style={{ borderColor: '#e2e8f0', color: '#475569', fontWeight: 500, padding: '6px 0', borderRadius: 8 }}
+                >
+                  {configuringTemplate ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      Loading...
+                    </>
+                  ) : (
+                    'Configure Template'
+                  )}
+                </button>
+              )}
               {extractionError && (
-                <p className="text-[11px] text-red-600 mt-1.5">{extractionError}</p>
+                <p className="text-[11px] text-red-600">{extractionError}</p>
               )}
             </div>
 

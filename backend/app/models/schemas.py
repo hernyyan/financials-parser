@@ -50,6 +50,14 @@ class Layer1DeterministicRequest(BaseModel):
     sharedTab: bool = False
 
 
+class Layer1SourceRowsRequest(BaseModel):
+    sessionId: str
+    sheetName: str
+    sheetType: str
+    reportingPeriod: str
+    sharedTab: bool = False
+
+
 class RecalculateRequest(BaseModel):
     statement_type: str
     values: Dict[str, Optional[float]]

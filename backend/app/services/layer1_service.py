@@ -239,6 +239,58 @@ class Layer1Service:
 
     # ── Public: template helpers ─────────────────────────────────────────────
 
+    def extract_source_rows(
+        self,
+        filepath: str,
+        sheet_name: str,
+        sheet_type: str,
+        reporting_period: str,
+        shared_tab: bool = False,
+    ):
+        """
+        Steps A+B+C only. Returns (rows, column_identified, source_scaling) where
+        rows is a list of {row_index, label, value} dicts. Used by the template
+        editor to populate the source panel without running full AI classification.
+        """
+        model = os.getenv("LAYER1_MODEL", "claude-sonnet-4-6")
+        normalized = sheet_type.lower().replace(" ", "_")
+
+        header_text = extract_header_rows(filepath, sheet_name, n_rows=150)
+        col_prompt_vars: Dict[str, Any] = {
+            "reporting_period": reporting_period,
+            "header_rows": header_text,
+            "statement_type": normalized if shared_tab else "",
+            "retry_hint": "",
+        }
+        col_info = self.claude.call_claude_with_tool(
+            "layer1_column_identifier",
+            col_prompt_vars,
+            model,
+            tool_def=_COLUMN_IDENTIFIER_TOOL,
+            max_tokens=4096,
+        )
+        column_index = int(col_info.get("column_index", 1))
+        source_scaling = str(col_info.get("source_scaling", "actual_dollars"))
+        skip_rows = int(col_info.get("skip_rows", 0))
+        column_identified = str(col_info.get("period_matched", col_info.get("column_letter", "")))
+        section_start_row = int(col_info.get("section_start_row", 0)) if shared_tab else 0
+        section_end_row = int(col_info.get("section_end_row", 0)) if shared_tab else 0
+
+        rows = extract_rows_with_metadata(
+            filepath, sheet_name,
+            column_index=column_index,
+            source_scaling=source_scaling,
+            skip_rows=skip_rows,
+            section_start_row=section_start_row,
+            section_end_row=section_end_row,
+        )
+
+        simplified = [
+            {"row_index": r["row_index"], "label": r["label"], "value": r["value"]}
+            for r in rows
+        ]
+        return simplified, column_identified, source_scaling
+
     def run_deterministic_extraction(
         self,
         filepath: str,
