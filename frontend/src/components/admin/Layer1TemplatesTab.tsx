@@ -7,6 +7,7 @@
 import { useEffect, useState } from 'react'
 import type { Layer1Template, Layer1TemplateRow, WaterfallStep } from '../../types'
 import { getLayer1Template, saveLayer1Template, deleteLayer1Template } from '../../api/client'
+import { API_BASE } from '../../api/client'
 import TemplateTreeEditor from '../wizard/TemplateTreeEditor'
 import { Loader2, CheckCircle2, Trash2 } from 'lucide-react'
 
@@ -30,6 +31,26 @@ const STMT_FULL: Record<StmtTab, string> = {
 
 export default function Layer1TemplatesTab({ companyId }: Props) {
   const [activeStmt, setActiveStmt] = useState<StmtTab>('income_statement')
+  const [labelColInput, setLabelColInput] = useState('')
+  const [labelColSaving, setLabelColSaving] = useState(false)
+  const [labelColSaved, setLabelColSaved] = useState(false)
+
+  async function saveLabelColOverride() {
+    setLabelColSaving(true)
+    setLabelColSaved(false)
+    try {
+      const val = labelColInput.trim() === '' ? null : parseInt(labelColInput, 10)
+      await fetch(`${API_BASE}/admin/companies/${companyId}/label-column`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ label_col: val }),
+      })
+      setLabelColSaved(true)
+      setTimeout(() => setLabelColSaved(false), 2000)
+    } finally {
+      setLabelColSaving(false)
+    }
+  }
 
   // Per-statement template state
   const [templates, setTemplates] = useState<Partial<Record<StmtTab, Layer1Template>>>({})
@@ -115,6 +136,28 @@ export default function Layer1TemplatesTab({ companyId }: Props) {
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
+      {/* Label column override */}
+      <div className="shrink-0 flex items-center gap-2 px-3 py-1.5 border-b border-border bg-gray-50 text-[11px] text-muted-foreground">
+        <span>Label column override:</span>
+        <input
+          type="number"
+          min={1}
+          placeholder="auto"
+          value={labelColInput}
+          onChange={e => setLabelColInput(e.target.value)}
+          className="w-16 border border-border rounded px-1.5 py-0.5 text-[11px] text-foreground"
+        />
+        <button
+          onClick={saveLabelColOverride}
+          disabled={labelColSaving}
+          className="px-2 py-0.5 rounded text-[11px] text-white disabled:opacity-50"
+          style={{ backgroundColor: '#030213' }}
+        >
+          {labelColSaved ? '✓ Saved' : labelColSaving ? '…' : 'Save'}
+        </button>
+        <span className="text-slate-400">e.g. 3 = column C. Leave blank to auto-detect.</span>
+      </div>
+
       {/* Statement sub-tabs + save button */}
       <div className="shrink-0 flex items-center justify-between px-3 py-1.5 border-b border-border bg-gray-50">
         <div className="flex gap-1">

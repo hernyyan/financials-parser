@@ -65,6 +65,18 @@ def _run_extraction_worker(
             service = get_layer1_service()
 
             # ── Extraction (the slow part: 2-5 Claude API calls) ─────────────────
+            label_col_override = None
+            if company_id:
+                try:
+                    row = db.execute(
+                        text("SELECT label_col_override FROM companies WHERE id = :cid"),
+                        {"cid": company_id},
+                    ).fetchone()
+                    if row and row[0]:
+                        label_col_override = int(row[0])
+                except Exception:
+                    pass
+
             try:
                 result = service.run_extraction(
                     sheet_type=sheet_type,
@@ -72,6 +84,7 @@ def _run_extraction_worker(
                     sheet_name=sheet_name,
                     reporting_period=reporting_period,
                     shared_tab=shared_tab,
+                    label_col_override=label_col_override,
                 )
             except anthropic.AuthenticationError:
                 job_store.set_error(job_id, "Invalid Anthropic API key.")
@@ -360,6 +373,7 @@ def _run_source_rows_worker(
                 sheet_type=sheet_type,
                 reporting_period=reporting_period,
                 shared_tab=shared_tab,
+                label_col_override=None,  # source-rows endpoint doesn't have company_id context
             )
         except anthropic.AuthenticationError:
             job_store.set_error(job_id, "Invalid Anthropic API key.")

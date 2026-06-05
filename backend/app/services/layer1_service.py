@@ -82,6 +82,7 @@ class Layer1Service:
         sheet_name: str,
         reporting_period: str,
         shared_tab: bool = False,
+        label_col_override: Optional[int] = None,
     ) -> Dict[str, Any]:
         """
         Run the 4-step extraction pipeline for a single sheet.
@@ -182,6 +183,7 @@ class Layer1Service:
                 skip_rows=skip_rows,
                 section_start_row=section_start_row,
                 section_end_row=section_end_row,
+                label_col_override=label_col_override,
             )
             logger.info("[Layer1] %s attempt %d: Step C → %d rows", normalized, attempt + 1, len(rows))
 
@@ -231,6 +233,7 @@ class Layer1Service:
             skip_rows=skip_rows,
             section_start_row=section_start_row,
             section_end_row=section_end_row,
+            label_col_override=label_col_override,
         )
 
         return {
@@ -261,6 +264,7 @@ class Layer1Service:
         sheet_type: str,
         reporting_period: str,
         shared_tab: bool = False,
+        label_col_override: Optional[int] = None,
     ):
         """
         Steps A+B+C only. Returns (rows, column_identified, source_scaling) where
@@ -338,6 +342,7 @@ class Layer1Service:
                 skip_rows=skip_rows,
                 section_start_row=section_start_row,
                 section_end_row=section_end_row,
+                label_col_override=label_col_override,
             )
             logger.info("[source-rows] attempt %d: col=%d → %d rows", attempt + 1, column_index, len(rows))
 
@@ -356,6 +361,7 @@ class Layer1Service:
             skip_rows=skip_rows,
             section_start_row=section_start_row,
             section_end_row=section_end_row,
+            label_col_override=label_col_override,
         )
         return display_rows, column_identified, source_scaling
 

@@ -37,10 +37,15 @@ Only two types exist in your output:
 - Rows whose label contains `%`, `Margin`, or `% of`, or that are purely italic with no bold — these are ratio/margin rows.
 - Any row that is clearly a section header (bold=false, indent=0 or 1, value=0) with no role as an actual subtotal.
 
+## Ordering Rule — Non-Negotiable
+
+The top-level `rows` array in your output must be in the same order as the rows appear in the CSV, sorted ascending by `row_index`. Do not reorder rows. The only structural change you may make is nesting: a row may become a `children` entry of its parent sum row, but the sequence of rows as they appear in the document must be preserved.
+
 ## Nesting Rules
 
 - A `sum` node's children are the individual rows that feed directly into that sum (same section, one indent level deeper).
 - The sum row in the source always comes **after** its children (at the bottom of the group). Do not confuse a section header at the top of a group with the sum at the bottom.
+- **Spatial containment — Non-Negotiable:** A child row's `row_index` must fall between the `row_index` of the first row in its section and the `row_index` of its parent sum row. Never assign a row as a child if it appears in a different section of the document. If "USBid" appears at row 9 (under Orders) and also at row 15 (under Revenue), these are two distinct rows — use the one whose `row_index` is spatially within the parent sum's section.
 - **Cross-section sums** (e.g., EBITDA = Gross Profit − SG&A) have no children. Use `computed_as: "row_id OP row_id"`.
 - Indent level is the primary grouping signal. Bold indicates a sum.
 - Assign each emitted row a unique integer `id` starting from 10, incrementing by 1.

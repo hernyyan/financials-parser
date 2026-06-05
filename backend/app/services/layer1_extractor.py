@@ -99,9 +99,10 @@ def extract_rows_with_metadata(
     sheet_name: str,
     column_index: int,          # 1-based column index of the target period
     source_scaling: str,        # 'thousands' | 'millions' | 'actual_dollars'
-    skip_rows: int = 0,         # legacy: rows to skip from sheet top (ignored when section_start_row > 0)
-    section_start_row: int = 0, # 1-based absolute row to begin reading (0 = use skip_rows)
-    section_end_row: int = 0,   # 1-based absolute row to stop reading (0 = read to end)
+    skip_rows: int = 0,
+    section_start_row: int = 0,
+    section_end_row: int = 0,
+    label_col_override: Optional[int] = None,  # company-specific label column (skips _find_label_column)
 ) -> List[Dict[str, Any]]:
     """
     Read the sheet and return one dict per non-empty label row with:
@@ -133,10 +134,7 @@ def extract_rows_with_metadata(
     wb = openpyxl.load_workbook(filepath, read_only=False, data_only=True)
     ws = wb[sheet_name]
 
-    # Identify the consistent label column across the section (most-frequent
-    # first-non-empty column), avoiding hidden account-code columns that only
-    # appear on some rows.
-    label_column = _find_label_column(ws, start_row, end_row)
+    label_column = label_col_override if label_col_override else _find_label_column(ws, start_row, end_row)
 
     rows: List[Dict[str, Any]] = []
 
@@ -230,6 +228,7 @@ def extract_all_rows_for_display(
     skip_rows: int = 0,
     section_start_row: int = 0,
     section_end_row: int = 0,
+    label_col_override: Optional[int] = None,
 ) -> List[Dict[str, Any]]:
     """
     Extract ALL rows between section boundaries for the template editor left panel.
@@ -251,7 +250,7 @@ def extract_all_rows_for_display(
     wb = openpyxl.load_workbook(filepath, read_only=False, data_only=True)
     ws = wb[sheet_name]
 
-    label_column = _find_label_column(ws, start_row, end_row)
+    label_column = label_col_override if label_col_override else _find_label_column(ws, start_row, end_row)
 
     rows: List[Dict[str, Any]] = []
 

@@ -195,6 +195,30 @@ def admin_rename_company(
     return {"success": True, "old_name": old_name, "new_name": new_name}
 
 
+@router.put("/companies/{company_id}/label-column")
+def set_label_column_override(
+    company_id: int,
+    payload: dict,
+    db: Session = Depends(get_db),
+):
+    """
+    Set or clear the label column override for a company.
+    Pass { "label_col": 3 } to pin column C, or { "label_col": null } to clear.
+    """
+    label_col = payload.get("label_col")
+    if label_col is not None:
+        label_col = int(label_col)
+        if label_col < 1:
+            raise HTTPException(status_code=422, detail="label_col must be >= 1")
+
+    db.execute(
+        text("UPDATE companies SET label_col_override = :lc WHERE id = :id"),
+        {"lc": label_col, "id": company_id},
+    )
+    db.commit()
+    return {"success": True, "company_id": company_id, "label_col_override": label_col}
+
+
 @router.post("/companies", status_code=201)
 def admin_create_company(
     request: AdminRenameCompanyRequest,
