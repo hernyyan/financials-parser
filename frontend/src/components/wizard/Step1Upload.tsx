@@ -803,26 +803,44 @@ export default function Step1Upload() {
   }
 
   // Convert AI structured output (schema v1) to a schema v2 Layer1Template.
-  // Preserves one level of children so segments stay nested under their parents.
-  // Deeper nesting is collapsed to a single level.
+  // Operator assignment:
+  //   - Uses the waterfall (if present) to assign outer-row operators — this
+  //     correctly identifies which rows are true waterfall results (=) vs. bases (null) vs. subtractions (-)
+  //   - Parent rows not in the waterfall default to null (their children summing to
+  //     them is structural, not an operator relationship)
+  //   - Children always get + (they add up to their parent)
+  //   - Deeper than one level of nesting is collapsed to a single level
   function structuredToTemplate(structured: any, stmtType: string): Layer1Template {
+    // Build row_id → operator map from waterfall
+    const waterfallOps = new Map<number, string | null>()
+    ;(structured?.waterfall ?? []).forEach((w: any) => {
+      waterfallOps.set(w.row_id, w.operator ?? null)
+    })
+    const hasWaterfall = waterfallOps.size > 0
+
+    function outerOp(r: Layer1TemplateRow): string | null {
+      if (hasWaterfall && r.id != null && waterfallOps.has(r.id)) return waterfallOps.get(r.id)!
+      // No waterfall: parents default to null (structural grouping), leaves use type
+      if ((r.children ?? []).length > 0) return null
+      return r.type === 'sum' ? '=' : '+'
+    }
+
     function convertRow(r: Layer1TemplateRow): Layer1TemplateRow {
       const children = r.children ?? []
       if (children.length > 0) {
-        // Flatten any deep nesting to a single level of children
         const flatChildren: Layer1TemplateRow[] = []
         children.forEach(c => {
           const grandChildren = c.children ?? []
           if (grandChildren.length > 0) {
             grandChildren.forEach(gc => flatChildren.push({ ...gc, operator: '+', children: [] }))
-            flatChildren.push({ ...c, operator: '=', children: [] })
+            flatChildren.push({ ...c, operator: '+', children: [] })
           } else {
-            flatChildren.push({ ...c, operator: c.type === 'sum' ? '=' : '+', children: [] })
+            flatChildren.push({ ...c, operator: '+', children: [] })
           }
         })
-        return { ...r, operator: '=', expanded: true, children: flatChildren }
+        return { ...r, operator: outerOp(r) as any, expanded: true, children: flatChildren }
       }
-      return { ...r, operator: r.type === 'sum' ? '=' : '+', children: [] }
+      return { ...r, operator: outerOp(r) as any, children: [] }
     }
     return {
       meta: { statement_type: stmtType, created_at: new Date().toISOString(), schema_version: 2 } as any,

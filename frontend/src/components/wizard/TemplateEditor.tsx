@@ -131,20 +131,32 @@ function templateToRows(tmpl: Layer1Template, stepCRows: StepCRow[]): TRow[] {
   }
 
   // Handle schema v1 (SUM/IND — preserve children structure, convert operators)
+  // Use waterfall operators for outer rows if available; parent rows without
+  // a waterfall entry default to null (structural grouping, not a result row)
+  const waterfallOps = new Map<number, Operator>()
+  ;(tmpl.waterfall ?? []).forEach((w: any) => {
+    waterfallOps.set(w.row_id, (w.operator ?? null) as Operator)
+  })
+  const hasWaterfall = waterfallOps.size > 0
+
   return (tmpl.rows ?? []).map(r => {
     const children = (r.children ?? [])
+    const outerOp: Operator = hasWaterfall && r.id != null && waterfallOps.has(r.id)
+      ? waterfallOps.get(r.id)!
+      : children.length > 0 ? null : (r.type === 'sum' ? '=' : '+')
+
     if (children.length > 0) {
       return {
         id: r.id ?? nextId(),
         source_row: resolve(r.label, r.source_row),
         label: r.label,
-        operator: '=' as Operator,
+        operator: outerOp,
         expanded: true,
         children: children.map(c => ({
           id: c.id ?? nextId(),
           source_row: resolve(c.label, c.source_row),
           label: c.label,
-          operator: ((c.children ?? []).length > 0 || c.type === 'sum' ? '=' : '+') as Operator,
+          operator: '+' as Operator,
         })),
       }
     }
@@ -152,7 +164,7 @@ function templateToRows(tmpl: Layer1Template, stepCRows: StepCRow[]): TRow[] {
       id: r.id ?? nextId(),
       source_row: resolve(r.label, r.source_row),
       label: r.label,
-      operator: (r.type === 'sum' ? '=' : '+') as Operator,
+      operator: outerOp,
       expanded: false,
       children: [],
     }
