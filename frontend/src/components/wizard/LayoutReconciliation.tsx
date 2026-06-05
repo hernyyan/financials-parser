@@ -595,7 +595,7 @@ export default function LayoutReconciliation({
                     className={`grid grid-cols-[36px_1fr_72px] items-center px-2 min-h-[26px] border-b border-slate-50 select-none transition-colors
                       ${isAdded ? 'bg-green-50' : isRenamed ? 'bg-amber-50' : ''}
                       ${isDraggable ? (!isAdded && !isRenamed ? 'cursor-grab hover:bg-blue-50' : 'cursor-grab') : isUsed ? 'opacity-30' : ''}
-                      ${isHovered ? '!bg-sky-100' : ''}
+                      ${isHovered ? '!bg-yellow-100' : ''}
                     `}
                   >
                     <span className="text-[10px] text-slate-400 font-mono text-center">{sr.row_index}</span>
@@ -651,7 +651,7 @@ export default function LayoutReconciliation({
                       onMouseLeave={() => setHoveredRow(null)}
                       className={`grid grid-cols-[40px_52px_1fr_26px_26px] items-center px-3 min-h-[30px] border transition-colors
                         ${tr.isDead ? 'bg-red-50 border-red-200' : tr.isRenamed ? 'bg-amber-50 border-amber-200' : isEq ? 'bg-blue-50 border-blue-200 my-0.5' : 'border-transparent hover:bg-slate-50'}
-                        ${isHovered ? '!bg-sky-100' : ''}
+                        ${isHovered ? '!bg-yellow-100' : ''}
                         ${dropOnto ? 'outline outline-2 outline-blue-500 rounded' : ''}
                         ${isRenameTarget ? 'outline outline-2 outline-amber-400 rounded' : ''}
                       `}
@@ -709,7 +709,7 @@ export default function LayoutReconciliation({
                             onDrop={(e) => { e.preventDefault(); e.stopPropagation(); commitDrop() }}
                             onMouseEnter={() => setHoveredRow(ch.source_row)}
                             onMouseLeave={() => setHoveredRow(null)}
-                            className={`grid grid-cols-[40px_52px_1fr_26px_26px] items-center pl-8 pr-3 min-h-[26px] border-l-2 border-blue-200 ml-4 bg-blue-50/40 transition-colors ${chHovered ? '!bg-sky-100' : 'hover:bg-blue-50/70'}`}
+                            className={`grid grid-cols-[40px_52px_1fr_26px_26px] items-center pl-8 pr-3 min-h-[26px] border-l-2 border-blue-200 ml-4 bg-blue-50/40 transition-colors ${chHovered ? '!bg-yellow-100' : 'hover:bg-blue-50/70'}`}
                           >
                             <span className="text-[10px] text-slate-400 font-mono text-center">{ch.source_row || ''}</span>
                             <button
