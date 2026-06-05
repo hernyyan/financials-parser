@@ -259,12 +259,12 @@ export default function TemplateTreeEditor({ rows, waterfall, statementType, onC
       >
         {/* Type badge */}
         <button
-          className={`shrink-0 px-1.5 py-0.5 rounded border text-[10px] font-mono transition-colors ${BADGE[row.type]} ${promoteMode ? 'pointer-events-none' : 'hover:opacity-70'}`}
+          className={`shrink-0 px-1.5 py-0.5 rounded border text-[10px] font-mono transition-colors ${BADGE[row.type ?? 'individual']} ${promoteMode ? 'pointer-events-none' : 'hover:opacity-70'}`}
           style={{ fontWeight: 600 }}
           onClick={(e) => { e.stopPropagation(); handleBadgeClick(row, depth) }}
           title={`Click to change type (current: ${row.type})`}
         >
-          {BADGE_LABEL[row.type]}
+          {BADGE_LABEL[row.type ?? 'individual']}
         </button>
 
         {/* Label */}
