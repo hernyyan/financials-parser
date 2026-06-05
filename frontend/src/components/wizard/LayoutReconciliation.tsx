@@ -122,12 +122,25 @@ function buildDiffSets(diff: LayoutDiffChange[]) {
 function templateToRows(tmpl: Layer1Template, diff: LayoutDiffChange[], newStepCRows: StepCRow[]): TRow[] {
   const { renames, removedRowIndices } = buildDiffSets(diff)
 
-  // Label lookup from new source rows for resolving missing source_row values
-  const labelLookup = new Map<string, number>()
-  newStepCRows.forEach(sr => { if (sr.label) labelLookup.set(sr.label.toLowerCase().trim(), sr.row_index) })
-
-  const resolveSourceRow = (r: Layer1TemplateRow) =>
-    (r.source_row && r.source_row > 0) ? r.source_row : (labelLookup.get(r.label.toLowerCase().trim()) ?? 0)
+  // Sequential label lookup: Nth template row with label X → Nth source row with label X
+  const labelLookup = new Map<string, number[]>()
+  newStepCRows.forEach(sr => {
+    if (sr.label) {
+      const key = sr.label.toLowerCase().trim()
+      if (!labelLookup.has(key)) labelLookup.set(key, [])
+      labelLookup.get(key)!.push(sr.row_index)
+    }
+  })
+  const usedCounts = new Map<string, number>()
+  const resolveSourceRow = (r: Layer1TemplateRow) => {
+    if (r.source_row && r.source_row > 0) return r.source_row
+    const key = r.label.toLowerCase().trim()
+    const indices = labelLookup.get(key) ?? []
+    const count = usedCounts.get(key) ?? 0
+    const rowIndex = indices[count] ?? 0
+    usedCounts.set(key, count + 1)
+    return rowIndex
+  }
 
   const convert = (r: Layer1TemplateRow, depth = 0): TRow => {
     const sourceRow = resolveSourceRow(r)

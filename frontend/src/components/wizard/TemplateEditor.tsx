@@ -79,55 +79,82 @@ function propagateSign(parentOp: Operator, childOp: Operator): Operator {
   return childOp
 }
 
-function buildLabelLookup(stepCRows: StepCRow[]): Map<string, number> {
-  const map = new Map<string, number>()
+// Build label → [row_index, ...] ordered list for sequential duplicate matching
+function buildLabelLookup(stepCRows: StepCRow[]): Map<string, number[]> {
+  const map = new Map<string, number[]>()
   stepCRows.forEach(sr => {
-    if (sr.label) map.set(sr.label.toLowerCase().trim(), sr.row_index)
+    if (sr.label) {
+      const key = sr.label.toLowerCase().trim()
+      if (!map.has(key)) map.set(key, [])
+      map.get(key)!.push(sr.row_index)
+    }
   })
   return map
 }
 
-function resolveSourceRow(
-  r: Layer1TemplateRow,
-  labelLookup: Map<string, number>,
-): number {
-  if (r.source_row && r.source_row > 0) return r.source_row
-  return labelLookup.get(r.label.toLowerCase().trim()) ?? 0
+// Sequential resolver: Nth template row with a given label maps to the Nth
+// source row with that label, avoiding duplicate-label collision.
+function makeSourceRowResolver(labelLookup: Map<string, number[]>) {
+  const usedCounts = new Map<string, number>()
+  return (label: string, existingSourceRow?: number): number => {
+    if (existingSourceRow && existingSourceRow > 0) return existingSourceRow
+    const key = label.toLowerCase().trim()
+    const indices = labelLookup.get(key) ?? []
+    const count = usedCounts.get(key) ?? 0
+    const rowIndex = indices[count] ?? 0
+    usedCounts.set(key, count + 1)
+    return rowIndex
+  }
 }
 
 function templateToRows(tmpl: Layer1Template, stepCRows: StepCRow[]): TRow[] {
   const labelLookup = buildLabelLookup(stepCRows)
+  const resolve = makeSourceRowResolver(labelLookup)
 
-  // Handle schema v2 (flat operator model)
+  // Handle schema v2 (flat operator model — already has children structure)
   if ((tmpl.meta as any)?.schema_version === 2) {
     return (tmpl.rows ?? []).map(r => ({
       id: r.id ?? nextId(),
-      source_row: resolveSourceRow(r, labelLookup),
+      source_row: resolve(r.label, r.source_row),
       label: r.label,
       operator: (r.operator ?? null) as Operator,
       expanded: r.expanded ?? false,
       children: (r.children ?? []).map(c => ({
         id: c.id ?? nextId(),
-        source_row: resolveSourceRow(c, labelLookup),
+        source_row: resolve(c.label, c.source_row),
         label: c.label,
         operator: (c.operator ?? '+') as Operator,
       })),
     }))
   }
-  // Handle schema v1 (SUM/IND — convert to flat operator model)
-  const flat: TRow[] = []
-  function walk(rows: Layer1TemplateRow[]) {
-    for (const r of rows) {
-      if ((r.children ?? []).length > 0) {
-        walk(r.children ?? [])
-        flat.push({ id: r.id ?? nextId(), source_row: resolveSourceRow(r, labelLookup), label: r.label, operator: '=', expanded: false, children: [] })
-      } else {
-        flat.push({ id: r.id ?? nextId(), source_row: resolveSourceRow(r, labelLookup), label: r.label, operator: r.type === 'sum' ? '=' : '+', expanded: false, children: [] })
+
+  // Handle schema v1 (SUM/IND — preserve children structure, convert operators)
+  return (tmpl.rows ?? []).map(r => {
+    const children = (r.children ?? [])
+    if (children.length > 0) {
+      return {
+        id: r.id ?? nextId(),
+        source_row: resolve(r.label, r.source_row),
+        label: r.label,
+        operator: '=' as Operator,
+        expanded: true,
+        children: children.map(c => ({
+          id: c.id ?? nextId(),
+          source_row: resolve(c.label, c.source_row),
+          label: c.label,
+          operator: ((c.children ?? []).length > 0 || c.type === 'sum' ? '=' : '+') as Operator,
+        })),
       }
     }
-  }
-  walk(tmpl.rows ?? [])
-  return flat
+    return {
+      id: r.id ?? nextId(),
+      source_row: resolve(r.label, r.source_row),
+      label: r.label,
+      operator: (r.type === 'sum' ? '=' : '+') as Operator,
+      expanded: false,
+      children: [],
+    }
+  })
 }
 
 function rowsToTemplate(rows: TRow[], statementType: string): Layer1Template {

@@ -802,26 +802,31 @@ export default function Step1Upload() {
     }
   }
 
-  // Convert AI structured output (schema v1) to a schema v2 Layer1Template for pre-filling
+  // Convert AI structured output (schema v1) to a schema v2 Layer1Template.
+  // Preserves one level of children so segments stay nested under their parents.
+  // Deeper nesting is collapsed to a single level.
   function structuredToTemplate(structured: any, stmtType: string): Layer1Template {
-    function convertRows(rows: Layer1TemplateRow[]): Layer1TemplateRow[] {
-      const flat: Layer1TemplateRow[] = []
-      function walk(rs: Layer1TemplateRow[]) {
-        rs.forEach(r => {
-          if ((r.children ?? []).length > 0) {
-            walk(r.children ?? [])
-            flat.push({ ...r, operator: '=', children: [] })
+    function convertRow(r: Layer1TemplateRow): Layer1TemplateRow {
+      const children = r.children ?? []
+      if (children.length > 0) {
+        // Flatten any deep nesting to a single level of children
+        const flatChildren: Layer1TemplateRow[] = []
+        children.forEach(c => {
+          const grandChildren = c.children ?? []
+          if (grandChildren.length > 0) {
+            grandChildren.forEach(gc => flatChildren.push({ ...gc, operator: '+', children: [] }))
+            flatChildren.push({ ...c, operator: '=', children: [] })
           } else {
-            flat.push({ ...r, operator: r.type === 'sum' ? '=' : '+', children: [] })
+            flatChildren.push({ ...c, operator: c.type === 'sum' ? '=' : '+', children: [] })
           }
         })
+        return { ...r, operator: '=', expanded: true, children: flatChildren }
       }
-      walk(rows)
-      return flat
+      return { ...r, operator: r.type === 'sum' ? '=' : '+', children: [] }
     }
     return {
       meta: { statement_type: stmtType, created_at: new Date().toISOString(), schema_version: 2 } as any,
-      rows: convertRows(structured?.rows ?? []),
+      rows: (structured?.rows ?? []).map(convertRow),
     }
   }
 

@@ -585,17 +585,32 @@ def _strip_margins(rows: List[Dict]) -> List[Dict]:
 
 def _stamp_source_rows(structured_rows: List[Dict], step_c_rows: List[Dict]) -> None:
     """
-    Walk structured rows in-place and stamp source_row by fuzzy-matching
+    Walk structured rows in-place and stamp source_row by sequentially matching
     each row's label against the Step C extraction rows.
-    Called after Step D so every row has a back-reference to the sheet.
+
+    Uses sequential (Nth-occurrence) matching so duplicate labels (e.g. a segment
+    named "USBid" under both Orders and Revenue) each get the correct distinct
+    row_index rather than all resolving to the same row.
     """
-    lookup = {re.sub(r"[^a-z0-9]", "", r["label"].lower()): r["row_index"] for r in step_c_rows}
+    from collections import defaultdict
+
+    # Build label → ordered list of row_index values
+    label_to_indices: Dict[str, List[int]] = defaultdict(list)
+    for r in step_c_rows:
+        norm = re.sub(r"[^a-z0-9]", "", r["label"].lower())
+        label_to_indices[norm].append(r["row_index"])
+
+    used_counts: Dict[str, int] = {}
 
     def walk(rows: List[Dict]) -> None:
         for r in rows:
             norm = re.sub(r"[^a-z0-9]", "", r.get("label", "").lower())
-            if norm in lookup:
-                r["source_row"] = lookup[norm]
+            indices = label_to_indices.get(norm, [])
+            if indices:
+                count = used_counts.get(norm, 0)
+                if count < len(indices):
+                    r["source_row"] = indices[count]
+                used_counts[norm] = count + 1
             walk(r.get("children", []))
 
     walk(structured_rows)
