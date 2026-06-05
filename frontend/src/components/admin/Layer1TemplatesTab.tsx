@@ -6,9 +6,9 @@
  */
 import { useEffect, useState } from 'react'
 import type { Layer1Template, Layer1TemplateRow, WaterfallStep } from '../../types'
-import { getLayer1Template, saveLayer1Template } from '../../api/client'
+import { getLayer1Template, saveLayer1Template, deleteLayer1Template } from '../../api/client'
 import TemplateTreeEditor from '../wizard/TemplateTreeEditor'
-import { Loader2, CheckCircle2 } from 'lucide-react'
+import { Loader2, CheckCircle2, Trash2 } from 'lucide-react'
 
 interface Props {
   companyId: number
@@ -37,6 +37,7 @@ export default function Layer1TemplatesTab({ companyId }: Props) {
   const [waterfalls, setWaterfalls] = useState<Partial<Record<StmtTab, WaterfallStep[] | null>>>({})
   const [loading, setLoading] = useState<Partial<Record<StmtTab, boolean>>>({})
   const [saving, setSaving] = useState<Partial<Record<StmtTab, boolean>>>({})
+  const [deleting, setDeleting] = useState<Partial<Record<StmtTab, boolean>>>({})
   const [errors, setErrors] = useState<Partial<Record<StmtTab, string>>>({})
   const [saved, setSaved] = useState<Partial<Record<StmtTab, boolean>>>({})
 
@@ -66,6 +67,22 @@ export default function Layer1TemplatesTab({ companyId }: Props) {
     setRows(prev => ({ ...prev, [stmt]: newRows }))
     setWaterfalls(prev => ({ ...prev, [stmt]: newWaterfall }))
     setSaved(prev => ({ ...prev, [stmt]: false }))
+  }
+
+  async function handleDelete(stmt: StmtTab) {
+    if (!window.confirm(`Delete the ${STMT_FULL[stmt]} template for this company? This cannot be undone and will trigger the new template editor on the next upload.`)) return
+    setDeleting(prev => ({ ...prev, [stmt]: true }))
+    setErrors(prev => ({ ...prev, [stmt]: undefined }))
+    try {
+      await deleteLayer1Template(companyId, stmt)
+      setTemplates(prev => { const n = { ...prev }; delete n[stmt]; return n })
+      setRows(prev => { const n = { ...prev }; delete n[stmt]; return n })
+      setWaterfalls(prev => { const n = { ...prev }; delete n[stmt]; return n })
+    } catch (err) {
+      setErrors(prev => ({ ...prev, [stmt]: err instanceof Error ? err.message : 'Delete failed.' }))
+    } finally {
+      setDeleting(prev => ({ ...prev, [stmt]: false }))
+    }
   }
 
   async function handleSave(stmt: StmtTab) {
@@ -127,6 +144,18 @@ export default function Layer1TemplatesTab({ companyId }: Props) {
                 <CheckCircle2 className="w-3 h-3" /> Saved
               </span>
             )}
+            <button
+              onClick={() => handleDelete(activeStmt)}
+              disabled={!!deleting[activeStmt]}
+              className="flex items-center gap-1.5 px-3 py-1 rounded text-[12px] text-red-600 border border-red-200 hover:bg-red-50 disabled:opacity-50 transition-colors"
+              style={{ fontWeight: 500 }}
+              title="Delete template — triggers new template editor on next upload"
+            >
+              {deleting[activeStmt]
+                ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                : <Trash2 className="w-3.5 h-3.5" />}
+              Delete
+            </button>
             <button
               onClick={() => handleSave(activeStmt)}
               disabled={!!saving[activeStmt]}

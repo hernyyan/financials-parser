@@ -176,6 +176,28 @@ def upsert_layer1_template(
     return {"success": True}
 
 
+@router.delete("/companies/{company_id}/layer1-templates/{statement_type}")
+def delete_layer1_template(
+    company_id: int,
+    statement_type: str,
+    db: Session = Depends(get_db),
+):
+    """Delete a stored template and its layout record, forcing the new template editor on next upload."""
+    if statement_type not in _VALID_TYPES:
+        raise HTTPException(status_code=400, detail=f"Invalid statement_type: {statement_type}")
+
+    db.execute(
+        text("DELETE FROM layer1_templates WHERE company_id = :cid AND statement_type = :st"),
+        {"cid": company_id, "st": statement_type},
+    )
+    db.execute(
+        text("DELETE FROM source_layouts WHERE company_id = :cid AND statement_type = :st"),
+        {"cid": company_id, "st": statement_type},
+    )
+    db.commit()
+    return {"success": True}
+
+
 @router.post("/companies/{company_id}/layer1-templates/{statement_type}/check-layout")
 def check_layout(
     company_id: int,

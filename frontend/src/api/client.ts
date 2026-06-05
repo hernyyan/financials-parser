@@ -383,6 +383,17 @@ export async function saveLayer1Template(
   await handleResponse<{ success: boolean }>(res)
 }
 
+// DELETE /companies/{id}/layer1-templates/{statement_type}
+export async function deleteLayer1Template(
+  companyId: number,
+  statementType: string,
+): Promise<void> {
+  const res = await fetch(`${API_BASE}/companies/${companyId}/layer1-templates/${statementType}`, {
+    method: 'DELETE',
+  })
+  await handleResponse<{ success: boolean }>(res)
+}
+
 // POST /companies/{id}/layer1-templates/{statement_type}/check-layout
 export async function checkLayout(
   companyId: number,
