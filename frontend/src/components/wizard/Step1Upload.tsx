@@ -355,8 +355,7 @@ export default function Step1Upload() {
     !!sessionId &&
     reportingPeriod.trim() !== '' &&
     companyName.trim() !== '' &&
-    extractionStatus !== 'running' &&
-    !configuringTemplate
+    extractionStatus !== 'running'
 
   // ── Resizable divider ───────────────────────────────────────────────────
 
@@ -733,7 +732,7 @@ export default function Step1Upload() {
   }
 
   async function handleConfigureTemplate() {
-    if (!sessionId) return
+    if (!sessionId || configuringTemplate) return
     setConfiguringTemplate(true)
     setExtractionElapsed(0)
 
@@ -752,24 +751,13 @@ export default function Step1Upload() {
           const sheetName = assignments[stmtType]
           const shared = tabCounts[sheetName] > 1
 
-          // Load existing template (may be null for first-time companies)
-          const existingTemplate = companyId
-            ? await getLayer1Template(companyId, stmtType).catch(() => null)
-            : null
+          // Load source rows (Steps A+B+C) and existing template in parallel
+          const [sourceResult, existingTemplate] = await Promise.all([
+            extractSourceRows(sessionId!, sheetName, stmtType, reportingPeriod, shared),
+            companyId ? getLayer1Template(companyId, stmtType).catch(() => null) : Promise.resolve(null),
+          ])
 
-          if (existingTemplate) {
-            // Has template — only need source rows (Steps A+B+C)
-            const sourceResult = await extractSourceRows(sessionId!, sheetName, stmtType, reportingPeriod, shared)
-            return { statementType: stmtType, sheetName, stepCRows: sourceResult.rows, existingTemplate }
-          } else {
-            // No template — run full extraction so AI pre-fills the right panel
-            const result = await runLayer1(sessionId!, sheetName, stmtType, reportingPeriod, undefined, companyId, shared)
-            // Build stepCRows from structured output (source_row stamped by _stamp_source_rows)
-            const stepCRows = flattenStructuredRows(result.structured?.rows ?? [])
-            // Convert AI structured output to a v2 template so the editor right panel is pre-filled
-            const aiTemplate = structuredToTemplate(result.structured, stmtType)
-            return { statementType: stmtType, sheetName, stepCRows, existingTemplate: aiTemplate }
-          }
+          return { statementType: stmtType, sheetName, stepCRows: sourceResult.rows, existingTemplate }
         })
       )
 
@@ -780,19 +768,6 @@ export default function Step1Upload() {
       clearInterval(tickHandle)
       setConfiguringTemplate(false)
     }
-  }
-
-  // Flatten structured rows to {row_index, label, value} sorted by row_index
-  function flattenStructuredRows(rows: Layer1TemplateRow[]): Array<{ row_index: number; label: string; value: number | null }> {
-    const out: Array<{ row_index: number; label: string; value: number | null }> = []
-    function walk(rs: Layer1TemplateRow[]) {
-      rs.forEach(r => {
-        if (r.source_row) out.push({ row_index: r.source_row, label: r.label, value: r.value ?? null })
-        walk(r.children ?? [])
-      })
-    }
-    walk(rows)
-    return out.sort((a, b) => a.row_index - b.row_index)
   }
 
   // Convert AI structured output (schema v1) to a schema v2 Layer1Template for pre-filling
