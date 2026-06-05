@@ -109,7 +109,7 @@ function makeSourceRowResolver(labelLookup: Map<string, number[]>) {
   }
 }
 
-function templateToRows(tmpl: Layer1Template, stepCRows: StepCRow[]): TRow[] {
+function templateToRows(tmpl: Layer1Template, stepCRows: StepCRow[], statementType?: string): TRow[] {
   const labelLookup = buildLabelLookup(stepCRows)
   const resolve = makeSourceRowResolver(labelLookup)
 
@@ -141,8 +141,9 @@ function templateToRows(tmpl: Layer1Template, stepCRows: StepCRow[]): TRow[] {
 
   return (tmpl.rows ?? []).map(r => {
     const children = (r.children ?? [])
-    const outerOp: Operator = hasWaterfall && r.id != null && waterfallOps.has(r.id)
-      ? waterfallOps.get(r.id)!
+    const isBsOrCfs = statementType === 'balance_sheet' || statementType === 'cash_flow_statement'
+    const outerOp: Operator = isBsOrCfs ? null
+      : hasWaterfall && r.id != null && waterfallOps.has(r.id) ? waterfallOps.get(r.id)!
       : children.length > 0 ? null : (r.type === 'sum' ? '=' : '+')
 
     if (children.length > 0) {
@@ -522,7 +523,7 @@ const STMT_SHORT: Record<string, string> = {
 export default function TemplateEditor({ statements, companyId, sessionId, reportingPeriod, sharedTab, onSaved, onCancel }: Props) {
   const [activeTab, setActiveTab] = useState(statements[0]?.statementType ?? 'income_statement')
   const [allRows, setAllRows] = useState<Record<string, TRow[]>>(() =>
-    Object.fromEntries(statements.map(s => [s.statementType, s.existingTemplate ? templateToRows(s.existingTemplate, s.stepCRows) : []]))
+    Object.fromEntries(statements.map(s => [s.statementType, s.existingTemplate ? templateToRows(s.existingTemplate, s.stepCRows, s.statementType) : []]))
   )
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)

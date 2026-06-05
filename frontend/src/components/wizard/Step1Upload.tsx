@@ -630,29 +630,38 @@ export default function Step1Upload() {
       }
     }
 
-    // Run extractions sequentially — backend semaphore already serializes them,
-    // so parallel submission just burns poll-timeout on queued jobs.
-    let anyFailed = false
-    let firstError = ''
-    for (const stmtType of assignedStmtTypes) {
+    // IS runs alone first (most intensive), then BS + CFS run concurrently.
+    // Backend semaphore(2) allows the concurrent pair without OOM risk.
+    const runOne = async (stmtType: typeof stmtTypes[number]) => {
       const tab = assignments[stmtType]
       const sharedTab = tabCounts[tab] > 1
-      try {
-        const result = await runLayer1(sessionId!, tab, stmtType, reportingPeriod, undefined, companyId, sharedTab, (s) => setExtractionElapsed(s))
-        console.log(`[Layer1 debug] ${stmtType} (tab="${tab}"):`, result.extractionDebug, '| lineItems:', Object.keys(result.lineItems).length)
-        results[stmtType] = result
-        mergeLayer1Result(stmtType, {
-          lineItems: result.lineItems,
-          sourceScaling: result.sourceScaling,
-          columnIdentified: result.columnIdentified,
-          sourceSheet: tab,
-          structured: result.structured,
-          templateCheck: result.templateCheck,
-        })
-      } catch (err: any) {
-        anyFailed = true
-        firstError = err?.message ?? 'Extraction failed.'
-      }
+      const result = await runLayer1(sessionId!, tab, stmtType, reportingPeriod, undefined, companyId, sharedTab, (s) => setExtractionElapsed(s))
+      results[stmtType] = result
+      mergeLayer1Result(stmtType, {
+        lineItems: result.lineItems,
+        sourceScaling: result.sourceScaling,
+        columnIdentified: result.columnIdentified,
+        sourceSheet: tab,
+        structured: result.structured,
+        templateCheck: result.templateCheck,
+      })
+    }
+
+    let anyFailed = false
+    let firstError = ''
+
+    // Phase 1: IS
+    if (assignedStmtTypes.includes('income_statement')) {
+      try { await runOne('income_statement') } catch (e: any) { anyFailed = true; firstError = e?.message ?? 'IS extraction failed.' }
+    }
+
+    // Phase 2: BS + CFS concurrently
+    const phase2 = assignedStmtTypes.filter(s => s !== 'income_statement')
+    if (phase2.length > 0) {
+      const settled = await Promise.allSettled(phase2.map(runOne))
+      settled.forEach((r, i) => {
+        if (r.status === 'rejected') { anyFailed = true; firstError = firstError || (r.reason?.message ?? `${phase2[i]} extraction failed.`) }
+      })
     }
 
     try {
@@ -760,46 +769,52 @@ export default function Step1Upload() {
       const statementConfigs: import('../../types').TemplateStatementConfig[] = []
       let reconcileState: import('../../types').TemplateReconcileState | null = null
 
-      for (const stmtType of assignedStatements) {
+      // Helper: load config for a single statement
+      const loadConfig = async (stmtType: 'income_statement' | 'balance_sheet' | 'cash_flow_statement') => {
         const sheetName = assignments[stmtType]
         const shared = tabCounts[sheetName] > 1
-
         const existingTemplate = companyId
           ? await getLayer1Template(companyId, stmtType).catch(() => null)
           : null
 
         if (!existingTemplate) {
-          // No template — run full extraction so AI pre-fills the right panel
           const result = await runLayer1(sessionId!, sheetName, stmtType, reportingPeriod, undefined, companyId, shared, (s) => setExtractionElapsed(s))
           const stepCRows = result.sourceRows ?? []
           const aiTemplate = result.structured ? structuredToTemplate(result.structured, stmtType) : null
-          statementConfigs.push({ statementType: stmtType, sheetName, stepCRows, existingTemplate: aiTemplate })
-        } else {
-          // Has template — load source rows and run layout check
-          const sourceResult = await extractSourceRows(sessionId!, sheetName, stmtType, reportingPeriod, shared, (s) => setExtractionElapsed(s))
-          const stepCRows = sourceResult.sourceRows ?? []
+          return { statementType: stmtType, sheetName, stepCRows, existingTemplate: aiTemplate, reconcile: null }
+        }
 
-          if (companyId) {
-            const layoutRows = stepCRows.map(r => ({ row_index: r.row_index, label: r.label }))
-            const layoutCheck = await checkLayout(companyId, stmtType, layoutRows).catch(() => null)
+        const sourceResult = await extractSourceRows(sessionId!, sheetName, stmtType, reportingPeriod, shared, (s) => setExtractionElapsed(s))
+        const stepCRows = sourceResult.sourceRows ?? []
 
-            if (layoutCheck?.has_real_diff) {
-              // Layout changed — show 3-panel reconciliation for this statement
-              // (reconcile only handles one statement at a time for now)
-              reconcileState = {
-                mode: 'reconcile',
-                statementType: stmtType,
-                sheetName,
-                stepCRows,
-                existingTemplate,
-                diff: layoutCheck.changes,
-                oldLayout: [],
-              }
-              break
+        if (companyId) {
+          const layoutRows = stepCRows.map(r => ({ row_index: r.row_index, label: r.label }))
+          const layoutCheck = await checkLayout(companyId, stmtType, layoutRows).catch(() => null)
+          if (layoutCheck?.has_real_diff) {
+            return {
+              statementType: stmtType, sheetName, stepCRows, existingTemplate, stepCRows2: stepCRows,
+              reconcile: { mode: 'reconcile' as const, statementType: stmtType, sheetName, stepCRows, existingTemplate, diff: layoutCheck.changes, oldLayout: [] as import('../../types').SourceLayoutRow[] },
             }
           }
+        }
+        return { statementType: stmtType, sheetName, stepCRows, existingTemplate, reconcile: null }
+      }
 
-          statementConfigs.push({ statementType: stmtType, sheetName, stepCRows, existingTemplate })
+      // IS first (most intensive), then BS + CFS concurrently
+      const isStmt = 'income_statement' as const
+      const others = assignedStatements.filter(s => s !== isStmt)
+
+      if (assignedStatements.includes(isStmt)) {
+        const cfg = await loadConfig(isStmt)
+        if (cfg.reconcile) { reconcileState = cfg.reconcile; setEditorState(reconcileState); return }
+        statementConfigs.push({ statementType: cfg.statementType, sheetName: cfg.sheetName, stepCRows: cfg.stepCRows, existingTemplate: cfg.existingTemplate })
+      }
+
+      if (others.length > 0 && !reconcileState) {
+        const otherCfgs = await Promise.all(others.map(s => loadConfig(s as any)))
+        for (const cfg of otherCfgs) {
+          if (cfg.reconcile && !reconcileState) { reconcileState = cfg.reconcile; break }
+          else statementConfigs.push({ statementType: cfg.statementType, sheetName: cfg.sheetName, stepCRows: cfg.stepCRows, existingTemplate: cfg.existingTemplate })
         }
       }
 
@@ -833,8 +848,10 @@ export default function Step1Upload() {
     const hasWaterfall = waterfallOps.size > 0
 
     function outerOp(r: Layer1TemplateRow): string | null {
+      // BS/CFS: no operators needed — only structural hierarchy matters
+      if (stmtType === 'balance_sheet' || stmtType === 'cash_flow_statement') return null
       if (hasWaterfall && r.id != null && waterfallOps.has(r.id)) return waterfallOps.get(r.id)!
-      // No waterfall: parents default to null (structural grouping), leaves use type
+      // IS with no waterfall: parents default to null, leaves use type
       if ((r.children ?? []).length > 0) return null
       return r.type === 'sum' ? '=' : '+'
     }

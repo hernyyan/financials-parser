@@ -5,9 +5,10 @@ Jobs are persisted in the extraction_jobs table so they survive container
 restarts. Each operation opens and closes its own DB session — safe to call
 from background threads.
 
-Also exports extraction_semaphore: a Semaphore(1) that limits concurrent
-extractions to one at a time, preventing OOM kills from simultaneous
-Claude API calls + file processing.
+Also exports extraction_semaphore: a Semaphore(2) that allows up to two
+concurrent extractions. IS runs alone first; BS and CFS run concurrently
+after IS completes. Semaphore(2) prevents a third simultaneous job while
+keeping memory safe.
 """
 import json
 import logging
@@ -23,7 +24,7 @@ logger = logging.getLogger(__name__)
 
 # One extraction at a time — prevents the 3 concurrent statement-type
 # threads from OOM-killing the container.
-extraction_semaphore = threading.Semaphore(1)
+extraction_semaphore = threading.Semaphore(2)
 
 
 class JobStore:
