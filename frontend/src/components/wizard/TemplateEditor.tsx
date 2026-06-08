@@ -199,7 +199,7 @@ export default function TemplateEditor({
 
   function buildAiTemplate(structured: any, stmtType: string) {
     const waterfallOps = new Map<number, any>()
-    ;(structured?.waterfall ?? []).forEach((w: any) => { waterfallOps.set(w.row_id, w.operator ?? null) })
+    ;(structured?.waterfall ?? []).forEach((w: any) => { const op = w.operator ?? null; waterfallOps.set(w.row_id, op === null ? '+' : op) })
     const hasWaterfall = waterfallOps.size > 0
     const isBsOrCfs = stmtType === 'balance_sheet' || stmtType === 'cash_flow_statement'
     function convertRow(r: any): any {

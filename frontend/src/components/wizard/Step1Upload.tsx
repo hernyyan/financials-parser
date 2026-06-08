@@ -862,10 +862,13 @@ export default function Step1Upload() {
   //   - Children always get + (they add up to their parent)
   //   - Deeper than one level of nesting is collapsed to a single level
   function structuredToTemplate(structured: any, stmtType: string): Layer1Template {
-    // Build row_id → operator map from waterfall
+    // Build row_id → operator map from waterfall.
+    // null from waterfall means "first term" (old convention) — convert to '+'.
+    // Going forward the prompt outputs '+' directly, but handle old output too.
     const waterfallOps = new Map<number, string | null>()
     ;(structured?.waterfall ?? []).forEach((w: any) => {
-      waterfallOps.set(w.row_id, w.operator ?? null)
+      const op = w.operator ?? null
+      waterfallOps.set(w.row_id, op === null ? '+' : op)
     })
     const hasWaterfall = waterfallOps.size > 0
 

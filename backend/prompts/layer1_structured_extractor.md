@@ -60,7 +60,9 @@ If `statement_type` is `income_statement`, produce a `waterfall` array of **majo
 - Top-line revenue, COGS, gross profit, operating expenses, EBITDA, net income.
 - **Exclude** sub-totals within a section (e.g. "Total Gross Sales" that don't feed into another waterfall step).
 - **Exclude** LTM and TTM rows.
-- Each entry: `{ row_id, label (verbatim from that row), operator: null | "+" | "-" | "=" }`. First entry uses `null`.
+- Each entry: `{ row_id, label (verbatim from that row), operator: "+" | "-" | "=" }`.
+- The first entry (top-line revenue) uses `"+"` — it is the base of the waterfall and participates in the calculation.
+- `null` operator means **excluded / informational only** (e.g. backlog, orders sections that do not feed into the P&L). Do NOT use `null` for any row that should appear in the income statement waterfall.
 
 Omit `waterfall` for non-IS statements.
 

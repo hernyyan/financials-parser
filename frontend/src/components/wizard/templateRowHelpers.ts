@@ -135,7 +135,9 @@ export function templateToRows(
   // Schema v1 — SUM/IND with waterfall operators
   const waterfallOps = new Map<number, Operator>()
   ;(tmpl.waterfall ?? []).forEach((w: any) => {
-    waterfallOps.set(w.row_id, (w.operator ?? null) as Operator)
+    // null in waterfall = first term (old convention) → convert to '+' (new convention)
+    const op = w.operator ?? null
+    waterfallOps.set(w.row_id, (op === null ? '+' : op) as Operator)
   })
   const hasWaterfall = waterfallOps.size > 0
   const isBsOrCfs = statementType === 'balance_sheet' || statementType === 'cash_flow_statement'

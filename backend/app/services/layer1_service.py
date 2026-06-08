@@ -479,10 +479,15 @@ class Layer1Service:
 
         structured_rows = _build_structured_rows(template_rows)
 
-        # Build lineItems flat dict for Layer 2 compatibility
+        # Build lineItems flat dict for Layer 2 compatibility.
+        # operator=None means "excluded" — skip the row and its entire subtree.
+        # operator='+'/'-'/'=' means the row participates in the waterfall.
         line_items: Dict[str, float] = {}
         def _collect_line_items(rows: List[Dict]) -> None:
             for r in rows:
+                if r.get("operator") is None:
+                    # Excluded/informational row — skip this row and all its children
+                    continue
                 if r.get("value") is not None:
                     try:
                         line_items[r["label"]] = float(r["value"])
