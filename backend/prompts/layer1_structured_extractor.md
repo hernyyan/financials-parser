@@ -73,17 +73,6 @@ Total Liabilities & Equity (sum, computed_as)
 
 Apply this hierarchy even if the source sheet doesn't use explicit indentation. The key rule: **Current Assets and Long-Term Assets are children of Total Assets — they must not appear independently at the top level.**
 
-For `statement_type = cash_flow_statement`, the standard structure is:
-
-```
-Operating Cash Flow (sum)
-  └── Net income, D&A, working capital changes, etc. (individual)
-Investing Cash Flow (sum)
-  └── CapEx, acquisitions, etc. (individual)
-Financing Cash Flow (sum)
-  └── Debt proceeds/repayments, dividends, etc. (individual)
-Net Change in Cash (sum, computed_as)
-```
 
 ## Arithmetic Verification
 
