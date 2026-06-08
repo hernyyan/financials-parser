@@ -179,6 +179,7 @@ export default function Step1Upload() {
   const [extractionStatus, setExtractionStatus] = useState<ExtractionStatus>('idle')
   const [extractionError, setExtractionError] = useState<string | null>(null)
   const [extractionElapsed, setExtractionElapsed] = useState(0)
+  const [extractionProgress, setExtractionProgress] = useState<{ done: number; total: number } | null>(null)
   const [configuringTemplate, setConfiguringTemplate] = useState(false)
 
   // Resizable divider — left panel width as percentage
@@ -611,6 +612,7 @@ export default function Step1Upload() {
 
     const stmtTypes = ['income_statement', 'balance_sheet', 'cash_flow_statement'] as const
     const assignedStmtTypes = stmtTypes.filter(s => assignments[s])
+    setExtractionProgress({ done: 0, total: assignedStmtTypes.length })
     const results: Record<string, Awaited<ReturnType<typeof runLayer1>>> = {}
 
     const assignedTabs = assignedStmtTypes.map(s => assignments[s])
@@ -653,18 +655,22 @@ export default function Step1Upload() {
     // Phase 1: IS
     if (assignedStmtTypes.includes('income_statement')) {
       try { await runOne('income_statement') } catch (e: any) { anyFailed = true; firstError = e?.message ?? 'IS extraction failed.' }
+      setExtractionProgress(p => p ? { ...p, done: p.done + 1 } : null)
     }
 
     // Phase 2: BS + CFS concurrently
     const phase2 = assignedStmtTypes.filter(s => s !== 'income_statement')
     if (phase2.length > 0) {
-      const settled = await Promise.allSettled(phase2.map(runOne))
+      const settled = await Promise.allSettled(phase2.map(async (s) => {
+        try { await runOne(s) } finally { setExtractionProgress(p => p ? { ...p, done: p.done + 1 } : null) }
+      }))
       settled.forEach((r, i) => {
         if (r.status === 'rejected') { anyFailed = true; firstError = firstError || (r.reason?.message ?? `${phase2[i]} extraction failed.`) }
       })
     }
 
     try {
+      setExtractionProgress(null)
       if (anyFailed && Object.keys(results).length === 0) {
         setExtractionStatus('error')
         setExtractionError(firstError)
@@ -760,6 +766,7 @@ export default function Step1Upload() {
       ['income_statement', 'balance_sheet', 'cash_flow_statement'] as const
     ).filter(st => !!assignments[st])
 
+    setExtractionProgress({ done: 0, total: assignedStatements.length })
     const tickHandle = setInterval(() => setExtractionElapsed(s => s + 1), 1000)
 
     try {
@@ -806,12 +813,17 @@ export default function Step1Upload() {
 
       if (assignedStatements.includes(isStmt)) {
         const cfg = await loadConfig(isStmt)
+        setExtractionProgress(p => p ? { ...p, done: p.done + 1 } : null)
         if (cfg.reconcile) { reconcileState = cfg.reconcile; setEditorState(reconcileState); return }
         statementConfigs.push({ statementType: cfg.statementType, sheetName: cfg.sheetName, stepCRows: cfg.stepCRows, existingTemplate: cfg.existingTemplate })
       }
 
       if (others.length > 0 && !reconcileState) {
-        const otherCfgs = await Promise.all(others.map(s => loadConfig(s as any)))
+        const otherCfgs = await Promise.all(others.map(async s => {
+          const cfg = await loadConfig(s as any)
+          setExtractionProgress(p => p ? { ...p, done: p.done + 1 } : null)
+          return cfg
+        }))
         for (const cfg of otherCfgs) {
           if (cfg.reconcile && !reconcileState) { reconcileState = cfg.reconcile; break }
           else statementConfigs.push({ statementType: cfg.statementType, sheetName: cfg.sheetName, stepCRows: cfg.stepCRows, existingTemplate: cfg.existingTemplate })
@@ -828,6 +840,7 @@ export default function Step1Upload() {
     } finally {
       clearInterval(tickHandle)
       setConfiguringTemplate(false)
+      setExtractionProgress(null)
     }
   }
 
@@ -1352,7 +1365,7 @@ export default function Step1Upload() {
                 {extractionStatus === 'running' ? (
                   <>
                     <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                    Extracting... ({extractionElapsed}s)
+                    Extracting... ({extractionElapsed}s){extractionProgress && extractionProgress.total > 1 ? ` · ${extractionProgress.done}/${extractionProgress.total}` : ''}
                   </>
                 ) : (
                   'Run Extraction'
@@ -1367,7 +1380,7 @@ export default function Step1Upload() {
                 {configuringTemplate ? (
                   <>
                     <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                    Configuring... ({extractionElapsed}s)
+                    Configuring... ({extractionElapsed}s){extractionProgress && extractionProgress.total > 1 ? ` · ${extractionProgress.done}/${extractionProgress.total}` : ''}
                   </>
                 ) : (
                   'Configure Template'
