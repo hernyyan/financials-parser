@@ -226,7 +226,9 @@ class Layer1Service:
             )
             logger.warning("[Layer1] %s: 0 lineItems on attempt %d — retrying", normalized, attempt + 1)
 
-        # Full-fidelity display rows for template editor left panel
+        # Full-fidelity display rows for template editor left panel.
+        # Pass the label_col from Step C rows to skip the second _find_label_column scan.
+        _step_c_label_col = rows[0]["label_col"] if rows else None
         display_rows, label_col_letter = extract_all_rows_for_display(
             filepath, sheet_name,
             column_index=column_index,
@@ -235,6 +237,7 @@ class Layer1Service:
             section_start_row=section_start_row,
             section_end_row=section_end_row,
             label_col_override=label_col_override,
+            precomputed_label_col=_step_c_label_col,
         )
 
         return {
@@ -312,6 +315,7 @@ class Layer1Service:
                 section_end_row=0,
                 label_col_override=label_col_override,
             )
+            _step_c_label_col_fast = rows[0]["label_col"] if rows else None
             display_rows, label_col_letter = extract_all_rows_for_display(
                 filepath, sheet_name,
                 column_index=column_index,
@@ -320,6 +324,7 @@ class Layer1Service:
                 section_start_row=0,
                 section_end_row=0,
                 label_col_override=label_col_override,
+                precomputed_label_col=_step_c_label_col_fast,
             )
             value_col_letter = col_index_to_letter(column_index)
             return display_rows, column_identified, source_scaling, label_col_letter, value_col_letter
@@ -384,6 +389,7 @@ class Layer1Service:
                 f"Choose a different column with actual financial data for '{reporting_period}'."
             )
 
+        _src_label_col = rows[0]["label_col"] if rows else None
         display_rows, label_col_letter = extract_all_rows_for_display(
             filepath, sheet_name,
             column_index=column_index,
@@ -392,6 +398,7 @@ class Layer1Service:
             section_start_row=section_start_row,
             section_end_row=section_end_row,
             label_col_override=label_col_override,
+            precomputed_label_col=_src_label_col,
         )
         value_col_letter = col_index_to_letter(column_index)
         return display_rows, column_identified, source_scaling, label_col_letter, value_col_letter

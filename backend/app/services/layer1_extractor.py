@@ -238,6 +238,7 @@ def extract_all_rows_for_display(
     section_start_row: int = 0,
     section_end_row: int = 0,
     label_col_override: Optional[int] = None,
+    precomputed_label_col: Optional[int] = None,  # skip _find_label_column if already known
 ) -> tuple:
     """
     Extract ALL rows between section boundaries for the template editor left panel.
@@ -259,7 +260,7 @@ def extract_all_rows_for_display(
     wb = openpyxl.load_workbook(filepath, read_only=False, data_only=True)
     ws = wb[sheet_name]
 
-    label_column = label_col_override if label_col_override else _find_label_column(ws, start_row, end_row)
+    label_column = label_col_override or precomputed_label_col or _find_label_column(ws, start_row, end_row)
     label_col_letter = col_index_to_letter(label_column)
 
     rows: List[Dict[str, Any]] = []
