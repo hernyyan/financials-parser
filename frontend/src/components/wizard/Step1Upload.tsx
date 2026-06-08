@@ -815,7 +815,7 @@ export default function Step1Upload() {
         const cfg = await loadConfig(isStmt)
         setExtractionProgress(p => p ? { ...p, done: p.done + 1 } : null)
         if (cfg.reconcile) { reconcileState = cfg.reconcile; setEditorState(reconcileState); return }
-        statementConfigs.push({ statementType: cfg.statementType, sheetName: cfg.sheetName, stepCRows: cfg.stepCRows, existingTemplate: cfg.existingTemplate })
+        statementConfigs.push({ statementType: cfg.statementType, sheetName: cfg.sheetName, stepCRows: cfg.stepCRows, existingTemplate: cfg.existingTemplate, labelColLetter: cfg.labelColLetter, valueColLetter: cfg.valueColLetter })
       }
 
       if (others.length > 0 && !reconcileState) {
@@ -826,7 +826,7 @@ export default function Step1Upload() {
         }))
         for (const cfg of otherCfgs) {
           if (cfg.reconcile && !reconcileState) { reconcileState = cfg.reconcile; break }
-          else statementConfigs.push({ statementType: cfg.statementType, sheetName: cfg.sheetName, stepCRows: cfg.stepCRows, existingTemplate: cfg.existingTemplate })
+          else statementConfigs.push({ statementType: cfg.statementType, sheetName: cfg.sheetName, stepCRows: cfg.stepCRows, existingTemplate: cfg.existingTemplate, labelColLetter: cfg.labelColLetter, valueColLetter: cfg.valueColLetter })
         }
       }
 
@@ -1438,7 +1438,8 @@ export default function Step1Upload() {
                             key={tab}
                             className="flex items-center gap-2 cursor-pointer border-b border-gray-100 last:border-b-0"
                             style={{
-                              padding: '5px 9px',
+                              padding: '5px 9px 5px 9px',
+                              paddingRight: 24,
                               background: selected ? '#eff6ff' : undefined,
                               color: selected ? '#1d4ed8' : undefined,
                             }}
