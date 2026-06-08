@@ -7,10 +7,10 @@
  */
 import { useEffect, useRef, useState } from 'react'
 import type { Layer1Template } from '../../types'
-import { getLayer1Template, saveLayer1Template, deleteLayer1Template } from '../../api/client'
+import { getLayer1Template, saveLayer1Template, deleteLayer1Template, applyTemplateChanges } from '../../api/client'
 import { API_BASE } from '../../api/client'
 import TemplateRightPanel, { type TemplateRightPanelHandle } from '../wizard/TemplateRightPanel'
-import { templateToRows, rowsToTemplate } from '../wizard/templateRowHelpers'
+import { templateToRows, rowsToTemplate, buildChangeSet } from '../wizard/templateRowHelpers'
 import type { TNode } from '../wizard/templateRowTypes'
 import { EMPTY_SELECTION, type SelectionState } from '../wizard/templateRowTypes'
 import { Loader2, CheckCircle2, Trash2, X, FileCode } from 'lucide-react'
@@ -94,8 +94,20 @@ export default function Layer1TemplatesTab({ companyId }: Props) {
     setSaving(true)
     setSaveError(null)
     try {
+      const existingTemplate = templates[openStmt] ?? null
       const tmpl = rowsToTemplate(modalRows, openStmt)
+
       await saveLayer1Template(companyId, openStmt, tmpl)
+
+      // Apply retroactive changes to company dataset Excel files.
+      // Source layout is intentionally NOT updated here — the admin doesn't have
+      // access to the uploaded file, so the layout stays from the last user upload.
+      const { renames, additions, deletions } = buildChangeSet(existingTemplate, modalRows)
+      if (renames.length > 0 || additions.length > 0 || deletions.length > 0) {
+        applyTemplateChanges(companyId, openStmt, renames, additions, deletions)
+          .catch(e => console.warn('[admin] apply-changes non-fatal:', e))
+      }
+
       setTemplates(prev => ({ ...prev, [openStmt]: tmpl }))
       setTimeout(closeModal, 400)
     } catch (e: any) {
