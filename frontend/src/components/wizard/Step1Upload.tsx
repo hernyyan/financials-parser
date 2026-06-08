@@ -181,6 +181,7 @@ export default function Step1Upload() {
   const [extractionElapsed, setExtractionElapsed] = useState(0)
   const [extractionProgress, setExtractionProgress] = useState<{ done: number; total: number } | null>(null)
   const [configuringTemplate, setConfiguringTemplate] = useState(false)
+  const [aiPrefill, setAiPrefill] = useState(true)
 
   // Resizable divider — left panel width as percentage
   const [leftPct, setLeftPct] = useState(65)
@@ -785,10 +786,18 @@ export default function Step1Upload() {
           : null
 
         if (!existingTemplate) {
-          const result = await runLayer1(sessionId!, sheetName, stmtType, reportingPeriod, undefined, companyId, shared, (s) => setExtractionElapsed(s))
-          const stepCRows = result.sourceRows ?? []
-          const aiTemplate = result.structured ? structuredToTemplate(result.structured, stmtType) : null
-          return { statementType: stmtType, sheetName, stepCRows, existingTemplate: aiTemplate, reconcile: null, labelColLetter: result.labelColLetter, valueColLetter: result.valueColLetter }
+          if (aiPrefill) {
+            // AI pre-fill: full extraction (A+B+C+D) → right panel gets AI's best guess
+            const result = await runLayer1(sessionId!, sheetName, stmtType, reportingPeriod, undefined, companyId, shared, (s) => setExtractionElapsed(s))
+            const stepCRows = result.sourceRows ?? []
+            const aiTemplate = result.structured ? structuredToTemplate(result.structured, stmtType) : null
+            return { statementType: stmtType, sheetName, stepCRows, existingTemplate: aiTemplate, reconcile: null, labelColLetter: result.labelColLetter, valueColLetter: result.valueColLetter }
+          } else {
+            // Build from scratch: source rows only (A+B+C) → right panel starts empty
+            const sourceResult = await extractSourceRows(sessionId!, sheetName, stmtType, reportingPeriod, shared, (s) => setExtractionElapsed(s), companyId)
+            const stepCRows = sourceResult.sourceRows ?? []
+            return { statementType: stmtType, sheetName, stepCRows, existingTemplate: null, reconcile: null, labelColLetter: sourceResult.labelColLetter, valueColLetter: sourceResult.valueColLetter }
+          }
         }
 
         const sourceResult = await extractSourceRows(sessionId!, sheetName, stmtType, reportingPeriod, shared, (s) => setExtractionElapsed(s), companyId)
@@ -1387,21 +1396,33 @@ export default function Step1Upload() {
                   'Run Extraction'
                 )}
               </button>
-              <button
-                onClick={handleConfigureTemplate}
-                disabled={!canConfigureTemplate}
-                className="w-full flex items-center justify-center gap-2 rounded-lg text-[13px] border transition-colors disabled:opacity-50 hover:bg-slate-50"
-                style={{ borderColor: '#e2e8f0', color: '#475569', fontWeight: 500, padding: '6px 0', borderRadius: 8 }}
-              >
-                {configuringTemplate ? (
-                  <>
-                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                    Configuring... ({extractionElapsed}s){extractionProgress && extractionProgress.total > 1 ? ` · ${extractionProgress.done}/${extractionProgress.total}` : ''}
-                  </>
-                ) : (
-                  'Configure Template'
-                )}
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={handleConfigureTemplate}
+                  disabled={!canConfigureTemplate}
+                  className="flex-1 flex items-center justify-center gap-2 rounded-lg text-[13px] border transition-colors disabled:opacity-50 hover:bg-slate-50"
+                  style={{ borderColor: '#e2e8f0', color: '#475569', fontWeight: 500, padding: '6px 0', borderRadius: 8 }}
+                >
+                  {configuringTemplate ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      Configuring... ({extractionElapsed}s){extractionProgress && extractionProgress.total > 1 ? ` · ${extractionProgress.done}/${extractionProgress.total}` : ''}
+                    </>
+                  ) : (
+                    'Configure Template'
+                  )}
+                </button>
+                <label className="flex items-center gap-1.5 cursor-pointer whitespace-nowrap" title="Uncheck to open blank template (faster — no AI)">
+                  <input
+                    type="checkbox"
+                    checked={aiPrefill}
+                    onChange={e => setAiPrefill(e.target.checked)}
+                    className="w-3 h-3 cursor-pointer"
+                    style={{ accentColor: '#185FA5' }}
+                  />
+                  <span className="text-[11px] text-slate-500">AI pre-fill</span>
+                </label>
+              </div>
               {extractionError && (
                 <p className="text-[11px] text-red-600">{extractionError}</p>
               )}
