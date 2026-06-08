@@ -209,7 +209,7 @@ export default function Layer1TemplatesTab({ companyId }: Props) {
             </div>
 
             {/* Modal body */}
-            <div className="flex-1 overflow-hidden min-h-0">
+            <div className="flex-1 flex flex-col overflow-hidden min-h-0">
               {modalMode === 'raw' ? (
                 <div className="h-full overflow-auto p-4 bg-slate-950 font-mono text-[11px] leading-relaxed">
                   {rawLoading ? (
