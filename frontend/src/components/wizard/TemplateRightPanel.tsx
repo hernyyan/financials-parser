@@ -9,7 +9,7 @@
  *   - Decouple (eject) button on parent rows
  *   - LR-specific coloring via optional rowStatus() prop
  */
-import { useState } from 'react'
+import { useState, useImperativeHandle, forwardRef } from 'react'
 import { LogOut } from 'lucide-react'
 import type { StepCRow } from '../../types'
 import {
@@ -38,6 +38,12 @@ import OpPopover from './OpPopover'
 import { useDragDrop, type UseDragDropOptions } from './useDragDrop'
 
 // ── Props ─────────────────────────────────────────────────────────────────────
+
+export interface TemplateRightPanelHandle {
+  /** Call this from the source panel's onDragStart to register a source drag. */
+  startSourceDrag: (e: React.DragEvent, sourceRow: number) => void
+  startNewSourceDrag: (e: React.DragEvent, sourceRow: number) => void
+}
 
 export interface TemplateRightPanelProps {
   rows: TNode[]
@@ -93,7 +99,7 @@ function StatusBar({ rows, hasSelection, selectionSize }: { rows: TNode[]; hasSe
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
-export default function TemplateRightPanel({
+const TemplateRightPanel = forwardRef<TemplateRightPanelHandle, TemplateRightPanelProps>(function TemplateRightPanel({
   rows,
   onRowsChange,
   sourceRows = [],
@@ -103,7 +109,7 @@ export default function TemplateRightPanel({
   onSelectionChange,
   dragOptions = {},
   rowStatus = () => 'normal',
-}: TemplateRightPanelProps) {
+}: TemplateRightPanelProps, ref: React.Ref<TemplateRightPanelHandle>) {
   const [popover, setPopover] = useState<{ path: number[]; rect: DOMRect } | null>(null)
 
   const {
@@ -119,6 +125,13 @@ export default function TemplateRightPanel({
     onPanelDragOver,
     onPanelDragLeave,
   } = useDragDrop(rows, onRowsChange, sourceRows, selection, onSelectionChange, dragOptions)
+
+  // Expose drag start handlers so parents (e.g. TemplateEditor left panel) can
+  // call them directly — keeping drag state inside this component's hook.
+  useImperativeHandle(ref, () => ({
+    startSourceDrag: (e, sourceRow) => onSourceDragStart(e, sourceRow),
+    startNewSourceDrag: (e, sourceRow) => onNewSourceDragStart(e, sourceRow),
+  }))
 
   const hasSelection = selection.selectedPaths.size > 0
   const usedRows = usedSourceRowSet(rows)
@@ -364,4 +377,6 @@ export default function TemplateRightPanel({
       })()}
     </div>
   )
-}
+})
+
+export default TemplateRightPanel

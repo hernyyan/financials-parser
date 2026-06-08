@@ -5,7 +5,7 @@
  * (shared with LayoutReconciliation). This file handles the outer shell:
  * tabs, source column, header, save logic.
  */
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import type { Layer1Response, SourceLayoutRow, TemplateStatementConfig, StepCRow } from '../../types'
 import {
   saveLayer1Template,
@@ -17,7 +17,7 @@ import {
 } from '../../api/client'
 import { type TNode, EMPTY_SELECTION, type SelectionState } from './templateRowTypes'
 import { templateToRows, rowsToTemplate, buildChangeSet, fmtVal } from './templateRowHelpers'
-import TemplateRightPanel from './TemplateRightPanel'
+import TemplateRightPanel, { type TemplateRightPanelHandle } from './TemplateRightPanel'
 
 // ── Props ─────────────────────────────────────────────────────────────────────
 
@@ -126,6 +126,8 @@ export default function TemplateEditor({
   const [allStepCRows, setAllStepCRows] = useState<Record<string, StepCRow[]>>(() =>
     Object.fromEntries(statements.map(s => [s.statementType, s.stepCRows])),
   )
+
+  const rightPanelRef = useRef<TemplateRightPanelHandle>(null)
 
   const activeConfig = statements.find(s => s.statementType === activeTab)
   const activeRows = allRows[activeTab] ?? []
@@ -371,19 +373,60 @@ export default function TemplateEditor({
                     }),
                   )
                   const isUsed = usedSet.has(sr.row_index)
+                  // Source rows use 'src:N' keys so they don't collide with template paths
+                  const srcKey = `src:${sr.row_index}`
                   const isHovered = !selection.selectedPaths.size && hoveredRow === sr.row_index
-                  const isSelected = selection.selectedPaths.has(JSON.stringify([sr.row_index]))  // source selection uses row_index as key
+                  const isSelected = selection.selectedPaths.has(srcKey)
                   const isDraggable = !isEmpty && !isTitleRow && !isUsed
                   return (
                     <div
                       key={sr.row_index}
                       draggable={isDraggable}
                       onDragStart={isDraggable ? e => {
-                        e.dataTransfer.setData('sourceRow', String(sr.row_index))
-                        e.dataTransfer.effectAllowed = 'copy'
+                        // Delegate to TemplateRightPanel's useDragDrop so it tracks drag state
+                        rightPanelRef.current?.startSourceDrag(e, sr.row_index)
                       } : undefined}
                       onMouseEnter={() => { if (!selection.selectedPaths.size) setHoveredRow(sr.row_index) }}
                       onMouseLeave={() => { if (!selection.selectedPaths.size && hoveredRow === sr.row_index) setHoveredRow(null) }}
+                      onClick={e => {
+                        if (!isDraggable && !isUsed) return
+                        // Build a fake "path" for source rows using srcKey
+                        const allSrcNodes = activeStepCRows
+                          .filter(r => !(!r.label) && !(Boolean(r.label) && r.value === null))
+                          .map(r => ({ id: r.row_index, source_row: r.row_index, label: r.label, operator: null as any, expanded: false, children: [] }))
+                        const srcIdx = allSrcNodes.findIndex(r => r.source_row === sr.row_index)
+                        if (srcIdx === -1) return
+                        const fakePath = [srcIdx]
+                        // Use prefix in selected paths to distinguish source from template
+                        const fakeKey = srcKey
+                        if (e.shiftKey && selection.anchorPath) {
+                          // range select among source rows
+                          const anchorRow = selection.anchorPath.startsWith('src:') ? parseInt(selection.anchorPath.slice(4)) : null
+                          if (anchorRow !== null) {
+                            const allDraggableSrc = activeStepCRows.filter(r => r.label && !(Boolean(r.label) && r.value === null) && !usedSet.has(r.row_index))
+                            const anchorIdx = allDraggableSrc.findIndex(r => r.row_index === anchorRow)
+                            const clickedIdx = allDraggableSrc.findIndex(r => r.row_index === sr.row_index)
+                            if (anchorIdx !== -1 && clickedIdx !== -1) {
+                              const lo = Math.min(anchorIdx, clickedIdx), hi = Math.max(anchorIdx, clickedIdx)
+                              const rangeKeys = new Set(allDraggableSrc.slice(lo, hi + 1).map(r => `src:${r.row_index}`))
+                              setSelection(prev => ({ selectedPaths: rangeKeys, anchorPath: prev.anchorPath }))
+                              return
+                            }
+                          }
+                        }
+                        if (e.ctrlKey || e.metaKey) {
+                          setSelection(prev => {
+                            const next = new Set(prev.selectedPaths)
+                            if (next.has(fakeKey)) next.delete(fakeKey); else next.add(fakeKey)
+                            return { selectedPaths: next, anchorPath: fakeKey }
+                          })
+                        } else {
+                          setSelection(prev => prev.selectedPaths.size === 1 && prev.selectedPaths.has(fakeKey)
+                            ? { selectedPaths: new Set(), anchorPath: null }
+                            : { selectedPaths: new Set([fakeKey]), anchorPath: fakeKey }
+                          )
+                        }
+                      }}
                       className={`grid grid-cols-[36px_1fr_80px] items-center px-2 min-h-[26px] border-b border-slate-50 transition-colors
                         ${isDraggable ? 'cursor-grab hover:bg-blue-50' : isUsed ? 'opacity-30' : ''}
                         ${isHovered ? '!bg-yellow-100' : ''}
@@ -412,6 +455,7 @@ export default function TemplateEditor({
 
             {/* RIGHT — shared template panel */}
             <TemplateRightPanel
+              ref={rightPanelRef}
               key={activeTab}
               rows={activeRows}
               onRowsChange={rows => setAllRows(prev => ({ ...prev, [activeTab]: rows }))}
