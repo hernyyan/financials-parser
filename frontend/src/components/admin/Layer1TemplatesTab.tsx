@@ -29,11 +29,33 @@ const STMT_FULL: Record<StmtTab, string> = {
   cash_flow_statement: 'Cash Flow Statement',
 }
 
+type ViewMode = 'editor' | 'raw'
+
 export default function Layer1TemplatesTab({ companyId }: Props) {
   const [activeStmt, setActiveStmt] = useState<StmtTab>('income_statement')
+  const [viewMode, setViewMode] = useState<ViewMode>('editor')
+  const [rawData, setRawData] = useState<Record<StmtTab, any>>({} as any)
+  const [rawLoading, setRawLoading] = useState(false)
   const [labelColInput, setLabelColInput] = useState('')
   const [labelColSaving, setLabelColSaving] = useState(false)
   const [labelColSaved, setLabelColSaved] = useState(false)
+
+  async function loadRaw(stmt: StmtTab) {
+    setRawLoading(true)
+    try {
+      const res = await fetch(`${API_BASE}/companies/${companyId}/layer1-templates/${stmt}/raw`)
+      if (res.ok) {
+        const data = await res.json()
+        setRawData(prev => ({ ...prev, [stmt]: data }))
+      }
+    } finally {
+      setRawLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    if (viewMode === 'raw') loadRaw(activeStmt)
+  }, [viewMode, activeStmt])
 
   async function saveLabelColOverride() {
     setLabelColSaving(true)
@@ -158,7 +180,7 @@ export default function Layer1TemplatesTab({ companyId }: Props) {
         <span className="text-slate-400">e.g. 3 = column C. Leave blank to auto-detect.</span>
       </div>
 
-      {/* Statement sub-tabs + save button */}
+      {/* Statement sub-tabs + view toggle + save button */}
       <div className="shrink-0 flex items-center justify-between px-3 py-1.5 border-b border-border bg-gray-50">
         <div className="flex gap-1">
           {(['income_statement', 'balance_sheet', 'cash_flow_statement'] as StmtTab[]).map(stmt => (
@@ -175,9 +197,23 @@ export default function Layer1TemplatesTab({ companyId }: Props) {
               {STMT_LABELS[stmt]}
             </button>
           ))}
+          <div className="w-px bg-border mx-1" />
+          {(['editor', 'raw'] as ViewMode[]).map(mode => (
+            <button
+              key={mode}
+              onClick={() => setViewMode(mode)}
+              className={`px-2.5 py-1 rounded text-[11px] transition-colors ${
+                viewMode === mode
+                  ? 'bg-white border border-border shadow-sm text-foreground'
+                  : 'text-muted-foreground hover:bg-gray-100'
+              }`}
+            >
+              {mode === 'editor' ? 'Editor' : 'Raw JSON'}
+            </button>
+          ))}
         </div>
 
-        {hasTemplate && (
+        {hasTemplate && viewMode === 'editor' && (
           <div className="flex items-center gap-2">
             {errors[activeStmt] && (
               <span className="text-[11px] text-red-600">{errors[activeStmt]}</span>
@@ -216,7 +252,38 @@ export default function Layer1TemplatesTab({ companyId }: Props) {
 
       {/* Content */}
       <div className="flex-1 overflow-hidden min-h-0">
-        {isLoading ? (
+        {viewMode === 'raw' ? (
+          <div className="h-full overflow-auto p-3 bg-slate-950 font-mono text-[11px] leading-relaxed">
+            {rawLoading ? (
+              <span className="text-slate-400">Loading...</span>
+            ) : rawData[activeStmt] ? (
+              <div className="flex flex-col gap-4">
+                <div>
+                  <div className="text-slate-400 mb-1 uppercase tracking-wider text-[10px]">
+                    Template — saved {rawData[activeStmt].template?.saved_at ?? 'never'}
+                  </div>
+                  <pre className="text-green-300 whitespace-pre-wrap break-all">
+                    {rawData[activeStmt].template
+                      ? JSON.stringify(rawData[activeStmt].template.data, null, 2)
+                      : 'null'}
+                  </pre>
+                </div>
+                <div>
+                  <div className="text-slate-400 mb-1 uppercase tracking-wider text-[10px]">
+                    Source Layout — saved {rawData[activeStmt].source_layout?.saved_at ?? 'never'}
+                  </div>
+                  <pre className="text-cyan-300 whitespace-pre-wrap break-all">
+                    {rawData[activeStmt].source_layout
+                      ? JSON.stringify(rawData[activeStmt].source_layout.data, null, 2)
+                      : 'null'}
+                  </pre>
+                </div>
+              </div>
+            ) : (
+              <span className="text-slate-400">No data saved for {STMT_FULL[activeStmt]}.</span>
+            )}
+          </div>
+        ) : isLoading ? (
           <div className="flex items-center justify-center h-full">
             <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
           </div>

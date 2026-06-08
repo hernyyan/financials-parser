@@ -198,6 +198,56 @@ def delete_layer1_template(
     return {"success": True}
 
 
+@router.get("/companies/{company_id}/layer1-templates/{statement_type}/raw")
+def get_layer1_raw(
+    company_id: int,
+    statement_type: str,
+    db: Session = Depends(get_db),
+):
+    """Return the raw saved template and source layout for debugging."""
+    if statement_type not in _VALID_TYPES:
+        raise HTTPException(status_code=400, detail=f"Invalid statement_type: {statement_type}")
+
+    tmpl_row = db.execute(
+        text(
+            "SELECT template, created_at, updated_at FROM layer1_templates "
+            "WHERE company_id = :cid AND statement_type = :st"
+        ),
+        {"cid": company_id, "st": statement_type},
+    ).fetchone()
+
+    layout_row = db.execute(
+        text(
+            "SELECT layout, created_at, updated_at FROM source_layouts "
+            "WHERE company_id = :cid AND statement_type = :st"
+        ),
+        {"cid": company_id, "st": statement_type},
+    ).fetchone()
+
+    template = None
+    if tmpl_row:
+        t = tmpl_row[0]
+        template = {
+            "data": json.loads(t) if isinstance(t, str) else t,
+            "saved_at": str(tmpl_row[2]) if tmpl_row[2] else None,
+        }
+
+    source_layout = None
+    if layout_row:
+        l = layout_row[0]
+        source_layout = {
+            "data": json.loads(l) if isinstance(l, str) else l,
+            "saved_at": str(layout_row[2]) if layout_row[2] else None,
+        }
+
+    return {
+        "company_id": company_id,
+        "statement_type": statement_type,
+        "template": template,
+        "source_layout": source_layout,
+    }
+
+
 @router.post("/companies/{company_id}/layer1-templates/{statement_type}/check-layout")
 def check_layout(
     company_id: int,
