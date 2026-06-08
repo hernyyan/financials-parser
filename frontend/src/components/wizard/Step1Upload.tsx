@@ -791,7 +791,7 @@ export default function Step1Upload() {
           return { statementType: stmtType, sheetName, stepCRows, existingTemplate: aiTemplate, reconcile: null }
         }
 
-        const sourceResult = await extractSourceRows(sessionId!, sheetName, stmtType, reportingPeriod, shared, (s) => setExtractionElapsed(s))
+        const sourceResult = await extractSourceRows(sessionId!, sheetName, stmtType, reportingPeriod, shared, (s) => setExtractionElapsed(s), companyId)
         const stepCRows = sourceResult.sourceRows ?? []
 
         if (companyId) {

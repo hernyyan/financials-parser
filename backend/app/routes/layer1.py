@@ -360,6 +360,7 @@ def _run_source_rows_worker(
     sheet_type: str,
     reporting_period: str,
     shared_tab: bool,
+    company_id: Optional[int] = None,
 ) -> None:
     """
     Steps A+B+C only — identifies the data column and extracts raw rows.
@@ -371,13 +372,28 @@ def _run_source_rows_worker(
         job_store.set_running(job_id)
         service = get_layer1_service()
         try:
+            label_col_override = None
+            if company_id:
+                _lc_db = SessionLocal()
+                try:
+                    row = _lc_db.execute(
+                        text("SELECT label_col_override FROM companies WHERE id = :cid"),
+                        {"cid": company_id},
+                    ).fetchone()
+                    if row and row[0]:
+                        label_col_override = int(row[0])
+                except Exception:
+                    pass
+                finally:
+                    _lc_db.close()
+
             rows, column_identified, source_scaling = service.extract_source_rows(
                 filepath=filepath,
                 sheet_name=sheet_name,
                 sheet_type=sheet_type,
                 reporting_period=reporting_period,
                 shared_tab=shared_tab,
-                label_col_override=None,  # source-rows endpoint doesn't have company_id context
+                label_col_override=label_col_override,
             )
         except anthropic.AuthenticationError:
             job_store.set_error(job_id, "Invalid Anthropic API key.")
@@ -421,7 +437,7 @@ def extract_source_rows(request: Layer1SourceRowsRequest):
     job_id = job_store.create_job()
     threading.Thread(
         target=_run_source_rows_worker,
-        args=(job_id, filepath, request.sheetName, request.sheetType, request.reportingPeriod, request.sharedTab),
+        args=(job_id, filepath, request.sheetName, request.sheetType, request.reportingPeriod, request.sharedTab, request.companyId),
         daemon=True,
         name=f"layer1-src-{job_id[:8]}",
     ).start()

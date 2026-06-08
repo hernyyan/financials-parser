@@ -56,6 +56,7 @@ class Layer1SourceRowsRequest(BaseModel):
     sheetType: str
     reportingPeriod: str
     sharedTab: bool = False
+    companyId: Optional[int] = None
 
 
 class RecalculateRequest(BaseModel):

@@ -456,11 +456,12 @@ export async function extractSourceRows(
   reportingPeriod: string,
   sharedTab?: boolean,
   onElapsedTick?: (s: number) => void,
+  companyId?: number | null,
 ): Promise<{ sourceRows: StepCRow[]; columnIdentified: string; sourceScaling: string }> {
   const startRes = await fetch(`${API_BASE}/layer1/source-rows`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ sessionId, sheetName, sheetType: sheetType, reportingPeriod, sharedTab: sharedTab ?? false }),
+    body: JSON.stringify({ sessionId, sheetName, sheetType, reportingPeriod, sharedTab: sharedTab ?? false, companyId: companyId ?? null }),
   })
   const { job_id } = await handleResponse<_JobStartResponse>(startRes)
   const result = await _pollJobUntilDone(`${API_BASE}/layer1/jobs/${job_id}`, onElapsedTick)
