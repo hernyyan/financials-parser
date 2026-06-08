@@ -53,6 +53,8 @@ export interface TemplateStatementConfig {
   sheetName: string
   stepCRows: StepCRow[]
   existingTemplate: Layer1Template | null
+  labelColLetter?: string   // column used for labels (editable in template editor)
+  valueColLetter?: string   // column used for values (editable everywhere)
 }
 
 // Configure mode: tabbed editor for all assigned statements
@@ -141,6 +143,8 @@ export interface Layer1Result {
   sourceSheet: string
   structured?: Layer1Template
   templateCheck?: TemplateCheckResult
+  labelColLetter?: string
+  valueColLetter?: string
 }
 
 export interface CalculationMeta {
@@ -223,6 +227,8 @@ export interface Layer1Response {
   templateCheck?: TemplateCheckResult
   extractionDebug?: Layer1ExtractionDebug
   sourceRows?: StepCRow[]
+  labelColLetter?: string   // e.g. "C" — column used for row labels
+  valueColLetter?: string   // e.g. "AN" — column used for period values
 }
 
 export interface Layer2Request {

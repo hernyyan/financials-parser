@@ -713,7 +713,7 @@ export default function Step1Upload() {
             const aiTemplate = structuredToTemplate(isResult.structured, 'income_statement')
             setEditorState({
               mode: 'configure',
-              statements: [{ statementType: 'income_statement', sheetName: isTab, stepCRows, existingTemplate: aiTemplate }],
+              statements: [{ statementType: 'income_statement', sheetName: isTab, stepCRows, existingTemplate: aiTemplate, labelColLetter: isResult.labelColLetter, valueColLetter: isResult.valueColLetter }],
             })
             return
           }
@@ -788,7 +788,7 @@ export default function Step1Upload() {
           const result = await runLayer1(sessionId!, sheetName, stmtType, reportingPeriod, undefined, companyId, shared, (s) => setExtractionElapsed(s))
           const stepCRows = result.sourceRows ?? []
           const aiTemplate = result.structured ? structuredToTemplate(result.structured, stmtType) : null
-          return { statementType: stmtType, sheetName, stepCRows, existingTemplate: aiTemplate, reconcile: null }
+          return { statementType: stmtType, sheetName, stepCRows, existingTemplate: aiTemplate, reconcile: null, labelColLetter: result.labelColLetter, valueColLetter: result.valueColLetter }
         }
 
         const sourceResult = await extractSourceRows(sessionId!, sheetName, stmtType, reportingPeriod, shared, (s) => setExtractionElapsed(s), companyId)
@@ -804,7 +804,7 @@ export default function Step1Upload() {
             }
           }
         }
-        return { statementType: stmtType, sheetName, stepCRows, existingTemplate, reconcile: null }
+        return { statementType: stmtType, sheetName, stepCRows, existingTemplate, reconcile: null, labelColLetter: sourceResult.labelColLetter, valueColLetter: sourceResult.valueColLetter }
       }
 
       // IS first (most intensive), then BS + CFS concurrently
@@ -1150,6 +1150,22 @@ export default function Step1Upload() {
                 }
                 if (Object.keys(toSave).length > 0) {
                   saveTabPreferences(companyId, toSave).catch(() => {})
+                }
+              }
+              // Auto-save label column to company when user approves extraction
+              // (implicit approval of whatever column was used)
+              if (companyId) {
+                const isResult = layer1Results['income_statement']
+                const labelColLetter = isResult?.labelColLetter
+                if (labelColLetter && /^[A-Z]+$/i.test(labelColLetter)) {
+                  let labelColIndex = 0
+                  for (let i = 0; i < labelColLetter.toUpperCase().length; i++) {
+                    labelColIndex = labelColIndex * 26 + (labelColLetter.toUpperCase().charCodeAt(i) - 64)
+                  }
+                  fetch(`/api/admin/companies/${companyId}/label-column`, {
+                    method: 'PUT', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ label_col: labelColIndex }),
+                  }).catch(() => {})
                 }
               }
               approveStep1()

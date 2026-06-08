@@ -139,6 +139,8 @@ export async function runLayer1(
   companyId?: number | null,
   sharedTab?: boolean,
   onElapsedTick?: (seconds: number) => void,
+  explicitLabelCol?: number | null,
+  explicitValueCol?: number | null,
 ): Promise<Layer1Response> {
   const startRes = await fetch(`${API_BASE}/layer1/run`, {
     method: 'POST',
@@ -151,6 +153,8 @@ export async function runLayer1(
       ...(companyId != null ? { companyId } : {}),
       ...(fieldsFilter && fieldsFilter.length > 0 ? { fieldsFilter } : {}),
       ...(sharedTab ? { sharedTab: true } : {}),
+      ...(explicitLabelCol != null ? { explicitLabelCol } : {}),
+      ...(explicitValueCol != null ? { explicitValueCol } : {}),
     }),
   })
   const { job_id } = await handleResponse<_JobStartResponse>(startRes)
@@ -457,11 +461,19 @@ export async function extractSourceRows(
   sharedTab?: boolean,
   onElapsedTick?: (s: number) => void,
   companyId?: number | null,
-): Promise<{ sourceRows: StepCRow[]; columnIdentified: string; sourceScaling: string }> {
+  explicitLabelCol?: number | null,
+  explicitValueCol?: number | null,
+): Promise<{ sourceRows: StepCRow[]; columnIdentified: string; sourceScaling: string; labelColLetter?: string; valueColLetter?: string }> {
   const startRes = await fetch(`${API_BASE}/layer1/source-rows`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ sessionId, sheetName, sheetType, reportingPeriod, sharedTab: sharedTab ?? false, companyId: companyId ?? null }),
+    body: JSON.stringify({
+      sessionId, sheetName, sheetType, reportingPeriod,
+      sharedTab: sharedTab ?? false,
+      companyId: companyId ?? null,
+      explicitLabelCol: explicitLabelCol ?? null,
+      explicitValueCol: explicitValueCol ?? null,
+    }),
   })
   const { job_id } = await handleResponse<_JobStartResponse>(startRes)
   const result = await _pollJobUntilDone(`${API_BASE}/layer1/jobs/${job_id}`, onElapsedTick)

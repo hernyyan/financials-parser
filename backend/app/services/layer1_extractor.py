@@ -23,6 +23,15 @@ from openpyxl.styles import Font
 
 # ── helpers ──────────────────────────────────────────────────────────────────
 
+def col_index_to_letter(idx: int) -> str:
+    """Convert a 1-based column index to an Excel column letter (e.g. 1→A, 3→C, 40→AN)."""
+    result = ""
+    while idx > 0:
+        idx, remainder = divmod(idx - 1, 26)
+        result = chr(65 + remainder) + result
+    return result
+
+
 def _find_label_column(ws, start_row: int, end_row: Optional[int]) -> int:
     """
     Identify the most consistent label column by finding which column index
@@ -229,7 +238,7 @@ def extract_all_rows_for_display(
     section_start_row: int = 0,
     section_end_row: int = 0,
     label_col_override: Optional[int] = None,
-) -> List[Dict[str, Any]]:
+) -> tuple:
     """
     Extract ALL rows between section boundaries for the template editor left panel.
 
@@ -251,6 +260,7 @@ def extract_all_rows_for_display(
     ws = wb[sheet_name]
 
     label_column = label_col_override if label_col_override else _find_label_column(ws, start_row, end_row)
+    label_col_letter = col_index_to_letter(label_column)
 
     rows: List[Dict[str, Any]] = []
 
@@ -303,7 +313,7 @@ def extract_all_rows_for_display(
     last_nonempty = len(rows) - 1
     while last_nonempty >= 0 and not rows[last_nonempty]["label"]:
         last_nonempty -= 1
-    return rows[:last_nonempty + 1]
+    return rows[:last_nonempty + 1], label_col_letter
 
 
 # ── Step B validation ─────────────────────────────────────────────────────────

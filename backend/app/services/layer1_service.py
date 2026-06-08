@@ -21,6 +21,7 @@ from sqlalchemy import text as sa_text
 
 from app.services.claude_service import ClaudeService, get_claude_service
 from app.services.layer1_extractor import (
+    col_index_to_letter,
     count_numeric_values_in_column,
     extract_header_rows,
     extract_rows_with_metadata,
@@ -226,7 +227,7 @@ class Layer1Service:
             logger.warning("[Layer1] %s: 0 lineItems on attempt %d — retrying", normalized, attempt + 1)
 
         # Full-fidelity display rows for template editor left panel
-        display_rows = extract_all_rows_for_display(
+        display_rows, label_col_letter = extract_all_rows_for_display(
             filepath, sheet_name,
             column_index=column_index,
             source_scaling=source_scaling,
@@ -240,6 +241,8 @@ class Layer1Service:
             "lineItems": line_items,
             "structured": structured,
             "sourceRows": display_rows,
+            "labelColLetter": label_col_letter,
+            "valueColLetter": col_info.get("column_letter", ""),
             "sourceScaling": source_scaling,
             "columnIdentified": column_identified,
             "extractionDebug": {
@@ -265,6 +268,7 @@ class Layer1Service:
         reporting_period: str,
         shared_tab: bool = False,
         label_col_override: Optional[int] = None,
+        explicit_value_col: Optional[int] = None,
     ):
         """
         Steps A+B+C only. Returns (rows, column_identified, source_scaling) where
@@ -293,6 +297,32 @@ class Layer1Service:
         section_start_row = 0
         section_end_row = 0
         rows: list = []
+
+        # Fast path: explicit value column provided — skip AI column identification
+        if explicit_value_col:
+            column_index = explicit_value_col
+            column_identified = col_index_to_letter(explicit_value_col)
+            col_info = {"column_letter": column_identified}
+            rows = extract_rows_with_metadata(
+                filepath, sheet_name,
+                column_index=column_index,
+                source_scaling=source_scaling,
+                skip_rows=0,
+                section_start_row=0,
+                section_end_row=0,
+                label_col_override=label_col_override,
+            )
+            display_rows, label_col_letter = extract_all_rows_for_display(
+                filepath, sheet_name,
+                column_index=column_index,
+                source_scaling=source_scaling,
+                skip_rows=0,
+                section_start_row=0,
+                section_end_row=0,
+                label_col_override=label_col_override,
+            )
+            value_col_letter = col_index_to_letter(column_index)
+            return display_rows, column_identified, source_scaling, label_col_letter, value_col_letter
 
         for attempt in range(MAX_ATTEMPTS):
             col_info = self.claude.call_claude_with_tool(
@@ -354,7 +384,7 @@ class Layer1Service:
                 f"Choose a different column with actual financial data for '{reporting_period}'."
             )
 
-        display_rows = extract_all_rows_for_display(
+        display_rows, label_col_letter = extract_all_rows_for_display(
             filepath, sheet_name,
             column_index=column_index,
             source_scaling=source_scaling,
@@ -363,7 +393,8 @@ class Layer1Service:
             section_end_row=section_end_row,
             label_col_override=label_col_override,
         )
-        return display_rows, column_identified, source_scaling
+        value_col_letter = col_index_to_letter(column_index)
+        return display_rows, column_identified, source_scaling, label_col_letter, value_col_letter
 
     def run_deterministic_extraction(
         self,

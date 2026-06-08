@@ -36,8 +36,10 @@ class Layer1Request(BaseModel):
     sheetType: str        # 'income_statement' | 'balance_sheet' | 'cash_flow_statement'
     reportingPeriod: str
     companyId: Optional[int] = None
-    fieldsFilter: Optional[List[str]] = None  # if set, only extract these fields
-    sharedTab: bool = False  # True when multiple statement types share the same sheet
+    fieldsFilter: Optional[List[str]] = None
+    sharedTab: bool = False
+    explicitLabelCol: Optional[int] = None   # 1-based; overrides both DB override and _find_label_column
+    explicitValueCol: Optional[int] = None   # 1-based; overrides AI column identification
 
 
 class Layer1DeterministicRequest(BaseModel):
@@ -57,6 +59,8 @@ class Layer1SourceRowsRequest(BaseModel):
     reportingPeriod: str
     sharedTab: bool = False
     companyId: Optional[int] = None
+    explicitLabelCol: Optional[int] = None
+    explicitValueCol: Optional[int] = None
 
 
 class RecalculateRequest(BaseModel):
@@ -73,7 +77,9 @@ class Layer1Response(BaseModel):
     structured: Optional[Dict] = None
     templateCheck: Optional[Dict] = None
     extractionDebug: Optional[Dict] = None
-    sourceRows: Optional[List[Dict]] = None  # full-fidelity display rows for template editor
+    sourceRows: Optional[List[Dict]] = None
+    labelColLetter: Optional[str] = None   # e.g. "C" — column used for row labels
+    valueColLetter: Optional[str] = None   # e.g. "AN" — column used for period values
 
 
 # ─── Layer 2 ──────────────────────────────────────────────────────────────────

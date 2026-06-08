@@ -6,12 +6,14 @@
  * tabs, source column, header, save logic.
  */
 import { useState } from 'react'
-import type { Layer1Response, SourceLayoutRow, TemplateStatementConfig } from '../../types'
+import type { Layer1Response, SourceLayoutRow, TemplateStatementConfig, StepCRow } from '../../types'
 import {
   saveLayer1Template,
   saveLayout,
   applyTemplateChanges,
   runLayer1Deterministic,
+  runLayer1,
+  extractSourceRows,
 } from '../../api/client'
 import { type TNode, EMPTY_SELECTION, type SelectionState } from './templateRowTypes'
 import { templateToRows, rowsToTemplate, buildChangeSet, fmtVal } from './templateRowHelpers'
@@ -27,6 +29,45 @@ interface Props {
   sharedTab?: boolean
   onSaved: (results: Record<string, Layer1Response>) => void
   onCancel: () => void
+}
+
+// ── ColBadge — click-to-edit column letter indicator ─────────────────────────
+
+function ColBadge({
+  colLetter, field, isEditing, draft,
+  onEdit, onDraftChange, onConfirm, onCancel, disabled,
+}: {
+  colLetter: string; field: string; isEditing: boolean; draft: string
+  onEdit: () => void; onDraftChange: (d: string) => void
+  onConfirm: () => void; onCancel: () => void; disabled: boolean
+}) {
+  if (isEditing) {
+    return (
+      <span className="flex items-center gap-0.5">
+        <span className="text-slate-400">(col</span>
+        <input
+          autoFocus
+          className="w-8 border border-blue-400 rounded px-1 text-[10px] font-mono text-blue-700 outline-none"
+          value={draft}
+          onChange={e => onDraftChange(e.target.value.toUpperCase())}
+          onKeyDown={e => { if (e.key === 'Enter') onConfirm(); if (e.key === 'Escape') onCancel() }}
+        />
+        <button onClick={onConfirm} disabled={disabled || !draft.trim()} className="text-blue-500 hover:text-blue-700 text-[10px] disabled:opacity-40">↺</button>
+        <button onClick={onCancel} className="text-slate-400 hover:text-slate-600 text-[10px]">✕</button>
+        <span className="text-slate-400">)</span>
+      </span>
+    )
+  }
+  return (
+    <button
+      onClick={onEdit}
+      disabled={disabled}
+      className="text-slate-400 hover:text-blue-500 font-mono text-[10px] disabled:opacity-40"
+      title={`Click to change ${field} column`}
+    >
+      ({colLetter})
+    </button>
+  )
 }
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -68,9 +109,115 @@ export default function TemplateEditor({
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
+  // Per-statement column tracking — keyed by statementType
+  const [colInfo, setColInfo] = useState<Record<string, { label: string; value: string }>>(() =>
+    Object.fromEntries(
+      statements.map(s => [s.statementType, {
+        label: s.labelColLetter ?? '?',
+        value: s.valueColLetter ?? '?',
+      }]),
+    ),
+  )
+  // Editing state: which statement + which col ('label' | 'value') is being edited
+  const [colEdit, setColEdit] = useState<{ stmt: string; field: 'label' | 'value'; draft: string } | null>(null)
+  const [reextracting, setReextracting] = useState(false)
+
+  // Per-statement stepCRows (can change after re-extract)
+  const [allStepCRows, setAllStepCRows] = useState<Record<string, StepCRow[]>>(() =>
+    Object.fromEntries(statements.map(s => [s.statementType, s.stepCRows])),
+  )
+
   const activeConfig = statements.find(s => s.statementType === activeTab)
   const activeRows = allRows[activeTab] ?? []
-  const activeStepCRows = activeConfig?.stepCRows ?? []
+  const activeStepCRows = allStepCRows[activeTab] ?? activeConfig?.stepCRows ?? []
+  const activeColInfo = colInfo[activeTab] ?? { label: '?', value: '?' }
+
+  // ── Column re-extract ──────────────────────────────────────────────────────
+
+  async function handleReextract(stmt: string, labelColLetter: string, valueColLetter: string) {
+    if (!activeConfig) return
+    setReextracting(true)
+    setError(null)
+    const config = statements.find(s => s.statementType === stmt)
+    if (!config) { setReextracting(false); return }
+
+    const labelColNum = colLetterToIndex(labelColLetter)
+    const valueColNum = colLetterToIndex(valueColLetter)
+    const isLabelChange = labelColLetter !== (colInfo[stmt]?.label ?? '?')
+
+    try {
+      if (isLabelChange) {
+        // Label column changed → full re-extraction, AI rebuilds template
+        const result = await runLayer1(
+          sessionId, config.sheetName, stmt, reportingPeriod,
+          undefined, companyId, sharedTab ?? false,
+          undefined,
+          /* explicitLabelCol */ labelColNum,
+        )
+        if (result.sourceRows) setAllStepCRows(p => ({ ...p, [stmt]: result.sourceRows! }))
+        setColInfo(p => ({ ...p, [stmt]: { label: result.labelColLetter ?? labelColLetter, value: result.valueColLetter ?? valueColLetter } }))
+        // Rebuild right panel from AI output
+        if (result.structured) {
+          const aiTmpl = buildAiTemplate(result.structured, stmt)
+          if (aiTmpl) setAllRows(p => ({ ...p, [stmt]: templateToRows(aiTmpl as any, result.sourceRows ?? [], stmt) }))
+        }
+        // Auto-save label col override
+        if (companyId && labelColNum) {
+          fetch(`/api/admin/companies/${companyId}/label-column`, {
+            method: 'PUT', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ label_col: labelColNum }),
+          }).catch(() => {})
+        }
+      } else {
+        // Only value column changed → refresh source rows only
+        const result = await extractSourceRows(
+          sessionId, config.sheetName, stmt, reportingPeriod,
+          sharedTab ?? false, undefined, companyId,
+          undefined, valueColNum,
+        )
+        if (result.sourceRows) setAllStepCRows(p => ({ ...p, [stmt]: result.sourceRows! }))
+        setColInfo(p => ({ ...p, [stmt]: { label: result.labelColLetter ?? labelColLetter, value: result.valueColLetter ?? valueColLetter } }))
+      }
+    } catch (e: any) {
+      setError(`Re-extract failed: ${e.message}`)
+    } finally {
+      setReextracting(false)
+      setColEdit(null)
+    }
+  }
+
+  function colLetterToIndex(letter: string): number {
+    let index = 0
+    const upper = letter.toUpperCase().trim()
+    for (let i = 0; i < upper.length; i++) {
+      index = index * 26 + (upper.charCodeAt(i) - 64)
+    }
+    return index
+  }
+
+  function buildAiTemplate(structured: any, stmtType: string) {
+    const waterfallOps = new Map<number, any>()
+    ;(structured?.waterfall ?? []).forEach((w: any) => { waterfallOps.set(w.row_id, w.operator ?? null) })
+    const hasWaterfall = waterfallOps.size > 0
+    const isBsOrCfs = stmtType === 'balance_sheet' || stmtType === 'cash_flow_statement'
+    function convertRow(r: any): any {
+      const children = r.children ?? []
+      const op = isBsOrCfs ? null : hasWaterfall && r.id != null && waterfallOps.has(r.id) ? waterfallOps.get(r.id) : children.length > 0 ? null : r.type === 'sum' ? '=' : '+'
+      if (children.length > 0) {
+        const flat = children.flatMap((c: any) => {
+          const gc = c.children ?? []
+          if (gc.length > 0) return [...gc.map((g: any) => ({ ...g, operator: '+', children: [] })), { ...c, operator: '+', children: [] }]
+          return [{ ...c, operator: '+', children: [] }]
+        })
+        return { ...r, operator: op, expanded: true, children: flat }
+      }
+      return { ...r, operator: op, children: [] }
+    }
+    return {
+      meta: { statement_type: stmtType, created_at: new Date().toISOString(), schema_version: 2 },
+      rows: (structured?.rows ?? []).map(convertRow),
+    }
+  }
 
   // ── Save ───────────────────────────────────────────────────────────────────
 
@@ -175,9 +322,40 @@ export default function TemplateEditor({
             <div className="flex flex-col border-r border-slate-200 bg-white overflow-hidden" style={{ width: '35%' }}>
               <div className="flex-shrink-0 px-3 py-1.5 bg-slate-50 border-b border-slate-200 flex items-center gap-2">
                 <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Source Sheet</span>
+                {reextracting && <span className="text-[10px] text-blue-500 ml-1">Re-extracting…</span>}
               </div>
               <div className="flex-shrink-0 grid grid-cols-[36px_1fr_80px] px-2 py-1 bg-slate-50 border-b border-slate-200 text-[10px] font-semibold text-slate-400 uppercase tracking-wider">
-                <span></span><span>Label</span><span className="text-right pr-1">Value</span>
+                <span></span>
+                {/* Label col header with editable column letter */}
+                <span className="flex items-center gap-1">
+                  Label
+                  <ColBadge
+                    colLetter={activeColInfo.label}
+                    field="label"
+                    isEditing={colEdit?.stmt === activeTab && colEdit.field === 'label'}
+                    draft={colEdit?.stmt === activeTab && colEdit.field === 'label' ? colEdit.draft : ''}
+                    onEdit={() => setColEdit({ stmt: activeTab, field: 'label', draft: activeColInfo.label })}
+                    onDraftChange={d => setColEdit(e => e ? { ...e, draft: d } : null)}
+                    onConfirm={() => colEdit && handleReextract(activeTab, colEdit.draft, activeColInfo.value)}
+                    onCancel={() => setColEdit(null)}
+                    disabled={reextracting}
+                  />
+                </span>
+                {/* Value col header with editable column letter */}
+                <span className="flex items-center justify-end gap-1 pr-1">
+                  Value
+                  <ColBadge
+                    colLetter={activeColInfo.value}
+                    field="value"
+                    isEditing={colEdit?.stmt === activeTab && colEdit.field === 'value'}
+                    draft={colEdit?.stmt === activeTab && colEdit.field === 'value' ? colEdit.draft : ''}
+                    onEdit={() => setColEdit({ stmt: activeTab, field: 'value', draft: activeColInfo.value })}
+                    onDraftChange={d => setColEdit(e => e ? { ...e, draft: d } : null)}
+                    onConfirm={() => colEdit && handleReextract(activeTab, activeColInfo.label, colEdit.draft)}
+                    onCancel={() => setColEdit(null)}
+                    disabled={reextracting}
+                  />
+                </span>
               </div>
               <div className="flex-1 overflow-y-auto">
                 {activeStepCRows.map(sr => {

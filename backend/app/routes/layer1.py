@@ -52,6 +52,8 @@ def _run_extraction_worker(
     filepath: str,
     company_id: Optional[int],
     shared_tab: bool,
+    explicit_label_col: Optional[int] = None,
+    explicit_value_col: Optional[int] = None,
 ) -> None:
     """
     Runs in a dedicated daemon thread. Acquires the extraction semaphore before
@@ -82,13 +84,14 @@ def _run_extraction_worker(
                     _lc_db.close()
 
             try:
+                effective_label_col = explicit_label_col or label_col_override or None
                 result = service.run_extraction(
                     sheet_type=sheet_type,
                     filepath=filepath,
                     sheet_name=sheet_name,
                     reporting_period=reporting_period,
                     shared_tab=shared_tab,
-                    label_col_override=label_col_override,
+                    label_col_override=effective_label_col,
                 )
             except anthropic.AuthenticationError:
                 job_store.set_error(job_id, "Invalid Anthropic API key.")
@@ -173,6 +176,8 @@ def _run_extraction_worker(
                 templateCheck=template_check,
                 extractionDebug=result.get("extractionDebug"),
                 sourceRows=result.get("sourceRows"),
+                labelColLetter=result.get("labelColLetter"),
+                valueColLetter=result.get("valueColLetter"),
             )
             job_store.set_done(job_id, response.model_dump())
 
@@ -217,6 +222,8 @@ def run_layer1(request: Layer1Request):
             filepath,
             request.companyId,
             request.sharedTab,
+            request.explicitLabelCol,
+            request.explicitValueCol,
         ),
         daemon=True,
         name=f"layer1-worker-{job_id[:8]}",
@@ -361,6 +368,8 @@ def _run_source_rows_worker(
     reporting_period: str,
     shared_tab: bool,
     company_id: Optional[int] = None,
+    explicit_label_col: Optional[int] = None,
+    explicit_value_col: Optional[int] = None,
 ) -> None:
     """
     Steps A+B+C only — identifies the data column and extracts raw rows.
@@ -387,13 +396,16 @@ def _run_source_rows_worker(
                 finally:
                     _lc_db.close()
 
-            rows, column_identified, source_scaling = service.extract_source_rows(
+            # Explicit overrides from the request take precedence over DB lookup
+            effective_label_col = explicit_label_col or label_col_override or None
+            rows, column_identified, source_scaling, label_col_letter, value_col_letter = service.extract_source_rows(
                 filepath=filepath,
                 sheet_name=sheet_name,
                 sheet_type=sheet_type,
                 reporting_period=reporting_period,
                 shared_tab=shared_tab,
-                label_col_override=label_col_override,
+                label_col_override=effective_label_col,
+                explicit_value_col=explicit_value_col,
             )
         except anthropic.AuthenticationError:
             job_store.set_error(job_id, "Invalid Anthropic API key.")
@@ -413,6 +425,8 @@ def _run_source_rows_worker(
             "sourceRows": rows,
             "columnIdentified": column_identified,
             "sourceScaling": source_scaling,
+            "labelColLetter": label_col_letter,
+            "valueColLetter": value_col_letter,
         })
     finally:
         extraction_semaphore.release()
@@ -437,7 +451,7 @@ def extract_source_rows(request: Layer1SourceRowsRequest):
     job_id = job_store.create_job()
     threading.Thread(
         target=_run_source_rows_worker,
-        args=(job_id, filepath, request.sheetName, request.sheetType, request.reportingPeriod, request.sharedTab, request.companyId),
+        args=(job_id, filepath, request.sheetName, request.sheetType, request.reportingPeriod, request.sharedTab, request.companyId, request.explicitLabelCol, request.explicitValueCol),
         daemon=True,
         name=f"layer1-src-{job_id[:8]}",
     ).start()
