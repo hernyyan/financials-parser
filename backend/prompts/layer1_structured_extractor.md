@@ -45,10 +45,45 @@ The top-level `rows` array in your output must be in the same order as the rows 
 
 - A `sum` node's children are the individual rows that feed directly into that sum (same section, one indent level deeper).
 - The sum row in the source always comes **after** its children (at the bottom of the group). Do not confuse a section header at the top of a group with the sum at the bottom.
-- **Spatial containment — Non-Negotiable:** A child row's `row_index` must fall between the `row_index` of the first row in its section and the `row_index` of its parent sum row. Never assign a row as a child if it appears in a different section of the document. If "USBid" appears at row 9 (under Orders) and also at row 15 (under Revenue), these are two distinct rows — use the one whose `row_index` is spatially within the parent sum's section.
+- **Spatial containment — Non-Negotiable:** A child row's `row_index` must fall between the `row_index` of the first row in its section and the `row_index` of its parent sum row. Never assign a row as a child if it appears in a different section of the document.
+- **No duplicate rows — Non-Negotiable:** Every CSV row appears **exactly once** in the output. If a row is a child of another row, it must NOT also appear as a standalone top-level row. A subtotal (e.g. "Current Assets") that is itself a child of a higher-level total ("Total Assets") must be nested inside that parent and removed from the top level.
 - **Cross-section sums** (e.g., EBITDA = Gross Profit − SG&A) have no children. Use `computed_as: "row_id OP row_id"`.
 - Indent level is the primary grouping signal. Bold indicates a sum.
 - Assign each emitted row a unique integer `id` starting from 10, incrementing by 1.
+
+## Balance Sheet Structure Guidance
+
+For `statement_type = balance_sheet`, the standard 3-level hierarchy is:
+
+```
+Total Assets (sum, no children at top level — it nests the subtotals)
+  └── Current Assets (sum)
+        └── Cash, Accounts Receivable, Inventory, Prepaid Expenses, etc. (individual)
+  └── Long-Term Assets / Non-Current Assets (sum)
+        └── PP&E gross, Accumulated Depreciation, PP&E net, Goodwill, etc. (individual)
+Total Liabilities (sum)
+  └── Current Liabilities (sum)
+        └── Accounts Payable, Accrued Expenses, etc. (individual)
+  └── Long-Term Liabilities (sum)
+        └── Long-term debt, deferred revenue, etc. (individual)
+Total Equity / Shareholders' Equity (sum)
+  └── Common stock, Retained Earnings, etc. (individual)
+Total Liabilities & Equity (sum, computed_as)
+```
+
+Apply this hierarchy even if the source sheet doesn't use explicit indentation. The key rule: **Current Assets and Long-Term Assets are children of Total Assets — they must not appear independently at the top level.**
+
+For `statement_type = cash_flow_statement`, the standard structure is:
+
+```
+Operating Cash Flow (sum)
+  └── Net income, D&A, working capital changes, etc. (individual)
+Investing Cash Flow (sum)
+  └── CapEx, acquisitions, etc. (individual)
+Financing Cash Flow (sum)
+  └── Debt proceeds/repayments, dividends, etc. (individual)
+Net Change in Cash (sum, computed_as)
+```
 
 ## Arithmetic Verification
 
@@ -101,7 +136,7 @@ Return a single JSON object, no markdown fences:
     }
   ],
   "waterfall": [
-    { "row_id": 10, "label": "Net Revenue", "operator": null },
+    { "row_id": 10, "label": "Net Revenue", "operator": "+" },
     { "row_id": 15, "label": "COGS", "operator": "-" },
     { "row_id": 20, "label": "Gross Profit", "operator": "=" }
   ],
