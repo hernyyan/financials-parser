@@ -166,6 +166,19 @@ export default function TemplateConfigurationWorkflow({
   const [hoveredRow, setHoveredRow] = useState<number | null>(null)
   const [selection, setSelection] = useState<SelectionState>(EMPTY_SELECTION)
 
+  // Per-tab set of row_indices manually unlocked from title-row freeze
+  const [unlockedRows, setUnlockedRows] = useState<Record<string, Set<number>>>(() =>
+    Object.fromEntries(statements.map(s => [s.statementType, new Set<number>()]))
+  )
+
+  function toggleRowUnlock(stmt: string, rowIndex: number) {
+    setUnlockedRows(prev => {
+      const next = new Set(prev[stmt] ?? [])
+      if (next.has(rowIndex)) next.delete(rowIndex); else next.add(rowIndex)
+      return { ...prev, [stmt]: next }
+    })
+  }
+
   const rightPanelRef = useRef<TemplateRightPanelHandle>(null)
 
   const activeConfig = statements.find(s => s.statementType === activeTab)!
@@ -389,6 +402,8 @@ export default function TemplateConfigurationWorkflow({
               onHoverChange={setHoveredRow}
               selection={selection}
               onSelectionChange={setSelection}
+              unlockedRows={unlockedRows[activeTab] ?? new Set()}
+              onToggleUnlock={idx => toggleRowUnlock(activeTab, idx)}
               rightPanelRef={rightPanelRef}
               key={activeTab}
             />
@@ -401,7 +416,8 @@ export default function TemplateConfigurationWorkflow({
 
 function ConfigurePanel({
   config, rows, onRowsChange, stepCRows, colInfo, colEdit, onColEdit,
-  onReextract, reextracting, hoveredRow, onHoverChange, selection, onSelectionChange, rightPanelRef,
+  onReextract, reextracting, hoveredRow, onHoverChange, selection, onSelectionChange,
+  unlockedRows, onToggleUnlock, rightPanelRef,
 }: {
   config: TemplateStatementConfig
   rows: TNode[]
@@ -416,6 +432,8 @@ function ConfigurePanel({
   onHoverChange: (row: number | null) => void
   selection: SelectionState
   onSelectionChange: (s: SelectionState) => void
+  unlockedRows: Set<number>
+  onToggleUnlock: (rowIndex: number) => void
   rightPanelRef: React.Ref<TemplateRightPanelHandle>
 }) {
   const usedSet = new Set(
@@ -453,12 +471,13 @@ function ConfigurePanel({
           <div className="flex-1 overflow-y-auto">
             {stepCRows.map(sr => {
               const isEmpty = !sr.label
-              const isTitleRow = Boolean(sr.label) && sr.value === null
+              const isTitleRow = Boolean(sr.label) && sr.value === null && !unlockedRows.has(sr.row_index)
               const isUsed = usedSet.has(sr.row_index)
               const srcKey = `src:${sr.row_index}`
               const isHovered = !selection.selectedPaths.size && hoveredRow === sr.row_index
               const isSelected = selection.selectedPaths.has(srcKey)
               const isDraggable = !isEmpty && !isTitleRow && !isUsed
+              const isUnlockable = Boolean(sr.label) && sr.value === null && !isUsed // show toggle
               return (
                 <div key={sr.row_index} draggable={isDraggable}
                   onDragStart={isDraggable ? e => { (rightPanelRef as any).current?.startSourceDrag(e, sr.row_index) } : undefined}
@@ -490,7 +509,20 @@ function ConfigurePanel({
                     style={{ paddingLeft: 6 + (sr.indent ?? 0) * 14, fontWeight: sr.bold ? 700 : 400, fontStyle: sr.italic ? 'italic' : 'normal' }}>
                     {sr.label || ' '}
                   </span>
-                  <span className={`text-[11px] font-mono text-right pr-1 ${sr.value != null && sr.value < 0 ? 'text-red-600' : 'text-slate-500'}`}>{fmtVal(sr.value)}</span>
+                  <span className="flex items-center justify-end pr-1 gap-1">
+                    {sr.value != null
+                      ? <span className={`text-[11px] font-mono ${sr.value < 0 ? 'text-red-600' : 'text-slate-500'}`}>{fmtVal(sr.value)}</span>
+                      : isUnlockable
+                        ? <button
+                            title={unlockedRows.has(sr.row_index) ? 'Lock this row (make non-draggable again)' : 'Unlock to use in template'}
+                            onClick={e => { e.stopPropagation(); onToggleUnlock(sr.row_index) }}
+                            className={`text-[10px] px-1 py-0.5 rounded transition-colors ${unlockedRows.has(sr.row_index) ? 'text-blue-600 bg-blue-50 hover:bg-blue-100' : 'text-slate-400 hover:text-slate-600 hover:bg-slate-100'}`}
+                          >
+                            {unlockedRows.has(sr.row_index) ? '⬚' : '🔒'}
+                          </button>
+                        : null
+                    }
+                  </span>
                 </div>
               )
             })}
