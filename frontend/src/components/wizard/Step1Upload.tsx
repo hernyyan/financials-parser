@@ -1471,7 +1471,7 @@ export default function Step1Upload() {
                             className="flex items-center gap-2 cursor-pointer border-b border-gray-100 last:border-b-0"
                             style={{
                               padding: '5px 9px 5px 9px',
-                              paddingRight: 44,
+                              paddingRight: 64,
                               background: selected ? '#eff6ff' : undefined,
                               color: selected ? '#1d4ed8' : undefined,
                             }}
