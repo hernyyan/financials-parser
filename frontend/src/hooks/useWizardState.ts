@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, ReactNode, createElement } from 'react'
 import type { WizardState, Layer1Result, Layer2Result, Correction, TemplateEditorState } from '../types'
+// TemplateEditorState is now a unified type (statements[] with per-statement panelMode)
 import {
   MOCK_LAYER2_INCOME_STATEMENT,
   MOCK_LAYER2_BALANCE_SHEET,

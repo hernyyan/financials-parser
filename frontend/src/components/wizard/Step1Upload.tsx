@@ -723,32 +723,30 @@ export default function Step1Upload() {
             // First upload — open tabbed editor with AI's pre-filled IS template
             const aiTemplate = structuredToTemplate(isResult.structured, 'income_statement')
             setEditorState({
-              mode: 'configure',
-              statements: [{ statementType: 'income_statement', sheetName: isTab, stepCRows, existingTemplate: aiTemplate, labelColLetter: isResult.labelColLetter, valueColLetter: isResult.valueColLetter }],
+              statements: [{ statementType: 'income_statement', sheetName: isTab, stepCRows, existingTemplate: aiTemplate, labelColLetter: isResult.labelColLetter, valueColLetter: isResult.valueColLetter, panelMode: 'configure' }],
             })
             return
           }
 
-          // Has template — run layout diff to decide between silent proceed, reconcile, or direct extract
+          // Has template — run layout diff to decide between silent proceed or open editor
           try {
             const layoutCheck = await checkLayout(companyId, 'income_statement', layoutRows)
 
             if (!layoutCheck.has_layout || !layoutCheck.has_real_diff) {
               // No layout yet, or layout is unchanged / only silent diffs — proceed directly
-              // (extraction already ran with AI, results are in layer1Results — just move to Step 2)
               return
             }
 
-            // Real diff detected — show reconciliation UI
+            // Real diff detected — open editor with IS in reconcile mode
             const existingTemplate = await getLayer1Template(companyId, 'income_statement')
             setEditorState({
-              mode: 'reconcile',
-              statementType: 'income_statement',
-              sheetName: isTab,
-              stepCRows,
-              existingTemplate: existingTemplate!,
-              diff: layoutCheck.changes,
-              oldLayout: [],
+              statements: [{
+                statementType: 'income_statement', sheetName: isTab, stepCRows,
+                existingTemplate: existingTemplate!,
+                labelColLetter: isResult.labelColLetter, valueColLetter: isResult.valueColLetter,
+                panelMode: 'reconcile',
+                reconcileData: { diff: layoutCheck.changes, oldLayout: [] },
+              }],
             })
             return
           } catch (layoutErr) {
@@ -781,14 +779,9 @@ export default function Step1Upload() {
     const tickHandle = setInterval(() => setExtractionElapsed(s => s + 1), 1000)
 
     try {
-      // Run Extraction and Configure Template follow the same routing logic.
-      // The only difference: Configure Template always shows the editor,
-      // even when the layout is unchanged.
-      const statementConfigs: import('../../types').TemplateStatementConfig[] = []
-      let reconcileState: import('../../types').TemplateReconcileState | null = null
-
-      // Helper: load config for a single statement
-      const loadConfig = async (stmtType: 'income_statement' | 'balance_sheet' | 'cash_flow_statement') => {
+      // Load config for a single statement — returns a TemplateStatementConfig with
+      // panelMode determined per-statement (no session-level short-circuit).
+      const loadConfig = async (stmtType: 'income_statement' | 'balance_sheet' | 'cash_flow_statement'): Promise<import('../../types').TemplateStatementConfig> => {
         const sheetName = assignments[stmtType]
         const shared = tabCounts[sheetName] > 1
         const existingTemplate = companyId
@@ -797,63 +790,68 @@ export default function Step1Upload() {
 
         if (!existingTemplate) {
           if (aiPrefill) {
-            // AI pre-fill: full extraction (A+B+C+D) → right panel gets AI's best guess
             const result = await runLayer1(sessionId!, sheetName, stmtType, reportingPeriod, undefined, companyId, shared, (s) => setExtractionElapsed(s))
-            const stepCRows = result.sourceRows ?? []
-            const aiTemplate = result.structured ? structuredToTemplate(result.structured, stmtType) : null
-            return { statementType: stmtType, sheetName, stepCRows, existingTemplate: aiTemplate, reconcile: null, labelColLetter: result.labelColLetter, valueColLetter: result.valueColLetter }
+            return {
+              statementType: stmtType, sheetName,
+              stepCRows: result.sourceRows ?? [],
+              existingTemplate: result.structured ? structuredToTemplate(result.structured, stmtType) : null,
+              labelColLetter: result.labelColLetter, valueColLetter: result.valueColLetter,
+              panelMode: 'configure',
+            }
           } else {
-            // Build from scratch: source rows only (A+B+C) → right panel starts empty
-            const sourceResult = await extractSourceRows(sessionId!, sheetName, stmtType, reportingPeriod, shared, (s) => setExtractionElapsed(s), companyId)
-            const stepCRows = sourceResult.sourceRows ?? []
-            return { statementType: stmtType, sheetName, stepCRows, existingTemplate: null, reconcile: null, labelColLetter: sourceResult.labelColLetter, valueColLetter: sourceResult.valueColLetter }
+            const sr = await extractSourceRows(sessionId!, sheetName, stmtType, reportingPeriod, shared, (s) => setExtractionElapsed(s), companyId)
+            return {
+              statementType: stmtType, sheetName,
+              stepCRows: sr.sourceRows ?? [], existingTemplate: null,
+              labelColLetter: sr.labelColLetter, valueColLetter: sr.valueColLetter,
+              panelMode: 'configure',
+            }
           }
         }
 
-        const sourceResult = await extractSourceRows(sessionId!, sheetName, stmtType, reportingPeriod, shared, (s) => setExtractionElapsed(s), companyId)
-        const stepCRows = sourceResult.sourceRows ?? []
+        const sr = await extractSourceRows(sessionId!, sheetName, stmtType, reportingPeriod, shared, (s) => setExtractionElapsed(s), companyId)
+        const stepCRows = sr.sourceRows ?? []
 
         if (companyId) {
           const layoutRows = stepCRows.map(r => ({ row_index: r.row_index, label: r.label }))
           const layoutCheck = await checkLayout(companyId, stmtType, layoutRows).catch(() => null)
           if (layoutCheck?.has_real_diff) {
             return {
-              statementType: stmtType, sheetName, stepCRows, existingTemplate, stepCRows2: stepCRows,
-              reconcile: { mode: 'reconcile' as const, statementType: stmtType, sheetName, stepCRows, existingTemplate, diff: layoutCheck.changes, oldLayout: [] as import('../../types').SourceLayoutRow[] },
+              statementType: stmtType, sheetName, stepCRows, existingTemplate,
+              labelColLetter: sr.labelColLetter, valueColLetter: sr.valueColLetter,
+              panelMode: 'reconcile',
+              reconcileData: { diff: layoutCheck.changes, oldLayout: [] },
             }
           }
         }
-        return { statementType: stmtType, sheetName, stepCRows, existingTemplate, reconcile: null, labelColLetter: sourceResult.labelColLetter, valueColLetter: sourceResult.valueColLetter }
+        return {
+          statementType: stmtType, sheetName, stepCRows, existingTemplate,
+          labelColLetter: sr.labelColLetter, valueColLetter: sr.valueColLetter,
+          panelMode: 'configure',
+        }
       }
 
-      // IS first (most intensive), then BS + CFS concurrently
+      // IS first, then BS + CFS concurrently — all go into statements[], no breaks
       const isStmt = 'income_statement' as const
       const others = assignedStatements.filter(s => s !== isStmt)
+      const statementConfigs: import('../../types').TemplateStatementConfig[] = []
 
       if (assignedStatements.includes(isStmt)) {
         const cfg = await loadConfig(isStmt)
         setExtractionProgress(p => p ? { ...p, done: p.done + 1 } : null)
-        if (cfg.reconcile) { reconcileState = cfg.reconcile; setEditorState(reconcileState); return }
-        statementConfigs.push({ statementType: cfg.statementType, sheetName: cfg.sheetName, stepCRows: cfg.stepCRows, existingTemplate: cfg.existingTemplate, labelColLetter: cfg.labelColLetter, valueColLetter: cfg.valueColLetter })
+        statementConfigs.push(cfg)
       }
 
-      if (others.length > 0 && !reconcileState) {
+      if (others.length > 0) {
         const otherCfgs = await Promise.all(others.map(async s => {
           const cfg = await loadConfig(s as any)
           setExtractionProgress(p => p ? { ...p, done: p.done + 1 } : null)
           return cfg
         }))
-        for (const cfg of otherCfgs) {
-          if (cfg.reconcile && !reconcileState) { reconcileState = cfg.reconcile; break }
-          else statementConfigs.push({ statementType: cfg.statementType, sheetName: cfg.sheetName, stepCRows: cfg.stepCRows, existingTemplate: cfg.existingTemplate, labelColLetter: cfg.labelColLetter, valueColLetter: cfg.valueColLetter })
-        }
+        statementConfigs.push(...otherCfgs)
       }
 
-      if (reconcileState) {
-        setEditorState(reconcileState)
-      } else {
-        setEditorState({ mode: 'configure', statements: statementConfigs })
-      }
+      setEditorState({ statements: statementConfigs })
     } catch (e: any) {
       setStatus({ type: 'error', message: `Failed to load template data: ${e.message}` })
     } finally {

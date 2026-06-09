@@ -50,34 +50,30 @@ export interface StepCRow {
   indent?: number
 }
 
-// One statement's worth of data for the template editor
+// Per-statement reconcile data (populated only when panelMode === 'reconcile')
+export interface StatementReconcileData {
+  diff: LayoutDiffChange[]
+  oldLayout: SourceLayoutRow[]
+}
+
+// One statement's worth of data for the template configuration workflow.
+// panelMode is determined per-statement: 'configure' = 2-panel, 'reconcile' = 3-panel.
 export interface TemplateStatementConfig {
   statementType: string
   sheetName: string
   stepCRows: StepCRow[]
   existingTemplate: Layer1Template | null
-  labelColLetter?: string   // column used for labels (editable in template editor)
-  valueColLetter?: string   // column used for values (editable everywhere)
+  labelColLetter?: string
+  valueColLetter?: string
+  panelMode: 'configure' | 'reconcile'
+  reconcileData?: StatementReconcileData
 }
 
-// Configure mode: tabbed editor for all assigned statements
-export interface TemplateConfigureState {
-  mode: 'configure'
+// Unified editor state — always a tabbed session, one entry per assigned statement.
+// Each statement independently carries its own panel mode.
+export interface TemplateEditorState {
   statements: TemplateStatementConfig[]
 }
-
-// Reconcile mode: 3-panel layout diff review (single statement)
-export interface TemplateReconcileState {
-  mode: 'reconcile'
-  statementType: string
-  sheetName: string
-  stepCRows: Array<{ row_index: number; label: string; value: number | null }>
-  existingTemplate: Layer1Template
-  diff: LayoutDiffChange[]
-  oldLayout: SourceLayoutRow[]
-}
-
-export type TemplateEditorState = TemplateConfigureState | TemplateReconcileState
 
 export interface Layer1TemplateRow {
   id: number
