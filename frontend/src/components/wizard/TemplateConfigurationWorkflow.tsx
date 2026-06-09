@@ -440,6 +440,10 @@ function ConfigurePanel({
     rows.flatMap(r => { const c: number[] = []; const walk = (n: TNode) => { if (n.source_row > 0) c.push(n.source_row); n.children.forEach(walk) }; walk(r); return c }),
   )
 
+  // Separate anchor for left-panel shift-range — insulated from right-panel clicks
+  // which contaminate the shared selection.anchorPath with path keys like "[0]".
+  const leftAnchorRow = useRef<number | null>(null)
+
   return (
     <div className="flex flex-1 overflow-hidden justify-center">
       <div className="flex w-full max-w-[1280px] overflow-hidden">
@@ -486,17 +490,30 @@ function ConfigurePanel({
                   onClick={e => {
                     if (!isDraggable && !isUsed) return
                     const fakeKey = srcKey
-                    if (e.shiftKey && selection.anchorPath?.startsWith('src:')) {
-                      const anchorRow = parseInt(selection.anchorPath.slice(4))
-                      const draggable = stepCRows.filter(r => r.label && !(Boolean(r.label) && r.value === null) && !usedSet.has(r.row_index))
-                      const ai = draggable.findIndex(r => r.row_index === anchorRow), ci = draggable.findIndex(r => r.row_index === sr.row_index)
-                      if (ai !== -1 && ci !== -1) { const lo = Math.min(ai, ci), hi = Math.max(ai, ci); onSelectionChange({ selectedPaths: new Set(draggable.slice(lo, hi + 1).map(r => `src:${r.row_index}`)), anchorPath: selection.anchorPath }); return }
+                    if (e.shiftKey && leftAnchorRow.current !== null) {
+                      // Use left-panel-specific anchor — immune to right-panel clicks
+                      // which would contaminate selection.anchorPath with "[0]"-style keys.
+                      const anchorRowIdx = leftAnchorRow.current
+                      const selectable = stepCRows.filter(r => r.label && !(Boolean(r.label) && r.value === null && !unlockedRows.has(r.row_index)) && !usedSet.has(r.row_index))
+                      const ai = selectable.findIndex(r => r.row_index === anchorRowIdx)
+                      const ci = selectable.findIndex(r => r.row_index === sr.row_index)
+                      if (ai !== -1 && ci !== -1) {
+                        const lo = Math.min(ai, ci), hi = Math.max(ai, ci)
+                        onSelectionChange({ selectedPaths: new Set(selectable.slice(lo, hi + 1).map(r => `src:${r.row_index}`)), anchorPath: `src:${anchorRowIdx}` })
+                        return
+                      }
                     }
                     if (e.ctrlKey || e.metaKey) {
-                      const next = new Set(selection.selectedPaths); if (next.has(fakeKey)) next.delete(fakeKey); else next.add(fakeKey)
+                      const next = new Set(selection.selectedPaths)
+                      if (next.has(fakeKey)) next.delete(fakeKey); else next.add(fakeKey)
+                      leftAnchorRow.current = sr.row_index
                       onSelectionChange({ selectedPaths: next, anchorPath: fakeKey })
                     } else {
-                      onSelectionChange(selection.selectedPaths.size === 1 && selection.selectedPaths.has(fakeKey) ? { selectedPaths: new Set(), anchorPath: null } : { selectedPaths: new Set([fakeKey]), anchorPath: fakeKey })
+                      // Plain click — set left-panel anchor
+                      leftAnchorRow.current = sr.row_index
+                      onSelectionChange(selection.selectedPaths.size === 1 && selection.selectedPaths.has(fakeKey)
+                        ? { selectedPaths: new Set(), anchorPath: null }
+                        : { selectedPaths: new Set([fakeKey]), anchorPath: fakeKey })
                     }
                   }}
                   className={`grid grid-cols-[36px_1fr_80px] items-center px-2 min-h-[26px] border-b border-slate-50 transition-colors
