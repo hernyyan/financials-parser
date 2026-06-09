@@ -157,6 +157,7 @@ export default function Step1Upload() {
     setPdfPageAssignments,
     approveStep1,
     setEditorState,
+    setSheetAssignments,
   } = useWizardState()
 
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -170,11 +171,20 @@ export default function Step1Upload() {
   const [contextLoading, setContextLoading] = useState(false)
 
   // Single-tab assignment: one sheet per statement type
-  const [assignments, setAssignments] = useState<{
+  const [assignments, setAssignmentsLocal] = useState<{
     income_statement: string
     balance_sheet: string
     cash_flow_statement: string
   }>({ income_statement: '', balance_sheet: '', cash_flow_statement: '' })
+
+  // Wrapper that keeps wizard state in sync so WizardShell can read current assignments
+  function setAssignments(updater: ((prev: typeof assignments) => typeof assignments) | typeof assignments) {
+    setAssignmentsLocal(prev => {
+      const next = typeof updater === 'function' ? updater(prev) : updater
+      setSheetAssignments(next)
+      return next
+    })
+  }
 
   const [extractionStatus, setExtractionStatus] = useState<ExtractionStatus>('idle')
   const [extractionError, setExtractionError] = useState<string | null>(null)
@@ -1475,6 +1485,10 @@ export default function Step1Upload() {
                               onChange={() =>
                                 setAssignments((prev) => ({ ...prev, [key]: tab }))
                               }
+                              onClick={() => {
+                                // Clicking an already-selected tab deselects it
+                                if (selected) setAssignments((prev) => ({ ...prev, [key]: '' }))
+                              }}
                               style={{ accentColor: '#185FA5', width: 13, height: 13, flexShrink: 0 }}
                             />
                             <span className="truncate text-[12px]">{tab}</span>

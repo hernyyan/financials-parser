@@ -34,6 +34,9 @@ export interface WizardState {
   selectedCell: string | null
   sidePanelOpen: boolean
 
+  // Sheet tab assignments (lifted so WizardShell can save them on template save)
+  sheetAssignments: Record<string, string>
+
   // Template editor / reconciliation state (cleared on save/cancel)
   editorState: TemplateEditorState | null
 }

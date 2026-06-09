@@ -34,6 +34,7 @@ interface WizardContextType extends WizardState {
   resetWizard: () => void
   loadMockStep2: () => void
   setEditorState: (state: TemplateEditorState | null) => void
+  setSheetAssignments: (assignments: Record<string, string>) => void
 }
 
 const defaultState: WizardState = {
@@ -59,6 +60,7 @@ const defaultState: WizardState = {
   selectedCell: null,
   sidePanelOpen: false,
   editorState: null,
+  sheetAssignments: {},
 }
 
 const WizardContext = createContext<WizardContextType | null>(null)
@@ -234,6 +236,10 @@ export function WizardProvider({ children }: { children: ReactNode }) {
     setState((s) => ({ ...s, editorState }))
   }
 
+  function setSheetAssignments(sheetAssignments: Record<string, string>) {
+    setState((s) => ({ ...s, sheetAssignments }))
+  }
+
   function resetWizard() {
     setState(defaultState)
   }
@@ -266,6 +272,7 @@ export function WizardProvider({ children }: { children: ReactNode }) {
       selectedCell: null,
       sidePanelOpen: false,
       editorState: null,
+      sheetAssignments: {},
     })
   }
 
@@ -298,6 +305,7 @@ export function WizardProvider({ children }: { children: ReactNode }) {
     resetWizard,
     loadMockStep2,
     setEditorState,
+    setSheetAssignments,
   }
 
   return createElement(WizardContext.Provider, { value }, children)
