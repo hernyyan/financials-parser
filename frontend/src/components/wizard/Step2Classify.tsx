@@ -149,6 +149,7 @@ export default function Step2Classify() {
     removeCorrection,
     approveStep2,
     backToStep1,
+    lastEditorState,
     setSelectedCell,
     setSidePanelOpen,
   } = useWizardState()
@@ -447,7 +448,7 @@ export default function Step2Classify() {
             className="flex items-center gap-1.5 text-[13px] text-muted-foreground hover:text-foreground transition-colors"
           >
             <ArrowLeft className="w-3.5 h-3.5" />
-            Back to Extraction
+            {lastEditorState ? 'Back to Template Editor' : 'Back to Extraction'}
           </button>
         </div>
         <div className="flex-1 flex flex-col items-center justify-center pt-20">
@@ -511,7 +512,7 @@ export default function Step2Classify() {
           className="flex items-center gap-1.5 text-[13px] text-muted-foreground hover:text-foreground transition-colors"
         >
           <ArrowLeft className="w-3.5 h-3.5" />
-          Back to Extraction
+          {lastEditorState ? 'Back to Template Editor' : 'Back to Extraction'}
         </button>
 
         {showBackConfirm && (
@@ -605,7 +606,7 @@ export default function Step2Classify() {
         >
           <div className="px-4 py-2 border-b border-border bg-gray-50 shrink-0">
             <p style={{ fontSize: 14, fontWeight: 600 }}>
-              Source Data (Extracted)
+              Layer 1 Template (Extracted)
             </p>
           </div>
           <div className="flex-1 overflow-y-auto min-h-0">

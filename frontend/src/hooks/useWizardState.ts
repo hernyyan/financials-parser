@@ -18,6 +18,7 @@ interface WizardContextType extends WizardState {
   setLayer1Results: (results: Record<string, Layer1Result>) => void
   mergeLayer1Result: (statementType: string, result: Layer1Result) => void
   approveStep1: () => void
+  approveStep1FromEditor: () => void
   setLayer2Results: (results: Record<string, Layer2Result>) => void
   addCorrection: (correction: Correction) => void
   removeCorrection: (fieldName: string) => void
@@ -61,6 +62,7 @@ const defaultState: WizardState = {
   selectedCell: null,
   sidePanelOpen: false,
   editorState: null,
+  lastEditorState: null,
   sheetAssignments: {},
 }
 
@@ -131,6 +133,29 @@ export function WizardProvider({ children }: { children: ReactNode }) {
     })
   }
 
+  // Called when the user proceeds to Step 2 via the template editor's "Save All & Extract".
+  // Snapshots the current editorState so the back button in Step 2 can restore it exactly.
+  function approveStep1FromEditor() {
+    setState((s) => {
+      if (s.companyName && s.reportingPeriod && Object.keys(s.layer1Results).length > 0) {
+        appendToCompanyDataset(
+          s.sessionId,
+          s.companyName,
+          s.reportingPeriod,
+          s.layer1Results,
+        ).catch((err) => console.error('Dataset append failed:', err))
+      }
+
+      return {
+        ...s,
+        step1Approved: true,
+        currentStep: 2,
+        lastEditorState: s.editorState,
+        editorState: null,
+      }
+    })
+  }
+
   function setLayer2Results(results: Record<string, Layer2Result>) {
     setState((s) => ({ ...s, layer2Results: results }))
   }
@@ -182,6 +207,9 @@ export function WizardProvider({ children }: { children: ReactNode }) {
       pdfPageCount: 0,
       pdfUrl: null,
       pdfPageAssignments: {},
+      // Restore template editor state if we came from that path
+      editorState: s.lastEditorState ?? null,
+      lastEditorState: null,
     }))
   }
 
@@ -273,6 +301,7 @@ export function WizardProvider({ children }: { children: ReactNode }) {
       selectedCell: null,
       sidePanelOpen: false,
       editorState: null,
+      lastEditorState: null,
       sheetAssignments: {},
     })
   }
@@ -289,6 +318,7 @@ export function WizardProvider({ children }: { children: ReactNode }) {
     setLayer1Results,
     mergeLayer1Result,
     approveStep1,
+    approveStep1FromEditor,
     setLayer2Results,
     addCorrection,
     removeCorrection,

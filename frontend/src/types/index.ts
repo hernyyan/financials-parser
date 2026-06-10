@@ -39,6 +39,8 @@ export interface WizardState {
 
   // Template editor / reconciliation state (cleared on save/cancel)
   editorState: TemplateEditorState | null
+  // Snapshot of editorState taken when proceeding to Step 2 via template editor path
+  lastEditorState: TemplateEditorState | null
 }
 
 export interface StepCRow {

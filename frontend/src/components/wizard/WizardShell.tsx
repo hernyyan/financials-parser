@@ -11,7 +11,7 @@ export default function WizardShell() {
     editorState,
     setEditorState,
     mergeLayer1Result,
-    approveStep1,
+    approveStep1FromEditor,
     sessionId,
     companyId,
     reportingPeriod,
@@ -43,8 +43,7 @@ export default function WizardShell() {
             Object.entries(sheetAssignments).forEach(([k, v]) => { if (v) toSave[k] = v })
             if (Object.keys(toSave).length > 0) saveTabPreferences(companyId, toSave).catch(() => {})
           }
-          setEditorState(null)
-          approveStep1()
+          approveStep1FromEditor()
         }}
         onCancel={() => setEditorState(null)}
       />
