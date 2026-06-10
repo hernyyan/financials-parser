@@ -212,3 +212,14 @@ export function usedSourceRowSet(nodes: TNode[]): Set<number> {
   }
   return s
 }
+
+/** Count how many times each source_row appears in the tree (for multi-use badge). */
+export function countSourceRowUsages(nodes: TNode[]): Map<number, number> {
+  const map = new Map<number, number>()
+  for (const [node] of walkTree(nodes)) {
+    if (node.source_row > 0) {
+      map.set(node.source_row, (map.get(node.source_row) ?? 0) + 1)
+    }
+  }
+  return map
+}

@@ -192,15 +192,17 @@ export function useDragDrop(
       : [d.sourceRow]
 
     const tree = cloneTree(rows)
-    const alreadyUsed = buildUsedSet(tree) // track within this batch to avoid duplicates
+    // Prevent the same row from being added twice in a single batch drag,
+    // but allow rows already in the template (multi-use is intentional).
+    const addedInThisBatch = new Set<number>()
     const nodesToAdd: TNode[] = []
 
     for (const rowIndex of rowsToAdd) {
-      if (alreadyUsed.has(rowIndex)) continue
+      if (addedInThisBatch.has(rowIndex)) continue
       const sr = sourceRows.find(r => r.row_index === rowIndex)
       if (!sr) continue
       nodesToAdd.push({ id: nextId(), source_row: sr.row_index, label: sr.label, operator: null, expanded: false, children: [] })
-      alreadyUsed.add(rowIndex)
+      addedInThisBatch.add(rowIndex)
     }
 
     if (nodesToAdd.length > 0) {

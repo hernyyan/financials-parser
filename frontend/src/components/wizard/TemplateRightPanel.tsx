@@ -51,6 +51,10 @@ export interface TemplateRightPanelProps {
   sourceRows?: StepCRow[]
   hoveredRow: number | null
   onHoverChange: (row: number | null) => void
+  /** When set, right-panel nodes highlight only the specific node with this id (not all nodes
+   *  sharing the same source_row). Used when multiple nodes share a source_row. */
+  hoveredNodeId?: number | null
+  onNodeHoverChange?: (nodeId: number | null) => void
   selection: SelectionState
   onSelectionChange: (sel: SelectionState) => void
   dragOptions?: UseDragDropOptions
@@ -105,6 +109,8 @@ const TemplateRightPanel = forwardRef<TemplateRightPanelHandle, TemplateRightPan
   sourceRows = [],
   hoveredRow,
   onHoverChange,
+  hoveredNodeId = null,
+  onNodeHoverChange,
   selection,
   onSelectionChange,
   dragOptions = {},
@@ -196,7 +202,11 @@ const TemplateRightPanel = forwardRef<TemplateRightPanelHandle, TemplateRightPan
     const pKey = pathKey(path)
     const status = rowStatus(node)
     const isEq = node.operator === '='
-    const isHovered = !hasSelection && hoveredRow === node.source_row
+    // If hoveredNodeId is set (right-panel hover), only highlight this specific node.
+    // If hoveredRow is set (left-panel hover), highlight all nodes with matching source_row.
+    const isHovered = !hasSelection && (
+      hoveredNodeId !== null ? hoveredNodeId === node.id : hoveredRow === node.source_row
+    )
     const isSelected = selection.selectedPaths.has(pKey)
     const dropBefore = dropZone?.zone === 'before' && pathKey(dropZone.path) === pKey
     const dropAfter = dropZone?.zone === 'after' && pathKey(dropZone.path) === pKey
@@ -233,8 +243,8 @@ const TemplateRightPanel = forwardRef<TemplateRightPanelHandle, TemplateRightPan
           onDragEnd={resetDrag}
           onDragOver={e => onNodeDragOver(e, path, e.currentTarget as HTMLElement, status === 'renamed')}
           onDrop={e => { e.preventDefault(); e.stopPropagation(); commitDrop() }}
-          onMouseEnter={() => { if (!hasSelection) onHoverChange(node.source_row) }}
-          onMouseLeave={() => { if (!hasSelection && hoveredRow === node.source_row) onHoverChange(null) }}
+          onMouseEnter={() => { if (!hasSelection) { onHoverChange(node.source_row); onNodeHoverChange?.(node.id) } }}
+          onMouseLeave={() => { if (!hasSelection) { onHoverChange(null); onNodeHoverChange?.(null) } }}
           onClick={e => {
             // Selection handling
             onSelectionChange(handleSelectionClick(rows, path, selection, e))

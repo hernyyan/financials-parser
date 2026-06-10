@@ -31,6 +31,7 @@ import {
   EMPTY_SELECTION,
   cloneTree,
   getNodeByPath,
+  countSourceRowUsages,
 } from './templateRowTypes'
 import {
   templateToRows,
@@ -178,6 +179,9 @@ export default function TemplateConfigurationWorkflow({
       return { ...prev, [stmt]: next }
     })
   }
+
+  // Per-tab hovered node id (for right-panel hover that shouldn't highlight twins)
+  const [hoveredNodeId, setHoveredNodeId] = useState<number | null>(null)
 
   const rightPanelRef = useRef<TemplateRightPanelHandle>(null)
 
@@ -399,7 +403,9 @@ export default function TemplateConfigurationWorkflow({
               onReextract={(lbl, val) => handleReextract(activeTab, lbl, val)}
               reextracting={reextracting}
               hoveredRow={hoveredRow}
-              onHoverChange={setHoveredRow}
+              onHoverChange={r => { setHoveredRow(r); if (r === null) setHoveredNodeId(null) }}
+              hoveredNodeId={hoveredNodeId}
+              onNodeHoverChange={setHoveredNodeId}
               selection={selection}
               onSelectionChange={setSelection}
               unlockedRows={unlockedRows[activeTab] ?? new Set()}
@@ -416,8 +422,8 @@ export default function TemplateConfigurationWorkflow({
 
 function ConfigurePanel({
   config, rows, onRowsChange, stepCRows, colInfo, colEdit, onColEdit,
-  onReextract, reextracting, hoveredRow, onHoverChange, selection, onSelectionChange,
-  unlockedRows, onToggleUnlock, rightPanelRef,
+  onReextract, reextracting, hoveredRow, onHoverChange, hoveredNodeId, onNodeHoverChange,
+  selection, onSelectionChange, unlockedRows, onToggleUnlock, rightPanelRef,
 }: {
   config: TemplateStatementConfig
   rows: TNode[]
@@ -430,15 +436,17 @@ function ConfigurePanel({
   reextracting: boolean
   hoveredRow: number | null
   onHoverChange: (row: number | null) => void
+  hoveredNodeId: number | null
+  onNodeHoverChange: (id: number | null) => void
   selection: SelectionState
   onSelectionChange: (s: SelectionState) => void
   unlockedRows: Set<number>
   onToggleUnlock: (rowIndex: number) => void
   rightPanelRef: React.Ref<TemplateRightPanelHandle>
 }) {
-  const usedSet = new Set(
-    rows.flatMap(r => { const c: number[] = []; const walk = (n: TNode) => { if (n.source_row > 0) c.push(n.source_row); n.children.forEach(walk) }; walk(r); return c }),
-  )
+  // Count how many times each source_row is used (for multi-use badge)
+  const usageCount = countSourceRowUsages(rows)
+  const usedSet = new Set(usageCount.keys())
 
   // Separate anchor for left-panel shift-range — insulated from right-panel clicks
   // which contaminate the shared selection.anchorPath with path keys like "[0]".
@@ -476,11 +484,13 @@ function ConfigurePanel({
             {stepCRows.map(sr => {
               const isEmpty = !sr.label
               const isTitleRow = Boolean(sr.label) && sr.value === null && !unlockedRows.has(sr.row_index)
-              const isUsed = usedSet.has(sr.row_index)
+              const useCount = usageCount.get(sr.row_index) ?? 0
+              const isUsed = useCount > 0
               const srcKey = `src:${sr.row_index}`
               const isHovered = !selection.selectedPaths.size && hoveredRow === sr.row_index
               const isSelected = selection.selectedPaths.has(srcKey)
-              const isDraggable = !isEmpty && !isTitleRow && !isUsed
+              // Used rows remain draggable — multi-use is intentional
+              const isDraggable = !isEmpty && !isTitleRow
               const isUnlockable = Boolean(sr.label) && sr.value === null && !isUsed // show toggle
               return (
                 <div key={sr.row_index} draggable={isDraggable}
@@ -517,7 +527,7 @@ function ConfigurePanel({
                     }
                   }}
                   className={`grid grid-cols-[36px_1fr_80px] items-center px-2 min-h-[26px] border-b border-slate-50 transition-colors
-                    ${isDraggable ? 'cursor-grab hover:bg-blue-50' : isUsed ? 'opacity-30' : ''}
+                    ${isDraggable ? `cursor-grab hover:bg-blue-50 ${isUsed ? 'opacity-50' : ''}` : ''}
                     ${isHovered ? '!bg-yellow-100' : ''} ${isSelected ? '!bg-blue-100 border-l-2 border-blue-500' : ''}
                   `}
                 >
@@ -527,6 +537,12 @@ function ConfigurePanel({
                     {sr.label || ' '}
                   </span>
                   <span className="flex items-center justify-end pr-1 gap-1">
+                    {/* Multi-use count badge — shown when row is used 2+ times */}
+                    {useCount >= 2 && (
+                      <span className="text-[9px] font-bold text-blue-600 bg-blue-50 border border-blue-200 rounded px-1 leading-none py-0.5" title={`Used ${useCount} times in template`}>
+                        {useCount}
+                      </span>
+                    )}
                     {sr.value != null
                       ? <span className={`text-[11px] font-mono ${sr.value < 0 ? 'text-red-600' : 'text-slate-500'}`}>{fmtVal(sr.value)}</span>
                       : isUnlockable
@@ -548,6 +564,7 @@ function ConfigurePanel({
         {/* RIGHT — template panel */}
         <TemplateRightPanel ref={rightPanelRef} rows={rows} onRowsChange={onRowsChange}
           sourceRows={stepCRows} hoveredRow={hoveredRow} onHoverChange={onHoverChange}
+          hoveredNodeId={hoveredNodeId} onNodeHoverChange={onNodeHoverChange}
           selection={selection} onSelectionChange={onSelectionChange} dragOptions={{}} />
       </div>
     </div>
@@ -623,7 +640,7 @@ function ReconciliationPanel({
                   onMouseLeave={() => { if (!selection.selectedPaths.size && hoveredRow === sr.row_index) onHoverChange(null) }}
                   className={`grid grid-cols-[36px_1fr_72px] items-center px-2 min-h-[26px] border-b border-slate-50 select-none transition-colors
                     ${isAdded ? 'bg-green-50' : isRenamed ? 'bg-amber-50' : ''}
-                    ${isDraggable ? (!isAdded && !isRenamed ? 'cursor-grab hover:bg-blue-50' : 'cursor-grab') : isUsed ? 'opacity-30' : ''}
+                    ${isDraggable ? (!isAdded && !isRenamed ? 'cursor-grab hover:bg-blue-50' : 'cursor-grab') : isUsed ? 'opacity-50' : ''}
                     ${isHovered ? '!bg-yellow-100' : ''}
                   `}
                 >
