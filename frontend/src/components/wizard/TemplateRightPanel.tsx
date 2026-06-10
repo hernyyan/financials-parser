@@ -10,7 +10,7 @@
  *   - LR-specific coloring via optional rowStatus() prop
  */
 import { useState, useImperativeHandle, forwardRef } from 'react'
-import { LogOut } from 'lucide-react'
+import { LogOut, Eye, EyeOff } from 'lucide-react'
 import type { StepCRow } from '../../types'
 import {
   type TNode,
@@ -196,9 +196,25 @@ const TemplateRightPanel = forwardRef<TemplateRightPanelHandle, TemplateRightPan
     onRowsChange(decoupleChildren(rows, path))
   }
 
+  function toggleHidden(path: number[]) {
+    function toggle(nodes: TNode[], remaining: number[]): TNode[] {
+      return nodes.map((n, i) => {
+        if (i !== remaining[0]) return n
+        if (remaining.length === 1) {
+          const nowHidden = !n.hidden
+          // Cascade hidden state to all descendants
+          const cascade = (nd: TNode): TNode => ({ ...nd, hidden: nowHidden, children: nd.children.map(cascade) })
+          return cascade(n)
+        }
+        return { ...n, children: toggle(n.children, remaining.slice(1)) }
+      })
+    }
+    onRowsChange(toggle(rows, path))
+  }
+
   // ── Rendering ─────────────────────────────────────────────────────────────
 
-  function renderNode(node: TNode, path: number[], depth: number): React.ReactNode {
+  function renderNode(node: TNode, path: number[], depth: number, ancestorHidden = false): React.ReactNode {
     const pKey = pathKey(path)
     const status = rowStatus(node)
     const isEq = node.operator === '='
@@ -214,9 +230,12 @@ const TemplateRightPanel = forwardRef<TemplateRightPanelHandle, TemplateRightPan
     const isRenameTarget = dropZone?.zone === 'rename-confirm' && pathKey(dropZone.path) === pKey
     const hasChildren = node.children.length > 0
     const indentPx = 12 + depth * 16
+    const isHiddenInStep2 = node.hidden === true
+    // A child's eye is disabled if any ancestor is already hidden
+    const eyeDisabled = ancestorHidden
 
     const baseRowCls = [
-      'grid grid-cols-[40px_52px_1fr_26px_26px_26px] items-center pr-3 min-h-[30px] border transition-colors select-none cursor-default',
+      'grid grid-cols-[40px_52px_1fr_26px_26px_26px_26px] items-center pr-3 min-h-[30px] border transition-colors select-none cursor-default',
       isEq && status === 'normal' ? 'bg-blue-50 border-blue-200 my-0.5 font-semibold' : STATUS_ROW_CLS[status],
       isHovered ? '!bg-yellow-100' : '',
       isSelected ? '!bg-blue-100 !border-l-2 !border-blue-500' : '',
@@ -290,6 +309,19 @@ const TemplateRightPanel = forwardRef<TemplateRightPanelHandle, TemplateRightPan
             {node.expanded ? '▾' : '▸'}
           </button>
 
+          {/* Eye — toggle Step 2 visibility */}
+          <button
+            className={`no-drag flex items-center justify-center w-5 h-5 rounded transition-colors ${
+              eyeDisabled ? 'opacity-30 cursor-default' :
+              isHiddenInStep2 ? 'text-amber-500 hover:bg-amber-50' : 'text-slate-300 hover:text-slate-500 hover:bg-slate-100'
+            }`}
+            title={eyeDisabled ? 'Unhide parent row first' : isHiddenInStep2 ? 'Hidden in Step 2 — click to show' : 'Visible in Step 2 — click to hide'}
+            onMouseDown={e => e.stopPropagation()}
+            onClick={e => { e.stopPropagation(); if (!eyeDisabled) toggleHidden(path) }}
+          >
+            {isHiddenInStep2 ? <EyeOff className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
+          </button>
+
           {/* Delete button */}
           <button
             className="no-drag flex items-center justify-center w-5 h-5 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded text-base transition-colors"
@@ -309,7 +341,7 @@ const TemplateRightPanel = forwardRef<TemplateRightPanelHandle, TemplateRightPan
           return (
             <div key={child.id}>
               <div className={`h-0.5 rounded mx-3 ${cdBefore ? 'bg-blue-500' : 'bg-transparent'}`} />
-              {renderNode(child, childPath, depth + 1)}
+              {renderNode(child, childPath, depth + 1, ancestorHidden || isHiddenInStep2)}
               <div className={`h-0.5 rounded mx-3 ${cdAfter ? 'bg-blue-500' : 'bg-transparent'}`} />
             </div>
           )
@@ -335,8 +367,8 @@ const TemplateRightPanel = forwardRef<TemplateRightPanelHandle, TemplateRightPan
       }}
     >
       {/* Column headers */}
-      <div className="flex-shrink-0 grid grid-cols-[40px_52px_1fr_26px_26px_26px] px-3 py-1.5 bg-slate-50 border-b border-slate-200 text-[10px] font-semibold text-slate-400 uppercase tracking-wider">
-        <span>Row</span><span>Op</span><span>Label</span><span></span><span></span><span></span>
+      <div className="flex-shrink-0 grid grid-cols-[40px_52px_1fr_26px_26px_26px_26px] px-3 py-1.5 bg-slate-50 border-b border-slate-200 text-[10px] font-semibold text-slate-400 uppercase tracking-wider">
+        <span>Row</span><span>Op</span><span>Label</span><span></span><span></span><span></span><span></span>
       </div>
 
       <div className="rows-list flex-1 overflow-y-auto pb-6">

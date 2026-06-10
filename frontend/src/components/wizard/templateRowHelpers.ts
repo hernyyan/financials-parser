@@ -126,6 +126,7 @@ export function templateToRows(
         label: r.label,
         operator: (r.operator ?? null) as Operator,
         expanded: r.expanded ?? false,
+        hidden: (r as any).hidden ?? false,
         children: (r.children ?? []).map(convertV2),
       }
     }
@@ -154,6 +155,7 @@ function nodeToTemplateRow(n: TNode): Layer1TemplateRow {
     label: n.label,
     operator: n.operator,
     expanded: n.expanded,
+    hidden: n.hidden,
     children: n.children.map(nodeToTemplateRow),
   } as unknown as Layer1TemplateRow
 }

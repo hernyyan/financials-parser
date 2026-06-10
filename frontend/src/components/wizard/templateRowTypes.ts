@@ -16,6 +16,9 @@ export interface TNode {
   operator: Operator
   expanded: boolean
   children: TNode[]
+  /** When true, this row is hidden in Step 2's source display. Default: false (visible).
+   *  Children are effectively hidden whenever any ancestor has hidden=true. */
+  hidden?: boolean
   // Reconciliation-only fields (undefined in normal configure editor)
   isDead?: boolean
   isRenamed?: boolean

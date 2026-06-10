@@ -33,13 +33,17 @@ function formatSourceValue(value: number): string {
   return value < 0 ? `(${formatted})` : formatted
 }
 
-/** Recursively flatten a structured rows tree into DataTable rows, preserving hierarchy via indentLevel and bold for sum rows. */
+/** Recursively flatten a structured rows tree into DataTable rows.
+ *  Rows with hidden=true (or with a hidden ancestor) are excluded from the output. */
 function flattenStructuredRows(
   rows: Layer1TemplateRow[],
   depth: number,
   out: React.ComponentProps<typeof DataTable>['rows'],
+  ancestorHidden = false,
 ): void {
   for (const row of rows) {
+    const isHidden = ancestorHidden || (row as any).hidden === true
+    if (isHidden) continue // skip hidden rows and their entire subtree
     out.push({
       label: row.label,
       value: row.value != null ? formatSourceValue(row.value) : null,
@@ -47,7 +51,7 @@ function flattenStructuredRows(
       indentLevel: depth,
     })
     if (row.children?.length) {
-      flattenStructuredRows(row.children, depth + 1, out)
+      flattenStructuredRows(row.children, depth + 1, out, false)
     }
   }
 }
