@@ -26,7 +26,7 @@ export default function WizardShell() {
         companyId={companyId!}
         sessionId={sessionId!}
         reportingPeriod={reportingPeriod}
-        onSaved={(results) => {
+        onSaved={(results, updatedStatements) => {
           Object.entries(results).forEach(([stmtType, result]) => {
             mergeLayer1Result(stmtType, {
               lineItems: result.lineItems,
@@ -43,7 +43,7 @@ export default function WizardShell() {
             Object.entries(sheetAssignments).forEach(([k, v]) => { if (v) toSave[k] = v })
             if (Object.keys(toSave).length > 0) saveTabPreferences(companyId, toSave).catch(() => {})
           }
-          approveStep1FromEditor()
+          approveStep1FromEditor({ statements: updatedStatements })
         }}
         onCancel={() => setEditorState(null)}
       />

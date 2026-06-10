@@ -18,7 +18,7 @@ interface WizardContextType extends WizardState {
   setLayer1Results: (results: Record<string, Layer1Result>) => void
   mergeLayer1Result: (statementType: string, result: Layer1Result) => void
   approveStep1: () => void
-  approveStep1FromEditor: () => void
+  approveStep1FromEditor: (editorSnapshot: TemplateEditorState) => void
   setLayer2Results: (results: Record<string, Layer2Result>) => void
   addCorrection: (correction: Correction) => void
   removeCorrection: (fieldName: string) => void
@@ -134,8 +134,9 @@ export function WizardProvider({ children }: { children: ReactNode }) {
   }
 
   // Called when the user proceeds to Step 2 via the template editor's "Save All & Extract".
-  // Snapshots the current editorState so the back button in Step 2 can restore it exactly.
-  function approveStep1FromEditor() {
+  // Accepts the fully-updated editor snapshot (with hidden flags, col changes, etc.) so the
+  // back button in Step 2 can restore the exact state the user left.
+  function approveStep1FromEditor(editorSnapshot: TemplateEditorState) {
     setState((s) => {
       if (s.companyName && s.reportingPeriod && Object.keys(s.layer1Results).length > 0) {
         appendToCompanyDataset(
@@ -150,7 +151,7 @@ export function WizardProvider({ children }: { children: ReactNode }) {
         ...s,
         step1Approved: true,
         currentStep: 2,
-        lastEditorState: s.editorState,
+        lastEditorState: editorSnapshot,
         editorState: null,
       }
     })

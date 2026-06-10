@@ -49,7 +49,7 @@ interface Props {
   sessionId: string
   reportingPeriod: string
   sharedTab?: boolean
-  onSaved: (results: Record<string, Layer1Response>) => void
+  onSaved: (results: Record<string, Layer1Response>, updatedStatements: TemplateStatementConfig[]) => void
   onCancel: () => void
 }
 
@@ -318,7 +318,16 @@ export default function TemplateConfigurationWorkflow({
         results[config.statementType] = result
       }))
 
-      onSaved(results)
+      // Build updated statements so the caller can snapshot exact editor state
+      // (including hidden flags and any col-letter changes made during this session).
+      const updatedStatements: TemplateStatementConfig[] = statements.map(config => ({
+        ...config,
+        existingTemplate: rowsToTemplate(allRows[config.statementType] ?? [], config.statementType),
+        labelColLetter: colInfo[config.statementType]?.label ?? config.labelColLetter,
+        valueColLetter: colInfo[config.statementType]?.value ?? config.valueColLetter,
+        stepCRows: allStepCRows[config.statementType] ?? config.stepCRows,
+      }))
+      onSaved(results, updatedStatements)
     } catch (e: any) {
       setError(e.message ?? 'Failed to save templates')
     } finally {

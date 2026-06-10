@@ -472,6 +472,7 @@ class Layer1Service:
                     "operator": tr.get("operator"),
                     "source_row": source_row,
                     "value": value,
+                    "hidden": tr.get("hidden", False),
                     "children": _build_structured_rows(tr.get("children", [])),
                 }
                 result.append(row_out)
