@@ -69,7 +69,7 @@ export async function uploadFile(
 // ── Async job polling ─────────────────────────────────────────────────────────
 
 const POLL_INTERVAL_MS = 3000
-const POLL_TIMEOUT_MS = 10 * 60 * 1000  // 10 min
+const POLL_TIMEOUT_MS = 12 * 60 * 1000  // 12 min
 
 interface _JobStartResponse { job_id: string }
 interface _JobStatusResponse {
