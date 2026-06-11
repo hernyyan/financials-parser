@@ -3,7 +3,7 @@
  * and LayoutReconciliation.
  *
  * Features:
- *   - Recursive rendering to arbitrary depth (capped at MAX_DEPTH = 3)
+ *   - Recursive rendering to arbitrary depth (unlimited nesting)
  *   - Multi-select (shift-click range, ctrl/cmd-click toggle)
  *   - Multi-level nesting via drag-onto with depth validation
  *   - Decouple (eject) button on parent rows

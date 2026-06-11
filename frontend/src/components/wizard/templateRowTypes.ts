@@ -1,8 +1,7 @@
 /**
  * Core types and depth utilities shared by TemplateEditor and LayoutReconciliation.
  *
- * TNode is a recursive type — TRow and TChild were merged into one unified type
- * that can appear at any depth. MAX_DEPTH = 3 (root → child → grandchild).
+ * TNode is a recursive type that can appear at any depth — nesting is unlimited.
  */
 
 // ── Core types ────────────────────────────────────────────────────────────────
@@ -25,7 +24,7 @@ export interface TNode {
   pendingRenameFrom?: string
 }
 
-export const MAX_DEPTH = 3
+export const MAX_DEPTH = Infinity
 
 // ── Drag / drop types ─────────────────────────────────────────────────────────
 
