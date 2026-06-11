@@ -37,6 +37,9 @@ _DATASET_SHEET = "Financials"
 class LayoutRow(BaseModel):
     row_index: int
     label: str
+    bold: Optional[bool] = None
+    italic: Optional[bool] = None
+    indent: Optional[int] = None
 
 
 class CheckLayoutRequest(BaseModel):
@@ -280,12 +283,17 @@ def check_layout(
             "changes": [],
         }
 
-    incoming = [{"row_index": r.row_index, "label": r.label} for r in request.layout_rows]
+    incoming = [
+        {"row_index": r.row_index, "label": r.label,
+         "bold": r.bold, "italic": r.italic, "indent": r.indent}
+        for r in request.layout_rows
+    ]
     diff = diff_layouts(stored_layout, incoming)
 
     return {
         "has_template": has_template,
         "has_layout": True,
+        "old_layout": stored_layout,  # full stored rows for left panel in reconcile editor
         **diff,
     }
 
@@ -301,7 +309,11 @@ def save_layout(
     if statement_type not in _VALID_TYPES:
         raise HTTPException(status_code=400, detail=f"Invalid statement_type: {statement_type}")
 
-    layout_rows = [{"row_index": r.row_index, "label": r.label} for r in request.layout_rows]
+    layout_rows = [
+        {"row_index": r.row_index, "label": r.label,
+         "bold": r.bold, "italic": r.italic, "indent": r.indent}
+        for r in request.layout_rows
+    ]
     _upsert_layout(company_id, statement_type, layout_rows, db)
     return {"success": True}
 

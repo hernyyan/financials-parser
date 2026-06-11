@@ -13,7 +13,6 @@
 import { useState, useRef } from 'react'
 import type {
   Layer1Response,
-  SourceLayoutRow,
   TemplateStatementConfig,
   StepCRow,
 } from '../../types'
@@ -282,7 +281,7 @@ export default function TemplateConfigurationWorkflow({
       await Promise.all(statements.map(async config => {
         const rows = allRows[config.statementType] ?? []
         const template = rowsToTemplate(rows, config.statementType)
-        const layoutRows: SourceLayoutRow[] = (allStepCRows[config.statementType] ?? config.stepCRows).map(r => ({ row_index: r.row_index, label: r.label }))
+        const layoutRows = allStepCRows[config.statementType] ?? config.stepCRows
 
         let renames: Array<{ old_label: string; new_label: string }> = []
         let additions: string[] = []

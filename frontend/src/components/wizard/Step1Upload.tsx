@@ -21,7 +21,7 @@ import {
   extractSourceRows,
 } from '../../api/client'
 import { API_BASE } from '../../api/client'
-import type { Company, CompanyContextStatus, Layer1Result, Layer1Template, Layer1TemplateRow, Layer2Result, SourceLayoutRow } from '../../types'
+import type { Company, CompanyContextStatus, Layer1Result, Layer1Template, Layer1TemplateRow, Layer2Result } from '../../types'
 import {
   Upload,
   Search,
@@ -702,9 +702,8 @@ export default function Step1Upload() {
           // Use full-fidelity source rows returned by the backend
           const stepCRows = isResult.sourceRows ?? []
 
-          // Build layout rows (all Step C rows including any we can infer from extractionDebug)
-          // Use stepCRows as the layout — these are the rows Python extracted
-          const layoutRows: SourceLayoutRow[] = stepCRows.map(r => ({ row_index: r.row_index, label: r.label }))
+          // Pass full StepCRow data — backend saves bold/italic/indent for left panel rendering
+          const layoutRows = stepCRows
 
           // Auto-save BS/CFS templates silently if no existing template
           const check = isResult.templateCheck
@@ -745,7 +744,7 @@ export default function Step1Upload() {
                 existingTemplate: existingTemplate!,
                 labelColLetter: isResult.labelColLetter, valueColLetter: isResult.valueColLetter,
                 panelMode: 'reconcile',
-                reconcileData: { diff: layoutCheck.changes, oldLayout: [] },
+                reconcileData: { diff: layoutCheck.changes, oldLayout: (layoutCheck.old_layout ?? []) as any },
               }],
             })
             return
@@ -813,8 +812,7 @@ export default function Step1Upload() {
         const stepCRows = sr.sourceRows ?? []
 
         if (companyId) {
-          const layoutRows = stepCRows.map(r => ({ row_index: r.row_index, label: r.label }))
-          const layoutCheck = await checkLayout(companyId, stmtType, layoutRows).catch(() => null)
+          const layoutCheck = await checkLayout(companyId, stmtType, stepCRows).catch(() => null)
           if (layoutCheck?.has_real_diff) {
             return {
               statementType: stmtType, sheetName, stepCRows, existingTemplate,

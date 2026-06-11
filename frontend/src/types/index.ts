@@ -59,7 +59,7 @@ export interface StepCRow {
 // Per-statement reconcile data (populated only when panelMode === 'reconcile')
 export interface StatementReconcileData {
   diff: LayoutDiffChange[]
-  oldLayout: SourceLayoutRow[]
+  oldLayout: StepCRow[]  // full row metadata so the left panel renders with formatting
 }
 
 // One statement's worth of data for the template configuration workflow.
@@ -122,6 +122,7 @@ export interface LayoutCheckResult {
   has_real_diff: boolean
   silent_update: boolean
   changes: LayoutDiffChange[]
+  old_layout?: StepCRow[]  // full stored layout rows returned by backend (snake_case from API)
 }
 
 export interface WaterfallStep {

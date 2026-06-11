@@ -17,7 +17,6 @@ import type {
   ExistingReviewCheck,
   ContinuedReview,
   Layer1Template,
-  SourceLayoutRow,
   LayoutCheckResult,
   StepCRow,
 } from '../types'
@@ -400,14 +399,19 @@ export async function deleteLayer1Template(
 export async function checkLayout(
   companyId: number,
   statementType: string,
-  layoutRows: SourceLayoutRow[],
+  layoutRows: StepCRow[],
 ): Promise<LayoutCheckResult> {
   const res = await fetch(
     `${API_BASE}/companies/${companyId}/layer1-templates/${statementType}/check-layout`,
     {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ layout_rows: layoutRows }),
+      body: JSON.stringify({
+        layout_rows: layoutRows.map(r => ({
+          row_index: r.row_index, label: r.label,
+          bold: r.bold, italic: r.italic, indent: r.indent,
+        })),
+      }),
     },
   )
   return handleResponse<LayoutCheckResult>(res)
@@ -417,14 +421,19 @@ export async function checkLayout(
 export async function saveLayout(
   companyId: number,
   statementType: string,
-  layoutRows: SourceLayoutRow[],
+  layoutRows: StepCRow[],
 ): Promise<void> {
   const res = await fetch(
     `${API_BASE}/companies/${companyId}/layer1-templates/${statementType}/save-layout`,
     {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ layout_rows: layoutRows }),
+      body: JSON.stringify({
+        layout_rows: layoutRows.map(r => ({
+          row_index: r.row_index, label: r.label,
+          bold: r.bold, italic: r.italic, indent: r.indent,
+        })),
+      }),
     },
   )
   await handleResponse<{ success: boolean }>(res)

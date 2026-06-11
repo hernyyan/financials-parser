@@ -6,13 +6,14 @@ import TemplateFieldList from './TemplateFieldList'
 import RuleWriter from './RuleWriter'
 import CompanyDataTable from './CompanyDataTable'
 import Layer1TemplatesTab from './Layer1TemplatesTab'
+import SourceLayoutsTab from './SourceLayoutsTab'
 
 interface Props {
   companyId: number
   onBack: () => void
 }
 
-type Tab = 'data' | 'corrections' | 'datasets' | 'l1_templates'
+type Tab = 'data' | 'corrections' | 'datasets' | 'l1_templates' | 'source_layouts'
 
 function formatVal(v: unknown): string {
   if (v === null || v === undefined) return '—'
@@ -92,6 +93,7 @@ export default function CompanyDetail({ companyId, onBack }: Props) {
     { key: 'corrections', label: `Corrections (${corrections.length})` },
     { key: 'datasets', label: 'Datasets' },
     { key: 'l1_templates', label: 'L1 Templates' },
+    { key: 'source_layouts', label: 'Source Layouts' },
   ]
 
   return (
@@ -268,6 +270,10 @@ export default function CompanyDetail({ companyId, onBack }: Props) {
 
           {activeTab === 'l1_templates' && (
             <Layer1TemplatesTab companyId={companyId} />
+          )}
+
+          {activeTab === 'source_layouts' && (
+            <SourceLayoutsTab companyId={companyId} />
           )}
         </div>
       </div>
