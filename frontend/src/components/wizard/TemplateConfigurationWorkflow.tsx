@@ -604,8 +604,10 @@ function ReconciliationPanel({
       <div className="flex w-full max-w-[1440px] overflow-hidden">
         {/* LEFT — old layout (read-only) */}
         <div className="flex flex-col border-r border-slate-200 bg-white overflow-hidden" style={{ width: '22%' }}>
-          <div className="flex-shrink-0 px-3 py-1.5 bg-slate-50 border-b border-slate-200">
+          <div className="flex-shrink-0 px-3 py-1.5 bg-slate-50 border-b border-slate-200 flex items-center gap-2">
             <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Previous Layout</span>
+            {removedRowIndices.size > 0 && <span className="text-[10px] bg-red-100 text-red-600 rounded-full px-1.5 py-0.5 font-medium">{removedRowIndices.size} removed</span>}
+            {renamedOldRowIndices.size > 0 && <span className="text-[10px] bg-amber-100 text-amber-600 rounded-full px-1.5 py-0.5 font-medium">{renamedOldRowIndices.size} renamed</span>}
           </div>
           <div className="flex-shrink-0 grid grid-cols-[36px_1fr] px-2 py-1 bg-slate-50 border-b border-slate-200 text-[10px] font-semibold text-slate-400 uppercase tracking-wider">
             <span></span><span>Label</span>
@@ -614,10 +616,18 @@ function ReconciliationPanel({
             {oldLayout.map(r => {
               const isRemoved = removedRowIndices.has(r.row_index)
               const isRenamed = renamedOldRowIndices.has(r.row_index)
+              const indentPx = ((r as any).indent ?? 0) * 10
               return (
                 <div key={r.row_index} className={`grid grid-cols-[36px_1fr] items-center px-2 min-h-[26px] border-b border-slate-50 select-none ${isRemoved ? 'bg-red-50' : isRenamed ? 'bg-amber-50' : ''}`}>
                   <span className="text-[10px] text-slate-400 font-mono text-center">{r.row_index}</span>
-                  <span className={`text-xs px-1.5 truncate ${isRemoved ? 'text-red-600 line-through' : isRenamed ? 'text-amber-700' : !r.label ? 'text-transparent' : 'text-slate-600'}`}>{r.label || ' '}</span>
+                  <span
+                    className={`text-xs truncate ${isRemoved ? 'text-red-600 line-through' : isRenamed ? 'text-amber-700' : !r.label ? 'text-transparent' : 'text-slate-600'}`}
+                    style={{
+                      paddingLeft: 4 + indentPx,
+                      fontWeight: (r as any).bold ? 600 : isRenamed ? 500 : 400,
+                      fontStyle: (r as any).italic ? 'italic' : 'normal',
+                    }}
+                  >{r.label || ' '}</span>
                 </div>
               )
             })}
@@ -653,7 +663,14 @@ function ReconciliationPanel({
                   `}
                 >
                   <span className="text-[10px] text-slate-400 font-mono text-center">{sr.row_index}</span>
-                  <span className={`text-xs px-1.5 truncate ${isAdded ? 'text-green-700 font-medium' : isRenamed ? 'text-amber-700 font-medium' : !sr.label ? 'text-transparent' : 'text-slate-600'}`}>{sr.label || ' '}</span>
+                  <span
+                    className={`text-xs truncate ${isAdded ? 'text-green-700' : isRenamed ? 'text-amber-700' : !sr.label ? 'text-transparent' : 'text-slate-600'}`}
+                    style={{
+                      paddingLeft: 4 + ((sr.indent ?? 0) * 10),
+                      fontWeight: sr.bold || isAdded || isRenamed ? 600 : 400,
+                      fontStyle: sr.italic ? 'italic' : 'normal',
+                    }}
+                  >{sr.label || ' '}</span>
                   <span className={`text-[11px] font-mono text-right pr-1 ${sr.value != null && sr.value < 0 ? 'text-red-500' : 'text-slate-500'}`}>{fmtVal(sr.value)}</span>
                 </div>
               )
