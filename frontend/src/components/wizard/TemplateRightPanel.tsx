@@ -9,7 +9,7 @@
  *   - Decouple (eject) button on parent rows
  *   - LR-specific coloring via optional rowStatus() prop
  */
-import { useState, useImperativeHandle, forwardRef } from 'react'
+import { useState, useEffect, useRef, useImperativeHandle, forwardRef } from 'react'
 import { LogOut, Eye, EyeOff } from 'lucide-react'
 import type { StepCRow } from '../../types'
 import {
@@ -138,6 +138,45 @@ const TemplateRightPanel = forwardRef<TemplateRightPanelHandle, TemplateRightPan
     startSourceDrag: (e, sourceRow) => onSourceDragStart(e, sourceRow),
     startNewSourceDrag: (e, sourceRow) => onNewSourceDragStart(e, sourceRow),
   }))
+
+  // Auto-scroll the rows container when dragging near the top/bottom edge.
+  // Uses a capture-phase native listener so it fires even when child nodes
+  // call stopPropagation on their synthetic dragover events.
+  const scrollRef = useRef<HTMLDivElement>(null)
+  const scrollRafRef = useRef<number | null>(null)
+  useEffect(() => {
+    const el = scrollRef.current
+    if (!el) return
+    const ZONE = 80
+    const MAX_SPEED = 14
+
+    function handleDragOver(e: DragEvent) {
+      const rect = el!.getBoundingClientRect()
+      if (scrollRafRef.current !== null) { cancelAnimationFrame(scrollRafRef.current); scrollRafRef.current = null }
+      const y = e.clientY
+      if (y < rect.top + ZONE) {
+        const speed = Math.ceil((1 - (y - rect.top) / ZONE) * MAX_SPEED)
+        const tick = () => { el!.scrollTop -= speed; scrollRafRef.current = requestAnimationFrame(tick) }
+        scrollRafRef.current = requestAnimationFrame(tick)
+      } else if (y > rect.bottom - ZONE) {
+        const speed = Math.ceil((1 - (rect.bottom - y) / ZONE) * MAX_SPEED)
+        const tick = () => { el!.scrollTop += speed; scrollRafRef.current = requestAnimationFrame(tick) }
+        scrollRafRef.current = requestAnimationFrame(tick)
+      }
+    }
+    function stopScroll() {
+      if (scrollRafRef.current !== null) { cancelAnimationFrame(scrollRafRef.current); scrollRafRef.current = null }
+    }
+    el.addEventListener('dragover', handleDragOver, true)
+    el.addEventListener('dragleave', stopScroll)
+    el.addEventListener('drop', stopScroll)
+    return () => {
+      el.removeEventListener('dragover', handleDragOver, true)
+      el.removeEventListener('dragleave', stopScroll)
+      el.removeEventListener('drop', stopScroll)
+      stopScroll()
+    }
+  }, [])
 
   const hasSelection = selection.selectedPaths.size > 0
   const usedRows = usedSourceRowSet(rows)
@@ -371,7 +410,7 @@ const TemplateRightPanel = forwardRef<TemplateRightPanelHandle, TemplateRightPan
         <span>Row</span><span>Op</span><span>Label</span><span></span><span></span><span></span><span></span>
       </div>
 
-      <div className="rows-list flex-1 overflow-y-auto pb-6">
+      <div ref={scrollRef} className="rows-list flex-1 overflow-y-auto pb-6">
         {rows.length === 0 ? (
           <div
             className={`mx-4 mt-5 border-2 border-dashed rounded-lg p-8 text-center text-xs leading-relaxed transition-colors ${dropZone ? 'border-blue-400 bg-blue-50 text-blue-500' : 'border-slate-300 text-slate-400'}`}
