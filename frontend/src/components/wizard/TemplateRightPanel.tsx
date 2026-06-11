@@ -125,6 +125,7 @@ const TemplateRightPanel = forwardRef<TemplateRightPanelHandle, TemplateRightPan
     commitDrop,
     onSourceDragStart,
     onNewSourceDragStart,
+    onSectionBreakDragStart,
     onNodeDragStart,
     onNodeDragOver,
     onChildNodeDragOver,
@@ -255,6 +256,37 @@ const TemplateRightPanel = forwardRef<TemplateRightPanelHandle, TemplateRightPan
 
   function renderNode(node: TNode, path: number[], depth: number, ancestorHidden = false): React.ReactNode {
     const pKey = pathKey(path)
+
+    // ── Section break ─────────────────────────────────────────────────────────
+    if (node.isSectionBreak) {
+      const dropBefore = dropZone?.zone === 'before' && pathKey(dropZone.path) === pKey
+      const dropAfter  = dropZone?.zone === 'after'  && pathKey(dropZone.path) === pKey
+      return (
+        <div key={node.id}>
+          <div className={`h-0.5 rounded mx-3 ${dropBefore ? 'bg-blue-500' : 'bg-transparent'}`} />
+          <div
+            className="relative flex items-center mx-3 my-1 group"
+            draggable
+            onDragStart={e => { e.stopPropagation(); onNodeDragStart(e, path) }}
+            onDragOver={e => onNodeDragOver(e, path, e.currentTarget as HTMLElement)}
+            onDrop={e => { e.preventDefault(); e.stopPropagation(); commitDrop() }}
+          >
+            <div className="flex-1 border-t-2 border-dashed border-slate-300 group-hover:border-slate-400 transition-colors" />
+            <span className="mx-2 text-[10px] font-semibold text-slate-400 group-hover:text-slate-500 uppercase tracking-widest whitespace-nowrap select-none">
+              Section Break
+            </span>
+            <div className="flex-1 border-t-2 border-dashed border-slate-300 group-hover:border-slate-400 transition-colors" />
+            <button
+              className="ml-2 flex items-center justify-center w-5 h-5 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded text-base transition-colors"
+              onMouseDown={e => e.stopPropagation()}
+              onClick={e => { e.stopPropagation(); deleteAtPath(path) }}
+            >×</button>
+          </div>
+          <div className={`h-0.5 rounded mx-3 ${dropAfter ? 'bg-blue-500' : 'bg-transparent'}`} />
+        </div>
+      )
+    }
+
     const status = rowStatus(node)
     const isEq = node.operator === '='
     // If hoveredNodeId is set (right-panel hover), only highlight this specific node.
@@ -405,9 +437,20 @@ const TemplateRightPanel = forwardRef<TemplateRightPanelHandle, TemplateRightPan
         }
       }}
     >
-      {/* Column headers */}
-      <div className="flex-shrink-0 grid grid-cols-[40px_52px_1fr_26px_26px_26px_26px] px-3 py-1.5 bg-slate-50 border-b border-slate-200 text-[10px] font-semibold text-slate-400 uppercase tracking-wider">
-        <span>Row</span><span>Op</span><span>Label</span><span></span><span></span><span></span><span></span>
+      {/* Column headers + section break chip */}
+      <div className="flex-shrink-0 flex items-center gap-2 px-3 py-1.5 bg-slate-50 border-b border-slate-200">
+        <div className="grid grid-cols-[40px_52px_1fr_26px_26px_26px_26px] flex-1 text-[10px] font-semibold text-slate-400 uppercase tracking-wider">
+          <span>Row</span><span>Op</span><span>Label</span><span></span><span></span><span></span><span></span>
+        </div>
+        <div
+          draggable
+          onDragStart={onSectionBreakDragStart}
+          title="Drag to insert a section break"
+          className="flex items-center gap-1 px-2 py-0.5 rounded border border-dashed border-slate-400 text-slate-500 text-[11px] cursor-grab hover:border-slate-600 hover:text-slate-700 hover:bg-slate-100 transition-colors select-none shrink-0"
+        >
+          <span className="text-[13px] leading-none">⟋</span>
+          <span>Section Break</span>
+        </div>
       </div>
 
       <div ref={scrollRef} className="rows-list flex-1 overflow-y-auto pb-6">

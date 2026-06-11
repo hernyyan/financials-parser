@@ -122,11 +122,12 @@ export function templateToRows(
     function convertV2(r: Layer1TemplateRow): TNode {
       return {
         id: r.id ?? nextId(),
-        source_row: resolve(r.label, r.source_row),
+        source_row: (r as any).isSectionBreak ? 0 : resolve(r.label, r.source_row),
         label: r.label,
         operator: (r.operator ?? null) as Operator,
         expanded: r.expanded ?? false,
         hidden: (r as any).hidden ?? false,
+        isSectionBreak: (r as any).isSectionBreak ?? false,
         children: (r.children ?? []).map(convertV2),
       }
     }
@@ -156,6 +157,7 @@ function nodeToTemplateRow(n: TNode): Layer1TemplateRow {
     operator: n.operator,
     expanded: n.expanded,
     hidden: n.hidden,
+    isSectionBreak: n.isSectionBreak,
     children: n.children.map(nodeToTemplateRow),
   } as unknown as Layer1TemplateRow
 }

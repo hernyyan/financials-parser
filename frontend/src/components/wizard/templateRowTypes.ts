@@ -18,6 +18,9 @@ export interface TNode {
   /** When true, this row is hidden in Step 2's source display. Default: false (visible).
    *  Children are effectively hidden whenever any ancestor has hidden=true. */
   hidden?: boolean
+  /** When true, this node is a visual section break — not a financial row.
+   *  Excluded from calculations, Step 2 display, and backend extraction. */
+  isSectionBreak?: boolean
   // Reconciliation-only fields (undefined in normal configure editor)
   isDead?: boolean
   isRenamed?: boolean
@@ -44,7 +47,7 @@ export interface DropZone {
 }
 
 export interface DragState {
-  type: 'source' | 'new-source' | 'node'
+  type: 'source' | 'new-source' | 'node' | 'section-break'
   /** Row index from the source sheet (for source/new-source drags) */
   sourceRow?: number
   /** Index path of the dragged node in the template tree (for node drags) */

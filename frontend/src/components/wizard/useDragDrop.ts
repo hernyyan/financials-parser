@@ -88,6 +88,11 @@ export function useDragDrop(
     e.dataTransfer.effectAllowed = 'copy'
   }
 
+  function onSectionBreakDragStart(e: React.DragEvent) {
+    dragRef.current = { type: 'section-break' }
+    e.dataTransfer.effectAllowed = 'copy'
+  }
+
   function onNodeDragStart(e: React.DragEvent, path: number[]) {
     e.stopPropagation()
     dragRef.current = { type: 'node', path }
@@ -158,6 +163,8 @@ export function useDragDrop(
 
     if (d.type === 'source' || d.type === 'new-source') {
       _commitSourceDrop(d, dz)
+    } else if (d.type === 'section-break') {
+      _commitSectionBreakDrop(dz)
     } else if (d.type === 'node' && d.path) {
       _commitNodeDrop(d, dz)
     }
@@ -208,6 +215,25 @@ export function useDragDrop(
     if (nodesToAdd.length > 0) {
       _insertNodes(tree, dz, nodesToAdd, '+')
     }
+    onRowsChange(tree)
+  }
+
+  // ── Section break drop ──────────────────────────────────────────────────────
+
+  function _commitSectionBreakDrop(dz: DropZone) {
+    const breakNode: TNode = {
+      id: nextId(),
+      source_row: 0,
+      label: '',
+      operator: null,
+      expanded: false,
+      children: [],
+      isSectionBreak: true,
+    }
+    const tree = cloneTree(rows)
+    // Section breaks only land before/after/end — never onto (no nesting)
+    const zone = dz.zone === 'onto' ? 'after' : dz.zone
+    _insertNodes(tree, { ...dz, zone }, [breakNode], null)
     onRowsChange(tree)
   }
 
@@ -347,6 +373,7 @@ export function useDragDrop(
     commitDrop,
     onSourceDragStart,
     onNewSourceDragStart,
+    onSectionBreakDragStart,
     onNodeDragStart,
     onNodeDragOver,
     onChildNodeDragOver,

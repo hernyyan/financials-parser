@@ -42,6 +42,7 @@ function flattenStructuredRows(
   ancestorHidden = false,
 ): void {
   for (const row of rows) {
+    if ((row as any).isSectionBreak) continue
     const isHidden = ancestorHidden || (row as any).hidden === true
     if (isHidden) continue // skip hidden rows and their entire subtree
     out.push({

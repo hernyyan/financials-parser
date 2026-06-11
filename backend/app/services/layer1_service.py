@@ -515,6 +515,8 @@ class Layer1Service:
         def _build_structured_rows(tmpl_rows: List[Dict]) -> List[Dict]:
             result = []
             for tr in tmpl_rows:
+                if tr.get("isSectionBreak"):
+                    continue
                 source_row = tr.get("source_row")
                 step_c = step_c_by_row_index.get(source_row) if source_row else None
                 value = step_c["value"] if step_c else None
