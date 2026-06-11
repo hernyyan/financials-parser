@@ -33,6 +33,58 @@ logger = logging.getLogger(__name__)
 
 _VALID_TYPES = {"income_statement", "balance_sheet", "cash_flow_statement"}
 
+_ROW_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "id":               {"type": "integer"},
+        "type":             {"type": "string", "enum": ["sum", "individual"]},
+        "label":            {"type": "string"},
+        "value":            {"type": ["number", "null"]},
+        "bold":             {"type": "boolean"},
+        "italic":           {"type": "boolean"},
+        "indent":           {"type": "integer"},
+        "validated":        {"type": "boolean"},
+        "validation_note":  {"type": "string"},
+        "computed_as":      {"type": "string"},
+        "children":         {"type": "array", "items": {"$ref": "#/$defs/row"}},
+    },
+    "required": ["id", "type", "label", "children"],
+}
+
+_EXTRACT_HIERARCHY_TOOL = {
+    "name": "extract_hierarchy",
+    "description": "Output the nested row hierarchy extracted from the financial statement CSV.",
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "rows": {
+                "type": "array",
+                "description": "Top-level rows of the hierarchy in CSV row_index order.",
+                "items": {"$ref": "#/$defs/row"},
+            },
+            "waterfall": {
+                "type": "array",
+                "description": "Waterfall entries (income statement only). Omit for balance sheet / CFS.",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "row_id":   {"type": "integer"},
+                        "label":    {"type": "string"},
+                        "operator": {"type": "string", "enum": ["+", "-", "="]},
+                    },
+                    "required": ["row_id", "label", "operator"],
+                },
+            },
+            "validation_flags": {
+                "type": "array",
+                "items": {"type": "string"},
+            },
+        },
+        "required": ["rows"],
+        "$defs": {"row": _ROW_SCHEMA},
+    },
+}
+
 _COLUMN_IDENTIFIER_TOOL = {
     "name": "identify_column",
     "description": (
@@ -200,14 +252,14 @@ class Layer1Service:
 
             rows_csv = rows_to_csv_with_metadata(rows)
 
-            # Step D: AI hierarchy classification
-            struct_response = self.claude.call_claude(
+            # Step D: AI hierarchy classification (forced tool use — no JSON parsing needed)
+            structured = self.claude.call_claude_with_tool(
                 "layer1_structured_extractor",
                 {"statement_type": normalized, "reporting_period": reporting_period, "rows_csv": rows_csv},
                 model,
+                _EXTRACT_HIERARCHY_TOOL,
                 max_tokens=16384,
             )
-            structured = self.claude.parse_json_response(struct_response)
             if "rows" in structured:
                 structured["rows"] = _strip_margins(structured["rows"])
                 _stamp_source_rows(structured["rows"], rows)
