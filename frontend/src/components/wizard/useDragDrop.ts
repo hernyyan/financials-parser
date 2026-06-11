@@ -254,9 +254,15 @@ export function useDragDrop(
   function _selectedPathsSorted(): number[][] {
     const all = walkAll(rows)
     const keySet = selection.selectedPaths
-    return all
+    const paths = all
       .filter(([, path]) => keySet.has(pathKey(path)))
       .map(([, path]) => path)
+    // Drop any path whose ancestor is also selected — it will travel with the ancestor.
+    // Without this filter, the descending-sort removal loop strips children from their
+    // parent before the parent is removed, causing them to land as flat siblings.
+    return paths.filter(path =>
+      !path.some((_, i) => i > 0 && keySet.has(pathKey(path.slice(0, i))))
+    )
   }
 
   // ── ID-based insert (used after removals) ─────────────────────────────────────
