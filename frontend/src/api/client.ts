@@ -186,25 +186,22 @@ export async function runLayer1Pdf(
   return result as unknown as Layer1Response
 }
 
-// POST /layer2/run
-// layer1_data is just the lineItems dict (not the full Layer1Result)
+// POST /layer2/run — sends full L1 structured tree; backend returns formula-based result
 export async function runLayer2(request: Layer2Request): Promise<Layer2Result> {
-  console.log(`[runLayer2] sending ${request.statement_type} request, layer1_data keys:`, Object.keys(request.layer1_data).length)
+  console.log(`[runLayer2] sending ${request.statement_type} request`)
   const res = await fetch(`${API_BASE}/layer2/run`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       session_id: request.session_id ?? undefined,
       statement_type: request.statement_type,
-      layer1_data: request.layer1_data,
+      layer1_structured: request.layer1_structured,
       company_id: request.company_id ?? undefined,
-      use_company_context: request.use_company_context ?? false,
     }),
   })
-  console.log(`[runLayer2] ${request.statement_type} HTTP response: status=${res.status} ok=${res.ok} content-length=${res.headers.get('content-length')}`)
+  console.log(`[runLayer2] ${request.statement_type} HTTP ${res.status}`)
   const result = await handleResponse<Layer2Result>(res)
-  console.log(`[runLayer2] ${request.statement_type} parsed result: statementType=${result?.statementType} values keys=${Object.keys(result?.values ?? {}).length} flaggedFields=${result?.flaggedFields?.length} fieldValidations keys=${Object.keys(result?.fieldValidations ?? {}).length}`)
-  console.log(`[runLayer2] ${request.statement_type} full result:`, result)
+  console.log(`[runLayer2] ${request.statement_type} formulaValues keys=${Object.keys(result?.formulaValues ?? {}).length}`)
   return result
 }
 

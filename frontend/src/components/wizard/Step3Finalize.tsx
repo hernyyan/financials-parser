@@ -51,10 +51,14 @@ interface TableRow {
 export default function Step3Finalize() {
   const {
     sessionId,
+    companyId,
     companyName,
     reportingPeriod,
+    layer1Results,
     layer2Results,
     corrections,
+    formulas,
+    manualOverrides,
     backToStep2,
     resetWizard,
   } = useWizardState()
@@ -87,21 +91,10 @@ export default function Step3Finalize() {
     ...(bsLayer2?.flaggedFields ?? []),
     ...(cfsLayer2?.flaggedFields ?? []),
   ])
-  const allValidationFails = new Set([
-    ...Object.entries(isLayer2?.validation ?? {})
-      .filter(([, v]) => v.status === 'FAIL')
-      .flatMap(([k]) =>
-        Object.entries(isLayer2?.fieldValidations ?? {})
-          .filter(([, checks]) => checks.includes(k))
-          .map(([f]) => f)
-      ),
-    ...Object.entries(bsLayer2?.validation ?? {})
-      .filter(([, v]) => v.status === 'FAIL')
-      .flatMap(([k]) =>
-        Object.entries(bsLayer2?.fieldValidations ?? {})
-          .filter(([, checks]) => checks.includes(k))
-          .map(([f]) => f)
-      ),
+  const allValidationFails = new Set<string>([
+    ...(isLayer2?.pythonFlaggedFields ?? []),
+    ...(bsLayer2?.pythonFlaggedFields ?? []),
+    ...(cfsLayer2?.pythonFlaggedFields ?? []),
   ])
 
   // Summary stats
@@ -129,7 +122,7 @@ export default function Step3Finalize() {
       if (section.header) rows.push({ label: section.header, classifiedValue: null, finalValue: null, isHeader: true })
       for (const field of section.fields) {
         const rawFinalValue = finalValues.income_statement[field] ?? null
-        const l2Value = isLayer2?.values[field] ?? null
+        const l2Value = isLayer2?.formulaValues[field] ?? null
         const corrected = correctedFieldNames.has(field)
         const flagged = allFlaggedFields.has(field) && !corrected
         const validationFail = allValidationFails.has(field) && !corrected
@@ -157,7 +150,7 @@ export default function Step3Finalize() {
           continue
         }
         const rawFinalValue = finalValues.balance_sheet[field] ?? null
-        const l2Value = bsLayer2?.values[field] ?? null
+        const l2Value = bsLayer2?.formulaValues[field] ?? null
         const corrected = correctedFieldNames.has(field)
         const flagged = allFlaggedFields.has(field) && !corrected
         const validationFail = allValidationFails.has(field) && !corrected
@@ -182,7 +175,7 @@ export default function Step3Finalize() {
         if (section.header) rows.push({ label: section.header, classifiedValue: null, finalValue: null, isHeader: true })
         for (const field of section.fields) {
           const rawFinalValue = finalValues.cash_flow_statement[field] ?? null
-          const l2Value = cfsLayer2?.values[field] ?? null
+          const l2Value = cfsLayer2?.formulaValues[field] ?? null
           const corrected = correctedFieldNames.has(field)
           const flagged = allFlaggedFields.has(field) && !corrected
           rows.push({
@@ -229,12 +222,34 @@ export default function Step3Finalize() {
     setSaving(true)
     setStatus(null)
     try {
+      // Build layer1Structured: {stmtType: structured tree} from layer1Results
+      const layer1Structured: Record<string, Record<string, unknown>> = {}
+      for (const [stmtType, result] of Object.entries(layer1Results)) {
+        if (result.structured) layer1Structured[stmtType] = result.structured as unknown as Record<string, unknown>
+      }
+
+      // Build finalValues: manual override takes priority over formula value
+      const finalValuesWithOverrides: Record<string, Record<string, number | null>> = {
+        income_statement: { ...finalValues.income_statement },
+        balance_sheet: { ...finalValues.balance_sheet },
+        cash_flow_statement: { ...finalValues.cash_flow_statement },
+      }
+      for (const [stmtType, overrides] of Object.entries(manualOverrides)) {
+        if (!finalValuesWithOverrides[stmtType]) continue
+        for (const [field, val] of Object.entries(overrides)) {
+          if (val !== null) finalValuesWithOverrides[stmtType][field] = val
+        }
+      }
+
       const response = await finalizeOutput({
         sessionId,
+        companyId,
         companyName,
         reportingPeriod,
-        finalValues,
+        finalValues: finalValuesWithOverrides,
         corrections,
+        formulas: Object.keys(formulas).length > 0 ? formulas : null,
+        layer1Structured: Object.keys(layer1Structured).length > 0 ? layer1Structured : null,
       })
       setFinalizedAt(response.finalizedAt)
       setFinalized(true)

@@ -78,9 +78,13 @@ function buildTemplateRows(
   corrections: Correction[],
   selectedCell: string | null,
   pendingValues: Record<string, number | null> | null,
+  stmtType: string,
+  manualOverrides: Record<string, Record<string, number | null>>,
 ) {
   type Row = React.ComponentProps<typeof DataTable>['rows'][number]
   const rows: Row[] = []
+  const stmtOverrides = manualOverrides[stmtType] ?? {}
+  const pythonFlagged = new Set(layer2?.pythonFlaggedFields ?? [])
 
   rows.push({ label: statementLabel, value: null, isStatementHeader: true })
 
@@ -89,32 +93,30 @@ function buildTemplateRows(
       rows.push({ label: section.header, value: null, isHeader: true })
     }
     for (const field of section.fields) {
-      const correction = corrections.find((c) => c.fieldName === field)
       const isPending = pendingValues !== null
-      // Use pending values for live preview (overrides corrections too)
+      const manualOverride = stmtOverrides[field]
+
+      // Priority: manual override > formula value
       const rawValue = isPending
         ? (pendingValues[field] ?? null)
-        : correction
-        ? correction.correctedValue
+        : manualOverride !== undefined
+        ? manualOverride
         : layer2
-        ? (layer2.values[field] ?? null)
+        ? (layer2.formulaValues?.[field] ?? null)
         : null
 
-      const isFlagged = layer2?.flaggedFields.includes(field) ?? false
-      const fieldChecks = layer2?.fieldValidations?.[field] ?? []
-      const hasValidationFail = fieldChecks.some(
-        (checkName) => layer2?.validation[checkName]?.status === 'FAIL',
-      )
-      // Highlight the actively-edited field in amber when pending
+      const isFlagged = (layer2?.flaggedFields ?? []).includes(field)
+      const isPythonFlagged = pythonFlagged.has(field)
       const isBeingEdited = isPending && field === selectedCell
 
       rows.push({
         label: field,
         value: rawValue !== null ? formatFieldValue(field, rawValue) : null,
         isFlagged,
-        hasValidationFail,
+        isPythonFlagged,
+        hasValidationFail: false,
         isClickable: true,
-        isEdited: isBeingEdited ? false : !!correction,
+        isEdited: isBeingEdited ? false : (manualOverride !== undefined && manualOverride !== null),
         isPending: isBeingEdited,
         isBold: BOLD_FIELDS.has(field),
         isIndented: isIndented(field),
@@ -145,7 +147,11 @@ export default function Step2Classify() {
     selectedCell,
     sidePanelOpen,
     useCompanyContext,
+    formulas,
+    manualOverrides,
     setLayer2Results,
+    setFieldFormula,
+    setManualOverride,
     addCorrection,
     removeCorrection,
     approveStep2,
@@ -239,9 +245,8 @@ export default function Step2Classify() {
         runLayer2({
           session_id: sessionId,
           statement_type: 'income_statement',
-          layer1_data: layer1Results['income_statement'].lineItems,
+          layer1_structured: (layer1Results['income_statement'].structured ?? {}) as Record<string, unknown>,
           company_id: companyId,
-          use_company_context: useCompanyContext,
         })
           .then((result) => {
             console.log('[Step2] IS .then() fired — result truthy:', !!result, 'statementType:', result?.statementType)
@@ -269,25 +274,23 @@ export default function Step2Classify() {
       const bsRequest = {
         session_id: sessionId,
         statement_type: 'balance_sheet' as const,
-        layer1_data: layer1Results['balance_sheet'].lineItems,
+        layer1_structured: (layer1Results['balance_sheet'].structured ?? {}) as Record<string, unknown>,
         company_id: companyId,
-        use_company_context: useCompanyContext,
       }
 
       tasks.push(
         runLayer2(bsRequest)
           .then(async (result) => {
-            // Auto-retry if balance sheet Check is materially off
-            const checkValue = result.values['Check'] ?? 0
-            const totalAssets = Math.abs(result.values['Total Assets'] ?? 0)
+            // Auto-retry if balance sheet Python check is materially imbalanced
+            const checkValue = result.pythonCheckValues?.['Check'] ?? 0
+            const totalAssets = Math.abs(result.formulaValues?.['Total Assets'] ?? 0)
             const retryThreshold = Math.max(totalAssets * 0.001, 1000)
             if (Math.abs(checkValue) > retryThreshold) {
               console.warn(`[Step2] BS: Check=${checkValue.toFixed(2)} > threshold ${retryThreshold.toFixed(2)} — retrying Layer 2`)
               try {
                 const retryResult = await runLayer2(bsRequest)
-                const retryCheck = retryResult.values['Check'] ?? 0
+                const retryCheck = retryResult.pythonCheckValues?.['Check'] ?? 0
                 console.log(`[Step2] BS retry: Check=${retryCheck.toFixed(2)} (original: ${checkValue.toFixed(2)})`)
-                // Use whichever result is closer to balanced
                 result = Math.abs(retryCheck) < Math.abs(checkValue) ? retryResult : result
               } catch (retryErr) {
                 console.warn('[Step2] BS retry failed — using original result:', retryErr)
@@ -316,9 +319,8 @@ export default function Step2Classify() {
         runLayer2({
           session_id: sessionId,
           statement_type: 'cash_flow_statement',
-          layer1_data: layer1Results['cash_flow_statement'].lineItems,
+          layer1_structured: (layer1Results['cash_flow_statement'].structured ?? {}) as Record<string, unknown>,
           company_id: companyId,
-          use_company_context: useCompanyContext,
         })
           .then((result) => {
             newResults['cash_flow_statement'] = result
@@ -400,11 +402,11 @@ export default function Step2Classify() {
   const isPending = selectedCellType === 'income_statement' ? pendingValues : null
   const bsPending = selectedCellType === 'balance_sheet' ? pendingValues : null
   const cfsPending = selectedCellType === 'cash_flow_statement' ? pendingValues : null
-  const isTemplateRows = buildTemplateRows(isSections, 'Income Statement', isLayer2, corrections, selectedCell, isPending)
-  const bsTemplateRows = buildTemplateRows(bsSections, 'Balance Sheet', bsLayer2, corrections, selectedCell, bsPending)
+  const isTemplateRows = buildTemplateRows(isSections, 'Income Statement', isLayer2, corrections, selectedCell, isPending, 'income_statement', manualOverrides)
+  const bsTemplateRows = buildTemplateRows(bsSections, 'Balance Sheet', bsLayer2, corrections, selectedCell, bsPending, 'balance_sheet', manualOverrides)
   const cfsSections = template?.cash_flow_statement?.sections ?? []
   const cfsTemplateRows = cfsSections.length > 0
-    ? buildTemplateRows(cfsSections, 'Cash Flow Statement', cfsLayer2, corrections, selectedCell, cfsPending)
+    ? buildTemplateRows(cfsSections, 'Cash Flow Statement', cfsLayer2, corrections, selectedCell, cfsPending, 'cash_flow_statement', manualOverrides)
     : []
 
   const isData = layer1Results['income_statement']
@@ -426,13 +428,16 @@ export default function Step2Classify() {
     return new Set()
   })()
 
-  const allValidation = { ...(isLayer2?.validation ?? {}), ...(bsLayer2?.validation ?? {}) }
-  const passCount = Object.values(allValidation).filter((v) => v.status === 'PASS').length
-  const failCount = Object.values(allValidation).filter((v) => v.status === 'FAIL').length
+  const failCount = 0
   const flaggedCount = [
     ...(isLayer2?.flaggedFields ?? []),
     ...(bsLayer2?.flaggedFields ?? []),
     ...(cfsLayer2?.flaggedFields ?? []),
+  ].length
+  const pythonFlagCount = [
+    ...(isLayer2?.pythonFlaggedFields ?? []),
+    ...(bsLayer2?.pythonFlaggedFields ?? []),
+    ...(cfsLayer2?.pythonFlaggedFields ?? []),
   ].length
 
   async function handleApproveStep2() {
@@ -540,12 +545,6 @@ export default function Step2Classify() {
 
         {hasAnyResults && !isClassifying && !showBackConfirm && (
           <div className="flex items-center gap-3 text-[11px]">
-            {passCount > 0 && (
-              <span className="flex items-center gap-1 px-2 py-0.5 rounded-[3px] bg-[#d1fae5]" style={{ color: '#065f46', fontWeight: 600 }}>
-                <CheckCircle2 className="w-3 h-3" />
-                {passCount} passed
-              </span>
-            )}
             {failCount > 0 && (
               <span className="flex items-center gap-1 px-2 py-0.5 rounded-[3px] bg-[#fee2e2]" style={{ color: '#991b1b', fontWeight: 600 }}>
                 <XCircle className="w-3 h-3" />
@@ -556,6 +555,12 @@ export default function Step2Classify() {
               <span className="flex items-center gap-1 px-2 py-0.5 rounded-[3px] bg-[#fef3c7]" style={{ color: '#92400e', fontWeight: 600 }}>
                 <Flag className="w-3 h-3" />
                 {flaggedCount} flagged
+              </span>
+            )}
+            {pythonFlagCount > 0 && (
+              <span className="flex items-center gap-1 px-2 py-0.5 rounded-[3px] bg-[#fff7ed]" style={{ color: '#c2410c', fontWeight: 600 }}>
+                <Flag className="w-3 h-3" />
+                {pythonFlagCount} check mismatch{pythonFlagCount !== 1 ? 'es' : ''}
               </span>
             )}
             {corrections.length > 0 && (
@@ -703,12 +708,19 @@ export default function Step2Classify() {
           fieldName={selectedCell}
           statementType={selectedCellType}
           layer2Result={activeLayer2}
-          existingCorrection={existingCorrection}
+          manualOverride={selectedCell && selectedCellType ? (manualOverrides[selectedCellType]?.[selectedCell] ?? null) : null}
+          formula={selectedCell && selectedCellType ? (formulas[selectedCellType]?.[selectedCell] ?? []) : []}
+          layer1Rows={selectedCellType ? (layer1Results[selectedCellType]?.structured?.rows as any ?? []) : []}
           sourceSheet={selectedCellType ? (layer1Results[selectedCellType]?.sourceSheet ?? null) : null}
           onClose={() => { setSidePanelOpen(false); clearPending() }}
-          onSaveCorrection={handleSaveCorrection}
-          onRemoveCorrection={handleRemoveCorrection}
-          onLiveEdit={handleLiveEdit}
+          onFormulaChange={(field, formula) => {
+            if (!selectedCellType) return
+            setFieldFormula(selectedCellType, field, formula)
+          }}
+          onManualOverrideChange={(field, value) => {
+            if (!selectedCellType) return
+            setManualOverride(selectedCellType, field, value)
+          }}
         />
       </div>
     </div>

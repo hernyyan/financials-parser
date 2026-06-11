@@ -1,12 +1,15 @@
 """
-POST /finalize — Merge corrections with Layer 2 values and save to SQLite.
+POST /finalize — Merge corrections with Layer 2 values, save to DB, and persist formulas.
 """
 import json
+import logging
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, HTTPException, Depends
 from sqlalchemy.orm import Session
 from sqlalchemy import text
+
+logger = logging.getLogger(__name__)
 
 from app.models.schemas import FinalizeRequest, FinalizeResponse
 from app.db.database import get_db
@@ -106,6 +109,36 @@ def finalize_output(request: FinalizeRequest, db: Session = Depends(get_db)):
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=str(e))
+
+    # Persist formulas to layer2_formula_configs for future deterministic runs
+    if request.companyId and request.formulas:
+        try:
+            existing = db.execute(
+                text("SELECT id FROM layer2_formula_configs WHERE company_id = :cid"),
+                {"cid": request.companyId},
+            ).fetchone()
+            formulas_json = json.dumps(request.formulas)
+            if existing:
+                db.execute(
+                    text("""
+                        UPDATE layer2_formula_configs
+                        SET formulas = :formulas, updated_at = :now
+                        WHERE company_id = :cid
+                    """),
+                    {"formulas": formulas_json, "now": now, "cid": request.companyId},
+                )
+            else:
+                db.execute(
+                    text("""
+                        INSERT INTO layer2_formula_configs (company_id, formulas, updated_at)
+                        VALUES (:cid, :formulas, :now)
+                    """),
+                    {"cid": request.companyId, "formulas": formulas_json, "now": now},
+                )
+            db.commit()
+        except Exception as e:
+            db.rollback()
+            logger.warning("Formula config persist failed for company %s: %s", request.companyId, e)
 
     return FinalizeResponse(
         success=True,

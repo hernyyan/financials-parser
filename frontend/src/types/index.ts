@@ -27,6 +27,10 @@ export interface WizardState {
   layer2Results: Record<string, Layer2Result>
   corrections: Correction[]
   step2Approved: boolean
+  /** Per-field formula map edited during session; persisted on finalization */
+  formulas: CompanyFormulas
+  /** Per-field manual number overrides (highest priority over formula value) */
+  manualOverrides: Record<string, Record<string, number | null>>
 
   // Current state
   currentStep: 1 | 2 | 3
@@ -161,16 +165,29 @@ export interface CalculationMeta {
   readonly?: boolean
 }
 
+// ── Layer 2 formula types ─────────────────────────────────────────────────────
+
+export interface FormulaRow {
+  operator: '+' | '-'
+  row: number      // source_row from L1 template
+  label: string    // verbatim label from L1 template
+}
+
+export type L2Formula = FormulaRow[]
+
+/** All formulas for one company: stmtType -> fieldName -> formula */
+export type CompanyFormulas = Record<string, Record<string, L2Formula>>
+
+// ── Layer 2 result (new formula-based shape) ──────────────────────────────────
+
 export interface Layer2Result {
   statementType: string
-  values: Record<string, number | null>
-  reasoning: Record<string, string>
-  validation: Record<string, ValidationCheck>
+  formulaValues: Record<string, number | null>     // computed from L1 formulas
+  pythonCheckValues: Record<string, number | null> // L2-to-L2 arithmetic check
+  pythonFlaggedFields: string[]                    // fields where formula ≠ python check
+  formulas: Record<string, L2Formula>              // field -> formula (initial or saved)
   flaggedFields: string[]
-  fieldValidations: Record<string, string[]>
-  aiMatchedValues: Record<string, number | null>
-  calculationMeta: Record<string, CalculationMeta>
-  sourceLabels: Record<string, string[]>
+  sourceLabels: Record<string, string[]>           // for left-panel highlight compat
 }
 
 export interface ValidationCheck {
@@ -235,9 +252,8 @@ export interface Layer1Response {
 export interface Layer2Request {
   session_id?: string | null
   statement_type: string
-  layer1_data: Record<string, number>
+  layer1_structured: Record<string, unknown>   // full structured tree from Layer 1
   company_id?: number | null
-  use_company_context?: boolean
 }
 
 export interface CompanyContextStatus {
@@ -261,10 +277,15 @@ export interface CorrectionRequest {
 export interface FinalizeRequest {
   sessionId?: string | null
   companyName: string
+  companyId?: number | null
   reportingPeriod: string
-  /** Keyed by statement type: 'income_statement' | 'balance_sheet' */
+  /** Keyed by statement type: 'income_statement' | 'balance_sheet' | 'cash_flow_statement' */
   finalValues: Record<string, Record<string, number | null>>
   corrections: Correction[]
+  /** Formula map to persist on finalization: stmtType -> fieldName -> FormulaRow[] */
+  formulas?: CompanyFormulas | null
+  /** L1 structured trees: stmtType -> structured tree (for formula validation) */
+  layer1Structured?: Record<string, Record<string, unknown>> | null
 }
 
 export interface FinalizeResponse {

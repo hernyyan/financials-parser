@@ -35,9 +35,8 @@ def run_layer2(request: Layer2Request, db: Session = Depends(get_db)):
     try:
         result = service.run_classification(
             statement_type=request.statement_type,
-            layer1_data=request.layer1_data,
+            layer1_structured=request.layer1_structured,
             company_id=request.company_id,
-            use_company_context=request.use_company_context or False,
             db=db,
         )
     except anthropic.AuthenticationError:

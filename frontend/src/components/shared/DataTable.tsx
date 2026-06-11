@@ -6,6 +6,7 @@ interface DataTableRow {
   isHeader?: boolean
   isStatementHeader?: boolean
   isFlagged?: boolean
+  isPythonFlagged?: boolean
   hasValidationFail?: boolean
   isClickable?: boolean
   isEdited?: boolean
@@ -130,7 +131,10 @@ export default function DataTable({
                     {row.isFlagged && (
                       <Flag className="w-3 h-3 shrink-0" style={{ color: '#92400e' }} />
                     )}
-                    {row.hasValidationFail && !row.isFlagged && (
+                    {row.isPythonFlagged && (
+                      <AlertTriangle className="w-3 h-3 shrink-0" style={{ color: '#c2410c' }} />
+                    )}
+                    {row.hasValidationFail && !row.isFlagged && !row.isPythonFlagged && (
                       <AlertTriangle className="w-3 h-3 shrink-0" style={{ color: '#991b1b' }} />
                     )}
                     {row.isEdited && (

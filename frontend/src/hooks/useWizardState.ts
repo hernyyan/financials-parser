@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, ReactNode, createElement } from 'react'
-import type { WizardState, Layer1Result, Layer2Result, Correction, TemplateEditorState } from '../types'
+import type { WizardState, Layer1Result, Layer2Result, Correction, TemplateEditorState, CompanyFormulas, L2Formula } from '../types'
 // TemplateEditorState is now a unified type (statements[] with per-statement panelMode)
 import {
   MOCK_LAYER2_INCOME_STATEMENT,
@@ -20,6 +20,8 @@ interface WizardContextType extends WizardState {
   approveStep1: () => void
   approveStep1FromEditor: (editorSnapshot: TemplateEditorState) => void
   setLayer2Results: (results: Record<string, Layer2Result>) => void
+  setFieldFormula: (stmtType: string, fieldName: string, formula: L2Formula) => void
+  setManualOverride: (stmtType: string, fieldName: string, value: number | null) => void
   addCorrection: (correction: Correction) => void
   removeCorrection: (fieldName: string) => void
   approveStep2: () => void
@@ -57,6 +59,8 @@ const defaultState: WizardState = {
   layer2Results: {},
   corrections: [],
   step2Approved: false,
+  formulas: {},
+  manualOverrides: {},
   currentStep: 1,
   activeSheetTab: '',
   selectedCell: null,
@@ -158,7 +162,32 @@ export function WizardProvider({ children }: { children: ReactNode }) {
   }
 
   function setLayer2Results(results: Record<string, Layer2Result>) {
-    setState((s) => ({ ...s, layer2Results: results }))
+    // Initialise formulas from the Layer 2 response when results first arrive
+    const initialFormulas: CompanyFormulas = {}
+    for (const [stmtType, result] of Object.entries(results)) {
+      if (result.formulas) initialFormulas[stmtType] = result.formulas as Record<string, L2Formula>
+    }
+    setState((s) => ({ ...s, layer2Results: results, formulas: initialFormulas }))
+  }
+
+  function setFieldFormula(stmtType: string, fieldName: string, formula: L2Formula) {
+    setState((s) => ({
+      ...s,
+      formulas: {
+        ...s.formulas,
+        [stmtType]: { ...(s.formulas[stmtType] ?? {}), [fieldName]: formula },
+      },
+    }))
+  }
+
+  function setManualOverride(stmtType: string, fieldName: string, value: number | null) {
+    setState((s) => ({
+      ...s,
+      manualOverrides: {
+        ...s.manualOverrides,
+        [stmtType]: { ...(s.manualOverrides[stmtType] ?? {}), [fieldName]: value },
+      },
+    }))
   }
 
   function addCorrection(correction: Correction) {
@@ -304,6 +333,8 @@ export function WizardProvider({ children }: { children: ReactNode }) {
       editorState: null,
       lastEditorState: null,
       sheetAssignments: {},
+      formulas: {},
+      manualOverrides: {},
     })
   }
 
@@ -321,6 +352,8 @@ export function WizardProvider({ children }: { children: ReactNode }) {
     approveStep1,
     approveStep1FromEditor,
     setLayer2Results,
+    setFieldFormula,
+    setManualOverride,
     addCorrection,
     removeCorrection,
     approveStep2,

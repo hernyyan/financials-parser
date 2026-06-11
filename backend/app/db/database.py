@@ -128,6 +128,16 @@ CREATE TABLE IF NOT EXISTS source_layouts (
 );
 """
 
+_SQLITE_CREATE_LAYER2_FORMULA_CONFIGS = """
+CREATE TABLE IF NOT EXISTS layer2_formula_configs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    company_id INTEGER NOT NULL UNIQUE,
+    formulas JSON NOT NULL,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (company_id) REFERENCES companies(id)
+);
+"""
+
 
 # ── PostgreSQL CREATE TABLE statements ────────────────────────────────────────
 
@@ -211,6 +221,16 @@ CREATE TABLE IF NOT EXISTS source_layouts (
 );
 """
 
+_PG_CREATE_LAYER2_FORMULA_CONFIGS = """
+CREATE TABLE IF NOT EXISTS layer2_formula_configs (
+    id SERIAL PRIMARY KEY,
+    company_id INTEGER NOT NULL UNIQUE,
+    formulas JSONB NOT NULL,
+    updated_at TIMESTAMP DEFAULT NOW(),
+    FOREIGN KEY (company_id) REFERENCES companies(id)
+);
+"""
+
 # ── Idempotent migrations for pre-existing databases ─────────────────────────
 
 _MIGRATIONS = [
@@ -258,6 +278,7 @@ def init_db() -> None:
             _SQLITE_CREATE_LAYER1_TEMPLATES,
             _SQLITE_CREATE_EXTRACTION_JOBS,
             _SQLITE_CREATE_SOURCE_LAYOUTS,
+            _SQLITE_CREATE_LAYER2_FORMULA_CONFIGS,
         ]
     else:
         ddl_statements = [
@@ -267,6 +288,7 @@ def init_db() -> None:
             _PG_CREATE_LAYER1_TEMPLATES,
             _PG_CREATE_EXTRACTION_JOBS,
             _PG_CREATE_SOURCE_LAYOUTS,
+            _PG_CREATE_LAYER2_FORMULA_CONFIGS,
         ]
 
     # Each CREATE TABLE runs in its own transaction so a failed migration

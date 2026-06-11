@@ -64,7 +64,7 @@ function buildL2Rows(
   for (const section of sections) {
     if (section.header) rows.push({ label: section.header, value: null, isHeader: true })
     for (const field of section.fields) {
-      const raw = layer2.values[field] ?? null
+      const raw = layer2.formulaValues[field] ?? null
       rows.push({
         label: field,
         value: raw !== null ? formatFieldValue(field, raw) : null,
@@ -119,7 +119,7 @@ export default function PreviousReviewPreview({
     // Fallback: flat list of values
     const rows: React.ComponentProps<typeof DataTable>['rows'] = []
     rows.push({ label: stmtLabel, value: null, isStatementHeader: true })
-    for (const [field, val] of Object.entries(layer2.values)) {
+    for (const [field, val] of Object.entries(layer2.formulaValues)) {
       rows.push({
         label: field,
         value: val !== null ? formatFieldValue(field, val) : null,

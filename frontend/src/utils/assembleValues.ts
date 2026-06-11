@@ -15,9 +15,10 @@ export function assembleValues(
   balance_sheet: Record<string, number | null>
   cash_flow_statement: Record<string, number | null>
 } {
-  const isValues: Record<string, number | null> = { ...(layer2Results['income_statement']?.values ?? {}) }
-  const bsValues: Record<string, number | null> = { ...(layer2Results['balance_sheet']?.values ?? {}) }
-  const cfsValues: Record<string, number | null> = { ...(layer2Results['cash_flow_statement']?.values ?? {}) }
+  // Use formulaValues (new formula-based architecture); fall back to empty
+  const isValues: Record<string, number | null> = { ...(layer2Results['income_statement']?.formulaValues ?? {}) }
+  const bsValues: Record<string, number | null> = { ...(layer2Results['balance_sheet']?.formulaValues ?? {}) }
+  const cfsValues: Record<string, number | null> = { ...(layer2Results['cash_flow_statement']?.formulaValues ?? {}) }
 
   const isFieldNames = new Set(isSections.flatMap((s) => s.fields))
   const cfsFieldNames = new Set(cfsSections.flatMap((s) => s.fields))

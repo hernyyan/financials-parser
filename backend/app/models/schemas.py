@@ -84,24 +84,27 @@ class Layer1Response(BaseModel):
 
 # ─── Layer 2 ──────────────────────────────────────────────────────────────────
 
+class FormulaRow(BaseModel):
+    operator: str          # '+' or '-'
+    row: int               # 1-based source_row from L1 template
+    label: str             # verbatim label from L1 template
+
+
 class Layer2Request(BaseModel):
     session_id: Optional[str] = None
-    statement_type: str       # 'income_statement' | 'balance_sheet'
-    layer1_data: Dict[str, float]  # Just the lineItems dict from Layer 1
+    statement_type: str                   # 'income_statement' | 'balance_sheet' | 'cash_flow_statement'
+    layer1_structured: Dict               # full structured tree from Layer 1 (rows with source_row, label, value)
     company_id: Optional[int] = None
-    use_company_context: Optional[bool] = False
 
 
 class Layer2Response(BaseModel):
     statementType: str
-    values: Dict[str, Optional[float]]
-    reasoning: Dict[str, str]
-    validation: Dict[str, ValidationCheck]
-    flaggedFields: List[str]
-    fieldValidations: Dict[str, List[str]]
-    aiMatchedValues: Dict[str, Optional[float]] = {}
-    calculationMeta: Dict = {}
-    sourceLabels: Dict[str, List[str]] = {}
+    formulaValues: Dict[str, Optional[float]]     # values computed by executing saved/AI formulas against L1
+    pythonCheckValues: Dict[str, Optional[float]] # values from L2-to-L2 Python arithmetic check
+    pythonFlaggedFields: List[str]                # fields where formulaValue ≠ pythonCheckValue
+    formulas: Dict[str, List]                     # field → [FormulaRow, ...] (initial or loaded)
+    flaggedFields: List[str]                      # AI-confidence flags
+    sourceLabels: Dict[str, List[str]] = {}       # kept for left-panel highlight compat
 
 
 # ─── Upload ───────────────────────────────────────────────────────────────────
@@ -180,9 +183,12 @@ class CorrectionItem(BaseModel):
 class FinalizeRequest(BaseModel):
     sessionId: Optional[str] = None
     companyName: str
+    companyId: Optional[int] = None
     reportingPeriod: str
     finalValues: Dict[str, Dict[str, Optional[float]]]  # {statement_type: {field: value}}
     corrections: List[CorrectionItem]
+    formulas: Optional[Dict[str, Dict[str, List]]] = None   # {stmtType: {field: [FormulaRow]}} — persisted on finalization
+    layer1Structured: Optional[Dict[str, Dict]] = None      # {stmtType: structured tree} — for formula validation
 
 
 class FinalizeResponse(BaseModel):
