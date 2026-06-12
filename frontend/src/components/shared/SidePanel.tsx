@@ -206,7 +206,7 @@ export default function SidePanel({
 
         {/* ── Python check ─────────────────────────────────────────────────── */}
         <div className="px-4 py-3 border-b border-border">
-          <p className="text-[11px] text-muted-foreground mb-2" style={{ fontWeight: 500 }}>Python check (L2-to-L2)</p>
+          <p className="text-[11px] text-muted-foreground mb-2" style={{ fontWeight: 500 }}>Python check (within loader)</p>
           <div className="flex items-center gap-2">
             <p className="text-[14px] font-mono text-slate-600" style={{ fontWeight: 600 }}>
               {fmt(pythonCheckValue)}

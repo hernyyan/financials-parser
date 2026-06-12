@@ -127,6 +127,13 @@ export default function FormulaEditor({ initialFormula, l1ValueMap, onSave, onCa
 
   return (
     <div className="flex flex-col gap-2">
+      {/* Header row */}
+      <div className="grid grid-cols-[16px_42px_52px_1fr] gap-1.5 px-1 text-[10px] font-semibold text-slate-400 uppercase tracking-wider">
+        <span></span>
+        <span>Op</span>
+        <span>Row</span>
+        <span>Label</span>
+      </div>
       {/* Row list */}
       <div className="flex flex-col gap-1">
         {rows.map((r, idx) => (
