@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useWizardState } from '../../hooks/useWizardState'
 import DataTable from '../shared/DataTable'
+import TemplateTreePreview from './TemplateTreePreview'
 import SidePanel from '../shared/SidePanel'
 import LoadingSpinner from '../shared/LoadingSpinner'
 import StatusBanner from '../shared/StatusBanner'
@@ -173,6 +174,11 @@ export default function Step2Classify() {
   const [elapsedSeconds, setElapsedSeconds] = useState(0)
   const [approvingStep2, setApprovingStep2] = useState(false)
   const classifyingRef = useRef(false)
+
+  // Cross-panel hover: hovering L1 row highlights L2 fields that use it in their formula,
+  // hovering L2 field highlights L1 rows in its formula.
+  const [hoveredL1Row, setHoveredL1Row] = useState<number | null>(null)
+  const [hoveredL2Field, setHoveredL2Field] = useState<{ stmtType: string; field: string } | null>(null)
 
   const isLayer2 = layer2Results['income_statement']
   const bsLayer2 = layer2Results['balance_sheet']
@@ -420,13 +426,27 @@ export default function Step2Classify() {
     ? corrections.find((c) => c.fieldName === selectedCell)
     : undefined
 
-  // Compute which source line item labels map to the selected template field
-  const relevantSourceLabels: Set<string> = (() => {
-    if (!selectedCell || !activeLayer2) return new Set()
-    const labels = activeLayer2.sourceLabels?.[selectedCell]
-    if (labels && labels.length > 0) return new Set(labels)
-    return new Set()
-  })()
+  // Cross-panel hover: which L1 rows to highlight on left panel
+  // Priority: hoveredL2Field formula rows > selected cell formula rows
+  const highlightedL1Rows = useMemo((): Set<number> => {
+    const activeField = hoveredL2Field ?? (selectedCell && selectedCellType ? { stmtType: selectedCellType, field: selectedCell } : null)
+    if (!activeField) return new Set()
+    const stmtFormulas = formulas[activeField.stmtType] ?? {}
+    const formulaRows = stmtFormulas[activeField.field] ?? []
+    return new Set(formulaRows.map(fr => fr.row).filter(Boolean))
+  }, [hoveredL2Field, selectedCell, selectedCellType, formulas])
+
+  // Cross-panel hover: which L2 fields to highlight on right panel
+  const highlightedL2Labels = useMemo((): Set<string> => {
+    if (!hoveredL1Row) return new Set()
+    const result = new Set<string>()
+    for (const stmtFormulas of Object.values(formulas)) {
+      for (const [fieldName, formulaRows] of Object.entries(stmtFormulas)) {
+        if (formulaRows.some(fr => fr.row === hoveredL1Row)) result.add(fieldName)
+      }
+    }
+    return result
+  }, [hoveredL1Row, formulas])
 
   const failCount = 0
   const flaggedCount = [
@@ -616,18 +636,42 @@ export default function Step2Classify() {
             </p>
           </div>
           <div className="flex-1 overflow-y-auto min-h-0">
-            {sourceIsRows.length === 0 && sourceBsRows.length === 0 ? (
+            {!isData && !bsData && !cfsData ? (
               <div className="flex items-center justify-center py-12 text-muted-foreground text-[13px]">
                 No source data available
               </div>
             ) : (
               <>
-                <DataTable rows={sourceIsRows} noScroll stmtHeaderStyle="gray"
-                  highlightedLabels={selectedCellType === 'income_statement' ? relevantSourceLabels : undefined} />
-                <DataTable rows={sourceBsRows} noScroll stmtHeaderStyle="gray"
-                  highlightedLabels={selectedCellType === 'balance_sheet' ? relevantSourceLabels : undefined} />
-                <DataTable rows={sourceCfsRows} noScroll stmtHeaderStyle="gray"
-                  highlightedLabels={selectedCellType === 'cash_flow_statement' ? relevantSourceLabels : undefined} />
+                {isData?.structured?.rows && (
+                  <>
+                    <div className="px-3 py-1 bg-gray-50 border-b text-[11px] font-semibold text-slate-500">Income Statement</div>
+                    <TemplateTreePreview
+                      rows={isData.structured.rows}
+                      highlightedRows={highlightedL1Rows}
+                      onRowHover={setHoveredL1Row}
+                    />
+                  </>
+                )}
+                {bsData?.structured?.rows && (
+                  <>
+                    <div className="px-3 py-1 bg-gray-50 border-b border-t text-[11px] font-semibold text-slate-500 mt-1">Balance Sheet</div>
+                    <TemplateTreePreview
+                      rows={bsData.structured.rows}
+                      highlightedRows={highlightedL1Rows}
+                      onRowHover={setHoveredL1Row}
+                    />
+                  </>
+                )}
+                {cfsData?.structured?.rows && (
+                  <>
+                    <div className="px-3 py-1 bg-gray-50 border-b border-t text-[11px] font-semibold text-slate-500 mt-1">Cash Flow Statement</div>
+                    <TemplateTreePreview
+                      rows={cfsData.structured.rows}
+                      highlightedRows={highlightedL1Rows}
+                      onRowHover={setHoveredL1Row}
+                    />
+                  </>
+                )}
               </>
             )}
           </div>
@@ -675,6 +719,8 @@ export default function Step2Classify() {
                     noScroll
                     onCellClick={setSelectedCell}
                     selectedCell={selectedCell}
+                    highlightedLabels={highlightedL2Labels.size > 0 ? highlightedL2Labels : undefined}
+                    onCellHover={label => setHoveredL2Field(label ? { stmtType: 'income_statement', field: label } : null)}
                   />
                 )}
                 {bsStatus === 'loading' ? (
@@ -687,6 +733,8 @@ export default function Step2Classify() {
                     noScroll
                     onCellClick={setSelectedCell}
                     selectedCell={selectedCell}
+                    highlightedLabels={highlightedL2Labels.size > 0 ? highlightedL2Labels : undefined}
+                    onCellHover={label => setHoveredL2Field(label ? { stmtType: 'balance_sheet', field: label } : null)}
                   />
                 )}
                 {cfsTemplateRows.length > 0 && (
@@ -695,6 +743,8 @@ export default function Step2Classify() {
                     noScroll
                     onCellClick={setSelectedCell}
                     selectedCell={selectedCell}
+                    highlightedLabels={highlightedL2Labels.size > 0 ? highlightedL2Labels : undefined}
+                    onCellHover={label => setHoveredL2Field(label ? { stmtType: 'cash_flow_statement', field: label } : null)}
                   />
                 )}
               </>

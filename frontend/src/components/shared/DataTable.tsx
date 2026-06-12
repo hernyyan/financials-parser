@@ -30,6 +30,8 @@ interface DataTableProps {
   stmtHeaderStyle?: 'blue' | 'gray'
   /** Source rows to highlight with soft purple (mapped from selected template field) */
   highlightedLabels?: Set<string>
+  /** Called when mouse enters/leaves a clickable row. Passes label on enter, null on leave. */
+  onCellHover?: (label: string | null) => void
 }
 
 export default function DataTable({
@@ -41,6 +43,7 @@ export default function DataTable({
   noScroll = false,
   stmtHeaderStyle = 'blue',
   highlightedLabels,
+  onCellHover,
 }: DataTableProps) {
   return (
     <div ref={scrollRef} className={noScroll ? className : `overflow-auto flex-1 ${className}`}>
@@ -125,6 +128,8 @@ export default function DataTable({
                   row.isClickable ? 'cursor-pointer' : ''
                 }`}
                 onClick={() => row.isClickable && onCellClick && onCellClick(row.label)}
+                onMouseEnter={() => row.isClickable && onCellHover?.(row.label)}
+                onMouseLeave={() => row.isClickable && onCellHover?.(null)}
               >
                 <td className="py-1 px-4 w-[60%]">
                   <span className="flex items-center gap-1.5">
