@@ -24,6 +24,29 @@ Every node you emit must have a `label` that is a **character-for-character copy
 
 To enforce this: for every node in your output, look up its `row_index` in the CSV and confirm the label matches exactly before emitting.
 
+## Source Row Rule — Non-Negotiable
+
+Every node you emit must include a `source_row` field containing the **exact `row_index` value** from the corresponding CSV row.
+
+- Copy `source_row` directly from the `row_index` column of the matching CSV row.
+- Do NOT invent, interpolate, or guess row numbers.
+- If you cannot identify which CSV row a node corresponds to with confidence, **omit the node entirely** — do not emit it with a guessed or zero source_row.
+
+## No-Duplicate-Row-Index Rule — Non-Negotiable
+
+Each `row_index` from the CSV may appear **at most once** across the entire output tree (top-level rows and all children at all depths combined).
+
+- If the same label appears in multiple sections (e.g. "Amazon" under both Revenue and COGS), do **NOT** include it as a child in multiple places.
+- When sub-segment names repeat across sections (Revenue/COGS/Gross Profit all broken down by the same business units), **do not attempt to build children for every parent**. Map only the section totals as top-level rows. Leave sub-item assignment to the analyst.
+- If you list "Amazon" as a child of "Total Revenue", you cannot also list any row with the same row_index as a child of "Total Cost of Goods Sold" or "Gross Profit".
+
+## Spatial Containment Rule (Children) — Non-Negotiable
+
+A child node's `source_row` must fall **between** the row_index of the first row in its parent's section and the parent's own row_index. Never assign a child whose row_index is outside this range — that row belongs to a different section of the document.
+
+- Example: if "Total Cost of Goods Sold" is at row 38, its children must all have row_index < 38 AND row_index > the end of the previous section.
+- Never assign rows 11-15 as children of a parent at row 46 if rows 40-44 are the correct section contents.
+
 ## Row Types
 
 Only two types exist in your output:
@@ -46,7 +69,7 @@ The top-level `rows` array in your output must be in the same order as the rows 
 - A `sum` node's children are the individual rows that feed directly into that sum (same section, one indent level deeper).
 - The sum row in the source always comes **after** its children (at the bottom of the group). Do not confuse a section header at the top of a group with the sum at the bottom.
 - **Spatial containment — Non-Negotiable:** A child row's `row_index` must fall between the `row_index` of the first row in its section and the `row_index` of its parent sum row. Never assign a row as a child if it appears in a different section of the document.
-- **No duplicate rows — Non-Negotiable:** Every CSV row appears **exactly once** in the output. If a row is a child of another row, it must NOT also appear as a standalone top-level row. A subtotal (e.g. "Current Assets") that is itself a child of a higher-level total ("Total Assets") must be nested inside that parent and removed from the top level.
+- **No duplicate rows — Non-Negotiable:** Every CSV row appears **exactly once** in the output. If a row is a child of another row, it must NOT also appear as a standalone top-level row.
 - **Cross-section sums** (e.g., EBITDA = Gross Profit − SG&A) have no children. Use `computed_as: "row_id OP row_id"`.
 - Indent level is the primary grouping signal. Bold indicates a sum.
 - Assign each emitted row a unique integer `id` starting from 10, incrementing by 1.
@@ -92,13 +115,14 @@ Omit `waterfall` for non-IS statements.
 
 ## Output Format
 
-Return a single JSON object, no markdown fences:
+Every node must include `source_row` copied from its CSV `row_index`. Example:
 
 ```json
 {
   "rows": [
     {
       "id": 10,
+      "source_row": 28,
       "type": "sum",
       "label": "Net Revenue",
       "value": 5000000,
@@ -107,12 +131,13 @@ Return a single JSON object, no markdown fences:
       "indent": 0,
       "validated": true,
       "children": [
-        { "id": 11, "type": "individual", "label": "Product Revenue", "value": 3000000, "bold": false, "italic": false, "indent": 1, "children": [] },
-        { "id": 12, "type": "individual", "label": "Service Revenue", "value": 2000000, "bold": false, "italic": false, "indent": 1, "children": [] }
+        { "id": 11, "source_row": 16, "type": "individual", "label": "Product Revenue", "value": 3000000, "bold": false, "italic": false, "indent": 1, "children": [] },
+        { "id": 12, "source_row": 22, "type": "individual", "label": "Service Revenue", "value": 2000000, "bold": false, "italic": false, "indent": 1, "children": [] }
       ]
     },
     {
       "id": 20,
+      "source_row": 46,
       "type": "sum",
       "label": "Gross Profit",
       "value": 2000000,

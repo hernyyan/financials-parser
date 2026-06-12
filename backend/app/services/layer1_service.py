@@ -39,6 +39,7 @@ _ROW_SCHEMA = {
         "id":               {"type": "integer"},
         "type":             {"type": "string", "enum": ["sum", "individual"]},
         "label":            {"type": "string"},
+        "source_row":       {"type": "integer", "description": "The exact row_index from the input CSV. Required — must match a real row."},
         "value":            {"type": ["number", "null"]},
         "bold":             {"type": "boolean"},
         "italic":           {"type": "boolean"},
@@ -48,7 +49,7 @@ _ROW_SCHEMA = {
         "computed_as":      {"type": "string"},
         "children":         {"type": "array", "items": {"$ref": "#/$defs/row"}},
     },
-    "required": ["id", "type", "label", "children"],
+    "required": ["id", "type", "label", "source_row", "children"],
 }
 
 _EXTRACT_HIERARCHY_TOOL = {
@@ -263,6 +264,7 @@ class Layer1Service:
             if "rows" in structured:
                 structured["rows"] = _strip_margins(structured["rows"])
                 _stamp_source_rows(structured["rows"], rows)
+                structured["rows"] = _dedup_and_clean_source_rows(structured["rows"])
 
             line_items = _flatten_structured(structured.get("rows", []))
             logger.info("[Layer1] %s attempt %d: %d lineItems", normalized, attempt + 1, len(line_items))
@@ -689,16 +691,18 @@ def _strip_margins(rows: List[Dict]) -> List[Dict]:
 
 def _stamp_source_rows(structured_rows: List[Dict], step_c_rows: List[Dict]) -> None:
     """
-    Walk structured rows in-place and stamp source_row by sequentially matching
-    each row's label against the Step C extraction rows.
+    Walk structured rows in-place and ensure each node has a valid source_row.
 
-    Uses sequential (Nth-occurrence) matching so duplicate labels (e.g. a segment
-    named "USBid" under both Orders and Revenue) each get the correct distinct
-    row_index rather than all resolving to the same row.
+    If the AI already output a source_row that matches a real row_index, keep it.
+    Otherwise fall back to sequential label matching as a best-effort.
+    Nodes with no valid source_row are set to source_row=0 so the caller can
+    strip them with _dedup_and_clean_source_rows.
     """
     from collections import defaultdict
 
-    # Build label → ordered list of row_index values
+    valid_indices = {r["row_index"] for r in step_c_rows}
+
+    # Label fallback: only used when AI source_row is absent or invalid
     label_to_indices: Dict[str, List[int]] = defaultdict(list)
     for r in step_c_rows:
         norm = re.sub(r"[^a-z0-9]", "", r["label"].lower())
@@ -708,16 +712,43 @@ def _stamp_source_rows(structured_rows: List[Dict], step_c_rows: List[Dict]) -> 
 
     def walk(rows: List[Dict]) -> None:
         for r in rows:
-            norm = re.sub(r"[^a-z0-9]", "", r.get("label", "").lower())
-            indices = label_to_indices.get(norm, [])
-            if indices:
+            sr = r.get("source_row", 0)
+            if sr and int(sr) in valid_indices:
+                r["source_row"] = int(sr)  # AI-provided and valid — keep
+            else:
+                # Fallback: sequential label match
+                norm = re.sub(r"[^a-z0-9]", "", r.get("label", "").lower())
+                indices = label_to_indices.get(norm, [])
                 count = used_counts.get(norm, 0)
                 if count < len(indices):
                     r["source_row"] = indices[count]
-                used_counts[norm] = count + 1
+                    used_counts[norm] = count + 1
+                else:
+                    r["source_row"] = 0  # no match — will be stripped
             walk(r.get("children", []))
 
     walk(structured_rows)
+
+
+def _dedup_and_clean_source_rows(rows: List[Dict], seen: Optional[set] = None) -> List[Dict]:
+    """
+    Remove nodes with source_row=0 (unmapped) and nodes whose source_row has
+    already appeared earlier in the tree (duplicates). First occurrence wins.
+    """
+    if seen is None:
+        seen = set()
+    result: List[Dict] = []
+    for r in rows:
+        # Recurse into children first so their seen entries are registered
+        r["children"] = _dedup_and_clean_source_rows(r.get("children", []), seen)
+        sr = int(r.get("source_row", 0))
+        if sr <= 0:
+            continue  # unmapped — drop
+        if sr in seen:
+            continue  # duplicate — drop
+        seen.add(sr)
+        result.append(r)
+    return result
 
 
 def _iter_all_rows(rows: List[Dict]):
