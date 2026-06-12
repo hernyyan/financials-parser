@@ -11,6 +11,7 @@
  * one statement triggered reconciliation.
  */
 import { useState, useRef } from 'react'
+import { Loader2, Save } from 'lucide-react'
 import ColBadge, { colLetterToIndex } from './ColBadge'
 import type {
   Layer1Response,
@@ -24,6 +25,7 @@ import {
   runLayer1Deterministic,
   runLayer1,
   extractSourceRows,
+  API_BASE,
 } from '../../api/client'
 import {
   type TNode,
@@ -159,6 +161,63 @@ export default function TemplateConfigurationWorkflow({
   const [hoveredNodeId, setHoveredNodeId] = useState<number | null>(null)
 
   const rightPanelRef = useRef<TemplateRightPanelHandle>(null)
+
+  // ── Per-tab save (checkpoint without extraction) ────────────────────────────
+
+  const savedSnapshotsRef = useRef<Record<string, string>>({})
+  const snapshotInitRef = useRef(false)
+  const [tabSaving, setTabSaving] = useState(false)
+
+  function computeTabSnapshot(stmtType: string): string {
+    return JSON.stringify({ rows: allRows[stmtType] ?? [], col: colInfo[stmtType] ?? {} })
+  }
+
+  // Initialise snapshots on first render so the button starts clean
+  if (!snapshotInitRef.current) {
+    snapshotInitRef.current = true
+    statements.forEach(s => {
+      savedSnapshotsRef.current[s.statementType] = computeTabSnapshot(s.statementType)
+    })
+  }
+
+  const isActiveTabDirty = computeTabSnapshot(activeTab) !== (savedSnapshotsRef.current[activeTab] ?? '')
+
+  async function handleTabSave() {
+    const stmtType = activeTab
+    const config = statements.find(s => s.statementType === stmtType)
+    if (!config || !isActiveTabDirty) return
+    setTabSaving(true)
+    try {
+      const rows = allRows[stmtType] ?? []
+      const template = rowsToTemplate(rows, stmtType)
+      const layoutRows = allStepCRows[stmtType] ?? config.stepCRows
+      const { renames, additions, deletions } = buildChangeSet(config.existingTemplate, rows)
+
+      await Promise.all([
+        saveLayer1Template(companyId, stmtType, template),
+        saveLayout(companyId, stmtType, layoutRows),
+      ])
+
+      if (renames.length || additions.length || deletions.length) {
+        applyTemplateChanges(companyId, stmtType, renames, additions, deletions)
+          .catch(e => console.warn('[TabSave] apply-changes non-fatal:', e))
+      }
+
+      if (companyId) {
+        const labelColNum = colLetterToIndex(colInfo[stmtType]?.label ?? 'A')
+        fetch(`${API_BASE}/admin/companies/${companyId}/label-column`, {
+          method: 'PUT', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ label_col: labelColNum }),
+        }).catch(() => {})
+      }
+
+      savedSnapshotsRef.current[stmtType] = computeTabSnapshot(stmtType)
+    } catch (e) {
+      console.error('[TabSave] failed:', e)
+    } finally {
+      setTabSaving(false)
+    }
+  }
 
   const activeConfig = statements.find(s => s.statementType === activeTab)!
   const activeRows = allRows[activeTab] ?? []
@@ -353,6 +412,26 @@ export default function TemplateConfigurationWorkflow({
             <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-red-400 inline-block" /><span className="text-slate-300">Removed</span></span>
           </div>
         )}
+
+        {/* Per-tab save button — active when this tab has unsaved changes */}
+        <div className={activeConfig?.panelMode !== 'reconcile' ? 'ml-auto' : ''}>
+          <button
+            onClick={handleTabSave}
+            disabled={!isActiveTabDirty || tabSaving}
+            className={`flex items-center gap-1.5 px-3 py-1 rounded text-[12px] font-medium transition-all ${
+              isActiveTabDirty && !tabSaving
+                ? 'bg-emerald-600 text-white hover:bg-emerald-700 shadow-sm'
+                : 'bg-slate-700 text-slate-500 cursor-not-allowed'
+            }`}
+            title={isActiveTabDirty ? 'Save this tab template and layout' : 'No unsaved changes'}
+          >
+            {tabSaving
+              ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              : <Save className="w-3.5 h-3.5" />
+            }
+            Save
+          </button>
+        </div>
       </div>
 
       {/* Active tab content */}
