@@ -393,8 +393,6 @@ export default function TemplateConfigurationWorkflow({
               config={activeConfig}
               rows={activeRows}
               onRowsChange={rows => setAllRows(p => ({ ...p, [activeConfig.statementType]: rows }))}
-              hoveredRow={hoveredRow}
-              onHoverChange={setHoveredRow}
               selection={selection}
               onSelectionChange={setSelection}
               onRenameConfirm={handleRenameConfirm(activeConfig.statementType)}
@@ -582,20 +580,31 @@ function ConfigurePanel({
 // ── ReconciliationPanel — 3-panel (old layout + new source + template) ────────
 
 function ReconciliationPanel({
-  config, rows, onRowsChange, hoveredRow, onHoverChange, selection, onSelectionChange, onRenameConfirm,
+  config, rows, onRowsChange, selection, onSelectionChange, onRenameConfirm,
 }: {
   config: TemplateStatementConfig
   rows: TNode[]
   onRowsChange: (rows: TNode[]) => void
-  hoveredRow: number | null
-  onHoverChange: (row: number | null) => void
   selection: SelectionState
   onSelectionChange: (s: SelectionState) => void
   onRenameConfirm: (targetPath: number[], sourceRow: number) => void
 }) {
-  const { diff = [], oldLayout = [] } = config.reconcileData ?? {}
+  const { diff = [], oldLayout = [], rowMapping: rowMappingRec = {} } = config.reconcileData ?? {}
   const { renames, removedRowIndices, addedRowIndices, renamedOldRowIndices } = buildDiffSets(diff)
   const newStepCRows = config.stepCRows
+
+  // Build bidirectional lookup maps from the row_mapping
+  const oldToNew = new Map<number, number>(
+    Object.entries(rowMappingRec).map(([k, v]) => [Number(k), v])
+  )
+  const newToOld = new Map<number, number>(
+    Object.entries(rowMappingRec).map(([k, v]) => [v, Number(k)])
+  )
+  // Build a Map for TemplateRightPanel (old_row → new_row)
+  const rowMappingForPanel = oldToNew.size > 0 ? oldToNew : undefined
+
+  // Canonical hover key = new row number
+  const [hoveredNewRow, setHoveredNewRow] = useState<number | null>(null)
 
   const rightPanelRef = useRef<TemplateRightPanelHandle>(null)
 
@@ -616,10 +625,24 @@ function ReconciliationPanel({
             {oldLayout.map(r => {
               const isRemoved = removedRowIndices.has(r.row_index)
               const isRenamed = renamedOldRowIndices.has(r.row_index)
+              const isShifted = oldToNew.has(r.row_index)
+              const resolvedNew = oldToNew.get(r.row_index) ?? r.row_index
+              const isHovered = !selection.selectedPaths.size && hoveredNewRow === resolvedNew
               const indentPx = ((r as any).indent ?? 0) * 10
               return (
-                <div key={r.row_index} className={`grid grid-cols-[36px_1fr] items-center px-2 min-h-[26px] border-b border-slate-50 select-none ${isRemoved ? 'bg-red-50' : isRenamed ? 'bg-amber-50' : ''}`}>
-                  <span className="text-[10px] text-slate-400 font-mono text-center">{r.row_index}</span>
+                <div
+                  key={r.row_index}
+                  onMouseEnter={() => { if (!selection.selectedPaths.size) setHoveredNewRow(resolvedNew) }}
+                  onMouseLeave={() => { if (!selection.selectedPaths.size) setHoveredNewRow(null) }}
+                  className={`grid grid-cols-[36px_1fr] items-center px-2 min-h-[26px] border-b border-slate-50 select-none transition-colors
+                    ${isRemoved ? 'bg-red-50' : isRenamed ? 'bg-amber-50' : ''}
+                    ${isHovered ? '!bg-yellow-100' : ''}
+                  `}
+                >
+                  <span
+                    className="text-[10px] font-mono text-center"
+                    style={{ color: isShifted ? '#ea580c' : undefined }}
+                  >{r.row_index}</span>
                   <span
                     className={`text-xs truncate ${isRemoved ? 'text-red-600 line-through' : isRenamed ? 'text-amber-700' : !r.label ? 'text-transparent' : 'text-slate-600'}`}
                     style={{
@@ -648,21 +671,25 @@ function ReconciliationPanel({
               const isTitleRow = Boolean(sr.label) && sr.value === null
               const isAdded = addedRowIndices.has(sr.row_index)
               const isRenamed = renames.has(sr.row_index)
-              const isHovered = !selection.selectedPaths.size && hoveredRow === sr.row_index
+              const isShifted = newToOld.has(sr.row_index)
+              const isHovered = !selection.selectedPaths.size && hoveredNewRow === sr.row_index
               const isUsed = rows.some(r => !r.isDead && r.source_row === sr.row_index)
               const isDraggable = !isTitleRow && !isUsed
               return (
                 <div key={sr.row_index} draggable={isDraggable}
                   onDragStart={isDraggable ? e => { rightPanelRef.current?.startNewSourceDrag(e, sr.row_index) } : undefined}
-                  onMouseEnter={() => { if (!selection.selectedPaths.size) onHoverChange(sr.row_index) }}
-                  onMouseLeave={() => { if (!selection.selectedPaths.size && hoveredRow === sr.row_index) onHoverChange(null) }}
+                  onMouseEnter={() => { if (!selection.selectedPaths.size) setHoveredNewRow(sr.row_index) }}
+                  onMouseLeave={() => { if (!selection.selectedPaths.size && hoveredNewRow === sr.row_index) setHoveredNewRow(null) }}
                   className={`grid grid-cols-[36px_1fr_72px] items-center px-2 min-h-[26px] border-b border-slate-50 select-none transition-colors
                     ${isAdded ? 'bg-green-50' : isRenamed ? 'bg-amber-50' : ''}
                     ${isDraggable ? (!isAdded && !isRenamed ? 'cursor-grab hover:bg-blue-50' : 'cursor-grab') : isUsed ? 'opacity-50' : ''}
                     ${isHovered ? '!bg-yellow-100' : ''}
                   `}
                 >
-                  <span className="text-[10px] text-slate-400 font-mono text-center">{sr.row_index}</span>
+                  <span
+                    className="text-[10px] font-mono text-center"
+                    style={{ color: isShifted ? '#ea580c' : undefined }}
+                  >{sr.row_index}</span>
                   <span
                     className={`text-xs truncate ${isAdded ? 'text-green-700' : isRenamed ? 'text-amber-700' : !sr.label ? 'text-transparent' : 'text-slate-600'}`}
                     style={{
@@ -684,11 +711,12 @@ function ReconciliationPanel({
           rows={rows}
           onRowsChange={onRowsChange}
           sourceRows={newStepCRows}
-          hoveredRow={hoveredRow}
-          onHoverChange={onHoverChange}
+          hoveredRow={hoveredNewRow}
+          onHoverChange={newRow => setHoveredNewRow(newRow)}
           selection={selection}
           onSelectionChange={onSelectionChange}
           rowStatus={n => n.isDead ? 'dead' : n.isRenamed ? 'renamed' : 'normal'}
+          rowMapping={rowMappingForPanel}
           dragOptions={{ onRenameConfirm }}
         />
       </div>

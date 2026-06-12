@@ -10,9 +10,17 @@ Change categories:
   - "add"     : row present in new layout only
   - "remove"  : row present in old layout only
 
-Silent changes (no user action required):
-  - Blank rows added or removed
+Silent changes (no user action required — handled automatically):
+  - Blank rows added or removed when no real structural changes exist
   - Labels that differ only in whitespace or capitalisation
+
+Row mapping:
+  - When blank rows shift non-blank rows, diff_layouts() returns a row_mapping
+    dict {old_row_index: new_row_index} covering only rows whose number changed.
+  - In a pure silent update, the backend uses this to remap L1 template source_rows.
+  - In a mixed update (blank shifts + real changes), blank rows are NOT marked
+    silent so they appear in the reconcile editor, and row_mapping is returned
+    for the frontend to pre-correct the template before opening the editor.
 """
 from __future__ import annotations
 
@@ -61,6 +69,7 @@ def _backtrack(
     """
     Backtrack the LCS table and emit diff operations.
     Returns list of {op, old_idx, new_idx} where op is 'keep'|'add'|'remove'.
+    Keep ops are included so the caller can derive the row_mapping.
     """
     ops: List[Dict[str, Any]] = []
     while i > 0 or j > 0:
@@ -87,20 +96,14 @@ def diff_layouts(
     """
     Compare two layout row lists via LCS on normalized labels.
 
-    Each row is: { "row_index": int, "label": str }
+    Each row is: { "row_index": int, "label": str, ... }
 
     Returns:
     {
-      "has_real_diff": bool,   # True if any non-silent, non-blank changes exist
-      "silent_update": bool,   # True if only blank/casing changes (auto-accept)
-      "changes": [
-        {
-          "type": "add" | "remove" | "rename",
-          "old": { row_index, label } | None,
-          "new": { row_index, label } | None,
-          "silent": bool
-        }
-      ]
+      "has_real_diff": bool,         # True if any non-silent changes exist
+      "silent_update": bool,         # True if only silent changes (auto-accept)
+      "changes": [...],              # all change entries
+      "row_mapping": {int: int},     # old_row_index -> new_row_index (shifted rows only)
     }
     """
     old_norms = [_normalize(r["label"]) for r in old_rows]
@@ -108,6 +111,16 @@ def diff_layouts(
 
     dp = _lcs_table(old_norms, new_norms)
     ops = _backtrack(dp, old_norms, new_norms, len(old_norms), len(new_norms))
+
+    # Build row_mapping from "keep" ops where the row_index actually changed
+    # (i.e., blank rows were inserted/removed above this row, shifting it)
+    row_mapping: Dict[int, int] = {}
+    for op in ops:
+        if op["op"] == "keep":
+            old_row_num = old_rows[op["old_idx"]]["row_index"]
+            new_row_num = new_rows[op["new_idx"]]["row_index"]
+            if old_row_num != new_row_num:
+                row_mapping[old_row_num] = new_row_num
 
     # Pair up adjacent remove+add ops as potential renames
     changes: List[Dict[str, Any]] = []
@@ -149,6 +162,17 @@ def diff_layouts(
 
         i += 1
 
+    # In a mixed update (real structural changes + blank row shifts), make blank
+    # changes visible too so they appear in the reconcile editor.
+    has_any_real = any(not c["silent"] for c in changes)
+    if has_any_real:
+        for c in changes:
+            if c["silent"]:
+                old_lbl = (c.get("old") or {}).get("label", "")
+                new_lbl = (c.get("new") or {}).get("label", "")
+                if _is_blank(old_lbl) or _is_blank(new_lbl):
+                    c["silent"] = False
+
     has_real_diff = any(not c["silent"] for c in changes)
     silent_update = bool(changes) and not has_real_diff
 
@@ -156,4 +180,5 @@ def diff_layouts(
         "has_real_diff": has_real_diff,
         "silent_update": silent_update,
         "changes": changes,
+        "row_mapping": row_mapping,
     }

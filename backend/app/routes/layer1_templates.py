@@ -91,6 +91,16 @@ def _load_stored_layout(company_id: int, statement_type: str, db: Session) -> Op
     return layout
 
 
+def _apply_row_mapping_to_rows(rows: List[Dict], mapping: Dict[int, int]) -> List[Dict]:
+    """Recursively update source_row values in template rows using the row_mapping."""
+    for r in rows:
+        sr = r.get("source_row")
+        if sr is not None and int(sr) in mapping:
+            r["source_row"] = mapping[int(sr)]
+        _apply_row_mapping_to_rows(r.get("children", []), mapping)
+    return rows
+
+
 def _upsert_layout(company_id: int, statement_type: str, layout_rows: List[Dict], db: Session) -> None:
     layout_json = json.dumps(layout_rows)
     result = db.execute(
@@ -281,6 +291,8 @@ def check_layout(
             "has_real_diff": False,
             "silent_update": False,
             "changes": [],
+            "old_layout": [],
+            "row_mapping": {},
         }
 
     incoming = [
@@ -289,11 +301,30 @@ def check_layout(
         for r in request.layout_rows
     ]
     diff = diff_layouts(stored_layout, incoming)
+    row_mapping: Dict[int, int] = diff.get("row_mapping", {})
+
+    # Silent update: atomically remap template source_rows + save new layout in DB
+    if diff.get("silent_update") and row_mapping:
+        tmpl_row = db.execute(
+            text("SELECT template FROM layer1_templates WHERE company_id = :cid AND statement_type = :st"),
+            {"cid": company_id, "st": statement_type},
+        ).fetchone()
+        if tmpl_row:
+            tmpl_data = tmpl_row[0]
+            if isinstance(tmpl_data, str):
+                tmpl_data = json.loads(tmpl_data)
+            _apply_row_mapping_to_rows(tmpl_data.get("rows", []), row_mapping)
+            db.execute(
+                text("UPDATE layer1_templates SET template = :tmpl, updated_at = CURRENT_TIMESTAMP "
+                     "WHERE company_id = :cid AND statement_type = :st"),
+                {"tmpl": json.dumps(tmpl_data), "cid": company_id, "st": statement_type},
+            )
+        _upsert_layout(company_id, statement_type, incoming, db)
 
     return {
         "has_template": has_template,
         "has_layout": True,
-        "old_layout": stored_layout,  # full stored rows for left panel in reconcile editor
+        "old_layout": stored_layout,
         **diff,
     }
 

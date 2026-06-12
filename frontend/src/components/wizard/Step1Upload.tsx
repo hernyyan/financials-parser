@@ -21,7 +21,7 @@ import {
   extractSourceRows,
 } from '../../api/client'
 import { API_BASE } from '../../api/client'
-import type { Company, CompanyContextStatus, Layer1Result, Layer1Template, Layer1TemplateRow, Layer2Result } from '../../types'
+import type { Company, CompanyContextStatus, Layer1Result, Layer1Template, Layer1TemplateRow, Layer2Result, StepCRow } from '../../types'
 import {
   Upload,
   Search,
@@ -44,6 +44,24 @@ type StatusMessage = { type: 'success' | 'error' | 'info'; message: string } | n
 type ExtractionStatus = 'idle' | 'running' | 'done' | 'error'
 
 // ── Helpers ───────────────────────────────────────────────────────────────
+
+/** Parse the backend row_mapping (string keys) into a numeric Record. */
+function parseRowMapping(raw: Record<string, number> | undefined): Record<number, number> {
+  if (!raw) return {}
+  return Object.fromEntries(Object.entries(raw).map(([k, v]) => [Number(k), v]))
+}
+
+/** Recursively apply old→new row number mapping to a Layer1Template's source_row fields. */
+function applyRowMappingToTemplate(template: Layer1Template, mapping: Record<number, number>): Layer1Template {
+  function applyToRows(rows: Layer1TemplateRow[]): Layer1TemplateRow[] {
+    return rows.map(r => ({
+      ...r,
+      source_row: r.source_row != null ? (mapping[r.source_row] ?? r.source_row) : r.source_row,
+      children: applyToRows(r.children ?? []),
+    }))
+  }
+  return { ...template, rows: applyToRows(template.rows ?? []) }
+}
 
 function formatLineItemValue(value: number): string {
   if (value === 0) return '—'
@@ -737,14 +755,22 @@ export default function Step1Upload() {
             }
 
             // Real diff detected — open editor with IS in reconcile mode
-            const existingTemplate = await getLayer1Template(companyId, 'income_statement')
+            const rowMapping = parseRowMapping(layoutCheck.row_mapping)
+            const rawTemplate = await getLayer1Template(companyId, 'income_statement')
+            const existingTemplate = rawTemplate && Object.keys(rowMapping).length > 0
+              ? applyRowMappingToTemplate(rawTemplate, rowMapping)
+              : rawTemplate
             setEditorState({
               statements: [{
                 statementType: 'income_statement', sheetName: isTab, stepCRows,
                 existingTemplate: existingTemplate!,
                 labelColLetter: isResult.labelColLetter, valueColLetter: isResult.valueColLetter,
                 panelMode: 'reconcile',
-                reconcileData: { diff: layoutCheck.changes, oldLayout: (layoutCheck.old_layout ?? []) as any },
+                reconcileData: {
+                  diff: layoutCheck.changes,
+                  oldLayout: (layoutCheck.old_layout ?? []) as StepCRow[],
+                  rowMapping,
+                },
               }],
             })
             return
@@ -814,11 +840,19 @@ export default function Step1Upload() {
         if (companyId) {
           const layoutCheck = await checkLayout(companyId, stmtType, stepCRows).catch(() => null)
           if (layoutCheck?.has_real_diff) {
+            const rowMapping = parseRowMapping(layoutCheck.row_mapping)
+            const correctedTemplate = existingTemplate && Object.keys(rowMapping).length > 0
+              ? applyRowMappingToTemplate(existingTemplate, rowMapping)
+              : existingTemplate
             return {
-              statementType: stmtType, sheetName, stepCRows, existingTemplate,
+              statementType: stmtType, sheetName, stepCRows, existingTemplate: correctedTemplate,
               labelColLetter: sr.labelColLetter, valueColLetter: sr.valueColLetter,
               panelMode: 'reconcile',
-              reconcileData: { diff: layoutCheck.changes, oldLayout: [] },
+              reconcileData: {
+                diff: layoutCheck.changes,
+                oldLayout: (layoutCheck.old_layout ?? []) as StepCRow[],
+                rowMapping,
+              },
             }
           }
         }

@@ -60,6 +60,8 @@ export interface TemplateRightPanelProps {
   dragOptions?: UseDragDropOptions
   /** Return 'dead' | 'renamed' | 'normal' for LR-specific coloring. Default: always 'normal'. */
   rowStatus?: (node: TNode) => 'dead' | 'renamed' | 'normal'
+  /** Mapping of old_row → new_row for shifted rows. When set, shows "74→75" in orange. */
+  rowMapping?: Map<number, number>
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -115,6 +117,7 @@ const TemplateRightPanel = forwardRef<TemplateRightPanelHandle, TemplateRightPan
   onSelectionChange,
   dragOptions = {},
   rowStatus = () => 'normal',
+  rowMapping,
 }: TemplateRightPanelProps, ref: React.Ref<TemplateRightPanelHandle>) {
   const [popover, setPopover] = useState<{ path: number[]; rect: DOMRect } | null>(null)
 
@@ -306,7 +309,7 @@ const TemplateRightPanel = forwardRef<TemplateRightPanelHandle, TemplateRightPan
     const eyeDisabled = ancestorHidden
 
     const baseRowCls = [
-      'grid grid-cols-[40px_52px_1fr_26px_26px_26px_26px] items-center pr-3 min-h-[30px] border transition-colors select-none cursor-default',
+      'grid grid-cols-[76px_52px_1fr_26px_26px_26px_26px] items-center pr-3 min-h-[30px] border transition-colors select-none cursor-default',
       isEq && status === 'normal' ? 'bg-blue-50 border-blue-200 my-0.5 font-semibold' : STATUS_ROW_CLS[status],
       isHovered ? '!bg-yellow-100' : '',
       isSelected ? '!bg-blue-100 !border-l-2 !border-blue-500' : '',
@@ -341,7 +344,13 @@ const TemplateRightPanel = forwardRef<TemplateRightPanelHandle, TemplateRightPan
           }}
         >
           {/* Row number */}
-          <span className="text-[10px] text-slate-400 font-mono text-center">{node.source_row || ''}</span>
+          {node.source_row && rowMapping?.has(node.source_row) ? (
+            <span className="text-[10px] font-mono text-center" style={{ color: '#ea580c' }}>
+              {node.source_row}→{rowMapping.get(node.source_row)}
+            </span>
+          ) : (
+            <span className="text-[10px] text-slate-400 font-mono text-center">{node.source_row || ''}</span>
+          )}
 
           {/* Operator button */}
           <button
@@ -439,7 +448,7 @@ const TemplateRightPanel = forwardRef<TemplateRightPanelHandle, TemplateRightPan
     >
       {/* Column headers + section break chip */}
       <div className="flex-shrink-0 flex items-center gap-2 px-3 py-1.5 bg-slate-50 border-b border-slate-200">
-        <div className="grid grid-cols-[40px_52px_1fr_26px_26px_26px_26px] flex-1 text-[10px] font-semibold text-slate-400 uppercase tracking-wider">
+        <div className="grid grid-cols-[76px_52px_1fr_26px_26px_26px_26px] flex-1 text-[10px] font-semibold text-slate-400 uppercase tracking-wider">
           <span>Row</span><span>Op</span><span>Label</span><span></span><span></span><span></span><span></span>
         </div>
         <div
