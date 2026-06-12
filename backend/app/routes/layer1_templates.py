@@ -261,6 +261,31 @@ def get_layer1_raw(
     }
 
 
+@router.get("/companies/{company_id}/mapping-file")
+def get_mapping_file(
+    company_id: int,
+    db: Session = Depends(get_db),
+):
+    """Return the saved L2 formula mapping config for a company (the 'mapping file')."""
+    row = db.execute(
+        text("SELECT formulas, updated_at FROM layer2_formula_configs WHERE company_id = :cid"),
+        {"cid": company_id},
+    ).fetchone()
+
+    if not row:
+        return {"company_id": company_id, "formulas": None, "updated_at": None}
+
+    formulas = row[0]
+    if isinstance(formulas, str):
+        formulas = json.loads(formulas)
+
+    return {
+        "company_id": company_id,
+        "formulas": formulas,
+        "updated_at": str(row[1]) if row[1] else None,
+    }
+
+
 @router.post("/companies/{company_id}/layer1-templates/{statement_type}/check-layout")
 def check_layout(
     company_id: int,
