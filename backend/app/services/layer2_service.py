@@ -73,12 +73,37 @@ _FIELDS_BY_TYPE = {
 }
 
 
-def _make_mapping_tool(field_names: List[str]) -> Dict:
-    """Build forced-tool-use tool for single-row L1->L2 mapping."""
+import re as _re
+
+def _sanitize_key(name: str) -> str:
+    """Sanitize a field name to match Anthropic's ^[a-zA-Z0-9_-]{1,64}$ constraint."""
+    return _re.sub(r"[^a-zA-Z0-9_-]", "_", name)[:64]
+
+
+def _make_mapping_tool(field_names: List[str]) -> tuple:
+    """
+    Build forced-tool-use tool for single-row L1->L2 mapping.
+
+    Returns (tool_def, safe_to_original) where safe_to_original maps sanitized
+    property keys back to original field names so the caller can restore them.
+    Anthropic requires property keys matching ^[a-zA-Z0-9_-]{1,64}$.
+    """
     properties: Dict[str, Any] = {}
+    safe_to_original: Dict[str, str] = {}
+    safe_keys: List[str] = []
+
     for field in field_names:
-        properties[field] = {
-            "description": "Best-effort single L1 row match, or null if no confident match.",
+        safe = _sanitize_key(field)
+        # Handle collisions by appending an index suffix
+        base = safe
+        idx = 1
+        while safe in safe_to_original:
+            safe = f"{base[:62]}_{idx}"
+            idx += 1
+        safe_to_original[safe] = field
+        safe_keys.append(safe)
+        properties[safe] = {
+            "description": f"Best-effort single L1 row for '{field}', or null.",
             "oneOf": [
                 {
                     "type": "object",
@@ -91,15 +116,17 @@ def _make_mapping_tool(field_names: List[str]) -> Dict:
                 {"type": "null"},
             ],
         }
-    return {
+
+    tool_def = {
         "name": "map_l1_to_l2",
         "description": "Map each L2 template field to the single best-matching L1 source row.",
         "input_schema": {
             "type": "object",
             "properties": properties,
-            "required": field_names,
+            "required": safe_keys,
         },
     }
+    return tool_def, safe_to_original
 
 
 def _build_row_value_map(structured_rows: List[Dict]) -> Dict[int, Optional[float]]:
@@ -218,15 +245,17 @@ class Layer2Service:
             formulas = saved_formulas
         else:
             fields = _FIELDS_BY_TYPE.get(normalized, [])
-            tool = _make_mapping_tool(fields)
+            tool, safe_to_original = _make_mapping_tool(fields)
             rows_display = _l1_rows_to_display(structured_rows)
-            ai_mapping = self.claude.call_claude_with_tool(
+            raw_mapping = self.claude.call_claude_with_tool(
                 PROMPT_MAP[normalized],
                 {"statement_type": normalized, "layer1_rows": rows_display},
                 model,
                 tool_def=tool,
                 max_tokens=4096,
             )
+            # Restore original field names from sanitized keys
+            ai_mapping = {safe_to_original.get(k, k): v for k, v in raw_mapping.items()}
             formulas = _formulas_from_ai_mapping(ai_mapping)
             for field, formula_rows in formulas.items():
                 if formula_rows:
