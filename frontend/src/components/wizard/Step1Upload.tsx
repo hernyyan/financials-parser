@@ -1209,37 +1209,6 @@ export default function Step1Upload() {
           </div>
         )}
 
-        {hasUpload && (
-          <div className="flex items-center gap-2.5 px-2.5 py-1 rounded-lg border border-border bg-white">
-            <button
-              onClick={() => setUseCompanyContext(!useCompanyContext)}
-              className={`relative w-8 h-[18px] rounded-full transition-colors ${
-                useCompanyContext ? 'bg-emerald-500' : 'bg-gray-300'
-              }`}
-            >
-              <div
-                className={`absolute top-[2px] w-[14px] h-[14px] rounded-full bg-white shadow-sm transition-transform ${
-                  useCompanyContext ? 'left-[17px]' : 'left-[2px]'
-                }`}
-              />
-            </button>
-            <div className="text-[12px]">
-              <span style={{ fontWeight: 500 }}>Company Context</span>
-              {contextLoading ? (
-                <span className="text-muted-foreground ml-1.5">checking...</span>
-              ) : contextStatus ? (
-                contextStatus.has_rules ? (
-                  <span className="text-emerald-600 ml-1.5" style={{ fontWeight: 500 }}>
-                    {contextStatus.rule_count} rule{contextStatus.rule_count !== 1 ? 's' : ''} ·{' '}
-                    {contextStatus.word_count} words
-                  </span>
-                ) : (
-                  <span className="text-muted-foreground ml-1.5">No rules yet</span>
-                )
-              ) : null}
-            </div>
-          </div>
-        )}
 
         <div className="flex-1" />
 
