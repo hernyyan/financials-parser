@@ -5,6 +5,8 @@ import ExcelViewer from '../shared/ExcelViewer'
 import PdfPageViewer from '../shared/PdfPageViewer'
 import StatusBanner from '../shared/StatusBanner'
 import PreviousReviewPreview from './PreviousReviewPreview'
+import ColBadge, { colLetterToIndex } from './ColBadge'
+import TemplateTreePreview from './TemplateTreePreview'
 import {
   uploadFile,
   runLayer1,
@@ -73,67 +75,122 @@ function formatLineItemValue(value: number): string {
   return value < 0 ? `(${formatted})` : formatted
 }
 
-// Results table used in PDF mode
-function Layer1ResultsTable({ result, label }: { result: Layer1Result; label?: string }) {
+interface ExtractionStatementPreviewProps {
+  result: Layer1Result
+  stmtType: string
+  label?: string
+  sessionId: string | null
+  companyId: number | null
+  reportingPeriod: string
+  onUpdated: (stmtType: string, newResult: Layer1Result) => void
+}
+
+function ExtractionStatementPreview({
+  result, stmtType, label, sessionId, companyId, reportingPeriod, onUpdated,
+}: ExtractionStatementPreviewProps) {
+  const [colEdit, setColEdit] = useState<{ field: 'label' | 'value'; draft: string } | null>(null)
+  const [reextracting, setReextracting] = useState(false)
+
+  const labelCol = result.labelColLetter ?? '?'
+  const valueCol = result.valueColLetter ?? '?'
+
+  async function handleReextract(newLabelCol: string, newValueCol: string) {
+    if (!sessionId || !result.sourceSheet) return
+    setReextracting(true)
+    setColEdit(null)
+    try {
+      const isLabelChange = newLabelCol !== labelCol
+      if (isLabelChange) {
+        const labelColNum = colLetterToIndex(newLabelCol)
+        const res = await runLayer1(sessionId, result.sourceSheet, stmtType, reportingPeriod,
+          undefined, companyId, false, undefined, labelColNum)
+        if (companyId && labelColNum) {
+          fetch(`${import.meta.env.VITE_API_URL || '/api'}/admin/companies/${companyId}/label-column`,
+            { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ label_col: labelColNum }) }
+          ).catch(() => {})
+        }
+        onUpdated(stmtType, { lineItems: res.lineItems, sourceScaling: res.sourceScaling, columnIdentified: res.columnIdentified, sourceSheet: result.sourceSheet, structured: res.structured, templateCheck: res.templateCheck, labelColLetter: res.labelColLetter, valueColLetter: res.valueColLetter })
+      } else {
+        const valueColNum = colLetterToIndex(newValueCol)
+        const res = await extractSourceRows(sessionId, result.sourceSheet, stmtType, reportingPeriod,
+          false, undefined, companyId, undefined, valueColNum)
+        onUpdated(stmtType, {
+          ...result,
+          labelColLetter: res.labelColLetter ?? labelCol,
+          valueColLetter: res.valueColLetter ?? newValueCol,
+          sourceScaling: res.sourceScaling ?? result.sourceScaling,
+        })
+      }
+    } catch (e) {
+      console.error('[ExtractionStatementPreview] re-extract failed:', e)
+    } finally {
+      setReextracting(false)
+    }
+  }
+
+  const structuredRows = result.structured?.rows
+  const itemCount = structuredRows?.length ?? Object.keys(result.lineItems).length
+
   return (
     <div>
       {label && (
-        <p className="text-[11px] text-muted-foreground mb-1.5" style={{ fontWeight: 600 }}>
-          {label}
-        </p>
+        <p className="text-[12px] text-slate-700 mb-1.5" style={{ fontWeight: 600 }}>{label}</p>
       )}
-      <div className="bg-gray-50 rounded-lg px-3 py-2 mb-3 text-[11px] text-muted-foreground flex flex-wrap gap-x-3 gap-y-1">
-        <span>
-          Scaling:{' '}
-          <span style={{ fontWeight: 500 }} className="text-foreground">
-            {result.sourceScaling}
-          </span>
+      {/* Metadata bar */}
+      <div className="bg-slate-50 rounded px-3 py-1.5 mb-1 text-[11px] text-slate-500 flex flex-wrap gap-x-3 gap-y-1 border border-slate-200">
+        <span>Scaling: <span className="text-slate-700 font-medium">{result.sourceScaling}</span></span>
+        <span>Items: <span className="text-slate-700 font-medium">{itemCount}</span></span>
+        {reextracting && <span className="text-blue-500 font-medium ml-1">Re-extracting…</span>}
+      </div>
+      {/* Column header with badges */}
+      <div className="grid grid-cols-[56px_1fr_88px] px-2 py-1 bg-slate-50 border border-b-0 border-slate-200 rounded-t text-[10px] font-semibold text-slate-400 uppercase tracking-wider">
+        <span></span>
+        <span className="flex items-center gap-1">
+          Label
+          <ColBadge
+            colLetter={labelCol} field="label"
+            isEditing={colEdit?.field === 'label'}
+            draft={colEdit?.field === 'label' ? colEdit.draft : ''}
+            onEdit={() => setColEdit({ field: 'label', draft: labelCol })}
+            onDraftChange={d => setColEdit(ce => ce ? { ...ce, draft: d } : null)}
+            onConfirm={() => colEdit && handleReextract(colEdit.draft, valueCol)}
+            onCancel={() => setColEdit(null)}
+            disabled={reextracting}
+          />
         </span>
-        <span>
-          Column:{' '}
-          <span style={{ fontWeight: 500 }} className="text-foreground">
-            {result.columnIdentified}
-          </span>
-        </span>
-        <span>
-          Items:{' '}
-          <span style={{ fontWeight: 500 }} className="text-foreground">
-            {Object.keys(result.lineItems).length}
-          </span>
+        <span className="flex items-center justify-end gap-1 pr-1">
+          Value
+          <ColBadge
+            colLetter={valueCol} field="value"
+            isEditing={colEdit?.field === 'value'}
+            draft={colEdit?.field === 'value' ? colEdit.draft : ''}
+            onEdit={() => setColEdit({ field: 'value', draft: valueCol })}
+            onDraftChange={d => setColEdit(ce => ce ? { ...ce, draft: d } : null)}
+            onConfirm={() => colEdit && handleReextract(labelCol, colEdit.draft)}
+            onCancel={() => setColEdit(null)}
+            disabled={reextracting}
+          />
         </span>
       </div>
-      <table className="w-full text-[12px]">
-        <thead>
-          <tr className="border-b border-border">
-            <th className="text-left py-1.5 px-2 text-muted-foreground" style={{ fontWeight: 500 }}>
-              Line Item
-            </th>
-            <th className="text-right py-1.5 px-2 text-muted-foreground" style={{ fontWeight: 500 }}>
-              Value
-            </th>
-          </tr>
-        </thead>
-        <tbody>
-          {Object.entries(result.lineItems).map(([label, value], i) => {
-            const isBold =
-              label.includes('Total') ||
-              label.includes('Gross') ||
-              label.includes('Net') ||
-              label.includes('Operating Income') ||
-              label.includes('Pre-Tax')
-            return (
-              <tr key={i} className={`border-b border-gray-100 ${isBold ? 'bg-gray-50/50' : ''}`}>
-                <td className="py-1.5 px-2" style={{ fontWeight: isBold ? 500 : 400 }}>
-                  {label}
-                </td>
-                <td className={`py-1.5 px-2 text-right font-mono ${value < 0 ? 'text-red-600' : ''}`}>
-                  {formatLineItemValue(value)}
-                </td>
-              </tr>
-            )
-          })}
-        </tbody>
-      </table>
+      {/* Tree body */}
+      <div className="border border-slate-200 rounded-b overflow-hidden">
+        {structuredRows ? (
+          <TemplateTreePreview rows={structuredRows} />
+        ) : (
+          <table className="w-full text-[12px]">
+            <tbody>
+              {Object.entries(result.lineItems).map(([lbl, value], i) => (
+                <tr key={i} className="border-b border-gray-100">
+                  <td className="py-1.5 px-2 text-slate-600">{lbl}</td>
+                  <td className={`py-1.5 px-2 text-right font-mono ${value < 0 ? 'text-red-600' : 'text-slate-500'}`}>
+                    {formatLineItemValue(value)}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
     </div>
   )
 }
@@ -1297,13 +1354,25 @@ export default function Step1Upload() {
               ) : showL1Results ? (
                 <div className="flex-1 overflow-auto p-4 space-y-6">
                   {layer1Results['income_statement'] && (
-                    <Layer1ResultsTable result={layer1Results['income_statement']} label="Income Statement" />
+                    <ExtractionStatementPreview
+                      result={layer1Results['income_statement']} stmtType="income_statement" label="Income Statement"
+                      sessionId={sessionId} companyId={companyId} reportingPeriod={reportingPeriod}
+                      onUpdated={(st, r) => mergeLayer1Result(st, r)}
+                    />
                   )}
                   {layer1Results['balance_sheet'] && (
-                    <Layer1ResultsTable result={layer1Results['balance_sheet']} label="Balance Sheet" />
+                    <ExtractionStatementPreview
+                      result={layer1Results['balance_sheet']} stmtType="balance_sheet" label="Balance Sheet"
+                      sessionId={sessionId} companyId={companyId} reportingPeriod={reportingPeriod}
+                      onUpdated={(st, r) => mergeLayer1Result(st, r)}
+                    />
                   )}
                   {layer1Results['cash_flow_statement'] && (
-                    <Layer1ResultsTable result={layer1Results['cash_flow_statement']} label="Cash Flow Statement" />
+                    <ExtractionStatementPreview
+                      result={layer1Results['cash_flow_statement']} stmtType="cash_flow_statement" label="Cash Flow Statement"
+                      sessionId={sessionId} companyId={companyId} reportingPeriod={reportingPeriod}
+                      onUpdated={(st, r) => mergeLayer1Result(st, r)}
+                    />
                   )}
                 </div>
               ) : (
@@ -1368,7 +1437,11 @@ export default function Step1Upload() {
 
             {layer1Results[pdfActiveTab] ? (
               <div className="flex-1 overflow-auto p-4">
-                <Layer1ResultsTable result={layer1Results[pdfActiveTab]} />
+                <ExtractionStatementPreview
+                  result={layer1Results[pdfActiveTab]} stmtType={pdfActiveTab}
+                  sessionId={sessionId} companyId={companyId} reportingPeriod={reportingPeriod}
+                  onUpdated={(st, r) => mergeLayer1Result(st, r)}
+                />
               </div>
             ) : pdfExtracting[pdfActiveTab] ? (
               <div className="flex-1 flex flex-col items-center justify-center gap-3">
