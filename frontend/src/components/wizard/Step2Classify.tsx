@@ -580,7 +580,7 @@ export default function Step2Classify() {
             {pythonFlagCount > 0 && (
               <span className="flex items-center gap-1 px-2 py-0.5 rounded-[3px] bg-[#fff7ed]" style={{ color: '#c2410c', fontWeight: 600 }}>
                 <Flag className="w-3 h-3" />
-                {pythonFlagCount} check mismatch{pythonFlagCount !== 1 ? 'es' : ''}
+                {pythonFlagCount}
               </span>
             )}
             {corrections.length > 0 && (

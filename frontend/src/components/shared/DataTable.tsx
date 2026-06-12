@@ -1,4 +1,4 @@
-import { Flag, AlertTriangle, Edit3 } from 'lucide-react'
+import { Flag, Edit3 } from 'lucide-react'
 
 interface DataTableRow {
   label: string
@@ -137,10 +137,10 @@ export default function DataTable({
                       <Flag className="w-3 h-3 shrink-0" style={{ color: '#92400e' }} />
                     )}
                     {row.isPythonFlagged && (
-                      <AlertTriangle className="w-3 h-3 shrink-0" style={{ color: '#c2410c' }} />
+                      <Flag className="w-3 h-3 shrink-0" style={{ color: '#c2410c' }} />
                     )}
                     {row.hasValidationFail && !row.isFlagged && !row.isPythonFlagged && (
-                      <AlertTriangle className="w-3 h-3 shrink-0" style={{ color: '#991b1b' }} />
+                      <Flag className="w-3 h-3 shrink-0" style={{ color: '#991b1b' }} />
                     )}
                     {row.isEdited && (
                       <Edit3 className="w-3 h-3 shrink-0" style={{ color: '#5b21b6' }} />

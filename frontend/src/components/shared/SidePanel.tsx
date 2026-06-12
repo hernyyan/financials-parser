@@ -11,7 +11,7 @@
  * formula automatically updates the live value.
  */
 import { useState, useEffect } from 'react'
-import { X, AlertTriangle, Edit2, Check } from 'lucide-react'
+import { X, Flag, Edit2, Check } from 'lucide-react'
 import type { Layer2Result, L2Formula } from '../../types'
 import { formatFieldValue } from '../../utils/formatters'
 import { buildL1ValueMap, calculateFormulaValue, formatFormula } from '../../utils/formulaCalculation'
@@ -213,7 +213,7 @@ export default function SidePanel({
             </p>
             {isPythonFlagged && pythonCheckValue !== null && (
               <span className="flex items-center gap-1 text-[11px] text-orange-600" style={{ fontWeight: 500 }}>
-                <AlertTriangle className="w-3.5 h-3.5" />
+                <Flag className="w-3.5 h-3.5" />
                 Differs from formula
               </span>
             )}
